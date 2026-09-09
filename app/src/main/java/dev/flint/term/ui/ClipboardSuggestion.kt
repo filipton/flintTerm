@@ -20,7 +20,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,6 +39,17 @@ import kotlinx.coroutines.delay
 
 /** How long an offer stays on screen before it stops being worth a row. */
 private const val OFFER_MS = 30_000L
+
+/**
+ * The newest clip already pasted or waved away.
+ *
+ * Process-wide rather than remembered by the composable: leaving a session and
+ * coming back rebuilds the screen, and an offer that came back with it would
+ * make the × mean "until you look away" rather than "no".
+ */
+private object Settled {
+    var stamp = 0L
+}
 
 /**
  * How old a clip can be and still be worth offering.
@@ -73,7 +83,6 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
     // newest stamp already dealt with. Stamps rather than a flag, because what
     // was copied while the app was away arrives with no notification at all.
     var offered by remember { mutableStateOf(0L) }
-    var settled by remember { mutableLongStateOf(0L) }
     // A picture cannot be typed: it goes up to the host as a file, so the offer
     // says so rather than promising a paste.
     var picture by remember { mutableStateOf(false) }
@@ -87,7 +96,7 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
                 d?.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML) == true
             val fresh = stamp > System.currentTimeMillis() - FRESH_MS
             picture = image && !text
-            offered = if ((text || image) && fresh && stamp > settled) stamp else 0L
+            offered = if ((text || image) && fresh && stamp > Settled.stamp) stamp else 0L
         }
         val onClip = ClipboardManager.OnPrimaryClipChangedListener { look() }
         // Resume as well as the listener: a copy made in another app happens
@@ -105,7 +114,7 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
     LaunchedEffect(offered) {
         if (offered != 0L) {
             delay(OFFER_MS)
-            settled = offered
+            Settled.stamp = offered
             offered = 0L
         }
     }
@@ -123,7 +132,7 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
                 .clip(RoundedCornerShape(15.dp))
                 .background(onChrome.copy(alpha = 0.10f))
                 .clickable {
-                    settled = offered
+                    Settled.stamp = offered
                     offered = 0L
                     view.paste()
                 }
@@ -142,7 +151,7 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
                 color = onChrome.copy(alpha = 0.85f),
             )
         }
-        Dismiss(onChrome) { settled = offered; offered = 0L }
+        Dismiss(onChrome) { Settled.stamp = offered; offered = 0L }
     }
 }
 
