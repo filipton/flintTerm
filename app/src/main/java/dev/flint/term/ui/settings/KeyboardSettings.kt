@@ -152,7 +152,7 @@ fun KeyboardSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Double tap sends Tab",
-                subtitle = "The key a phone keyboard hides, two taps away",
+                subtitle = "The key a phone keyboard hides, two taps away — inside a program reading the mouse as well, which then sees single taps but no double click",
                 icon = Icons.Rounded.TouchApp,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.doubleTapSendsTab,

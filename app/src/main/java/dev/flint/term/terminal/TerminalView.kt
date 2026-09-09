@@ -534,7 +534,14 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
         override fun onDoubleTap(e: MotionEvent): Boolean {
             // Tab is the key a phone keyboard hides and a shell needs most.
-            if (!doubleTapSendsTab || mouseReporting) return false
+            //
+            // Sent even while a program is reading the mouse, which is where it
+            // is needed most: an editor or an agent CLI that turned mouse
+            // tracking on is exactly the place a phone has no Tab for, and a
+            // gesture that quietly stops working inside half the programs reads
+            // as a broken one. What that program loses is the double click
+            // alone — every single tap still goes to it as one.
+            if (!doubleTapSendsTab) return false
             performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
             sendKey(KeyCode.Tab)
             return true
