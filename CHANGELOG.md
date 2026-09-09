@@ -26,6 +26,10 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 - Both pages away from the letters have the same layout, so paging does not move the keys
 - The system keyboard stays down while the app draws one of its own
 - An address on a network the phone is not on is tried after the ones that can answer
+- The second symbol page puts the backtick, tilde, slash, pipe and braces where a phone keyboard has them
+- The paste offer appears for a screenshot, and for anything else copied as a file
+- Pasting a file into a session with no host says so instead of typing a content Uri
+- The arrows sit in the middle of the second page, under where the key bar keeps its own
 
 ### Documentation
 
