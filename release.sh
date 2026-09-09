@@ -95,6 +95,12 @@ die() { echo "$@" >&2; exit 1; }
 
 version=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts)
 
+# What the build was cut from, for RELEASE.txt and for the publish check below.
+# An `if` rather than `&&`, because a false test is a non-zero status and this
+# script stops on those.
+commit=$(git rev-parse --short=10 HEAD 2>/dev/null || echo unknown)
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then dirty=" (dirty)"; else dirty=""; fi
+
 # Everything that would stop a publish is checked before the build rather than
 # after it: finding out that there is no remote at the end of twenty minutes of
 # compiling is the same as not checking at all.
