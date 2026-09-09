@@ -846,9 +846,14 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         val conf = LocalConfiguration.current
         val hardwareKeyboard = conf.keyboard == Configuration.KEYBOARD_QWERTY && conf.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
         val barRows = settings.extraKeysRows
+        // With the app's own keyboard below it, the bar is no longer the
+        // bottom of the screen: the keyboard holds the navigation bar off, and
+        // the bar doing it too leaves a band of nothing between the two.
+        val ownKeyboard = settings.builtInKeyboard && softKeys
+        val bottomInsets = if (ownKeyboard) Modifier else Modifier.navigationBarsPadding().imePadding()
         if (barRows > 0 && !(hardwareKeyboard && settings.hideExtraKeysWithHardwareKeyboard)) {
             ExtraKeysBar(
-                view, chrome, onChrome, Modifier.fillMaxWidth().navigationBarsPadding().imePadding(),
+                view, chrome, onChrome, Modifier.fillMaxWidth().then(bottomInsets),
                 row1 = settings.extraKeysRow1 ?: ExtraKeys.defaultRow1,
                 // Hidden rather than emptied: the second row keeps whatever was
                 // arranged in it and comes back the way it was left.
@@ -860,7 +865,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 onMore = { pad = true },
             )
         } else {
-            Spacer(Modifier.fillMaxWidth().navigationBarsPadding().imePadding())
+            Spacer(Modifier.fillMaxWidth().then(bottomInsets))
         }
         if (settings.builtInKeyboard && softKeys) {
             TerminalKeyboard(
