@@ -6,6 +6,23 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-09
+
+### Added
+
+- The app's keyboard pages the way a phone's does, every page the same height
+- A strip offers to paste what was just copied in another app
+- Ctrl+[, Ctrl+I and Ctrl+M go out as keys of their own even when no program asked
+
+### Fixed
+
+- The key bar sits against the app's keyboard instead of a navigation bar's worth of nothing
+- Back puts the app's keyboard away instead of leaving the session, and the system one stops coming back on top of it
+
+### Documentation
+
+- The feature list covers the keyboard pages, the paste offer and the three keys
+
 ## [0.1.0] - 2026-09-09
 
 First release. Written by hand rather than generated, for two reasons: a first release is a
