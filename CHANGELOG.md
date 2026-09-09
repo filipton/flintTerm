@@ -30,6 +30,7 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 - The paste offer appears for a screenshot, and for anything else copied as a file
 - Pasting a file into a session with no host says so instead of typing a content Uri
 - The arrows sit in the middle of the second page, under where the key bar keeps its own
+- Two taps send Tab inside a program reading the mouse too, where it was silently doing nothing
 
 ### Documentation
 
