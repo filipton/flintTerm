@@ -212,6 +212,11 @@ Everything the app does, at length. The short list is in the [README](../README.
   Gboard's clipboard — and anything pasted or dropped as a file rather than as text — goes up to the
   host's upload folder instead and its path is typed at the cursor, quoted, once the bytes are there.
   Same for the **📎** cap and for a file dropped on the terminal: three ways in, one road.
+- **An offer to paste what you just copied**: a strip above the keys, for a while after something is
+  copied in another app, so the command in a browser or a chat is one tap away instead of a hunt for
+  the paste cap. Only the clipboard's description is ever read, never its contents, so nothing is
+  looked at until the offer is taken. It goes away by itself, and the whole thing can be turned off
+  in Settings → Keyboard & input.
 - Pinch to zoom the font; the grid re-flows live (more rows/cols for `btop`-style layouts).
 - **A font size per host**, on the host editor's Terminal page, where the step below the smallest size
   is "Follow settings" — so the size and whether this host has an opinion at all are one control. Set
@@ -262,6 +267,15 @@ Everything the app does, at length. The short list is in the [README](../README.
   tmux it needs 3.3+ with `set -g extended-keys on`. Settings → Keyboard & input has the switch, and
   a host can override it. Switched off, the queries are swallowed, so a program never learns the
   protocol is there and keeps to legacy keys.
+- **Ctrl+[, Ctrl+I and Ctrl+M are keys**, whether or not anybody asked. A program only gets the
+  protocol by asking, and tmux decides whether it can ask from a list of terminal names neither this
+  app nor ghostty is on — so `bind -n C-[` would never fire. These three are the ones
+  [fixterms](https://www.leonerd.org.uk/hacks/fixterms/) says to send as keys rather than as the
+  Escape, Tab and Enter bytes, and ghostty sends them that way unprompted, which is why such a
+  binding works there. This does the same, so it works here with nothing added to a tmux config. The
+  Escape, Tab and Enter keys still send their bytes, and Ctrl+H and Ctrl+J stay Backspace and line
+  feed, because no key of their own sends those. Off in Settings → Keyboard & input, and a host can
+  override it on the host editor's Terminal page.
 - **Caps Lock as Escape or Control**, since it is the best-placed useless key on any keyboard:
   Settings → Keyboard & input → Hardware keyboard. As Escape it fires as the key goes down, as
   Control it is held for as long as the key is, and letters stay lowercase either way.
@@ -285,8 +299,9 @@ Everything the app does, at length. The short list is in the [README](../README.
   method: it is drawn inside the app, types into the terminal alone, and asks for nothing in system
   settings. The layout is the one every Android keyboard already uses, down to the half-key indent
   on the home row, because a keyboard that moves the letters is one nobody can type on; the
-  difference is the bottom row, where Ctrl sits where the emoji key was. Three layers — letters,
-  symbols, and function keys with the arrows and F1–F12 — and the number row can be turned off. The
+  difference is the bottom row, where Ctrl sits where the emoji key was. Three pages — letters, then
+  the symbols and, behind the 1/2 key a phone puts in the same place, the arrows and F1–F12. Every
+  page opens with a strip of its own, so switching page never changes the keyboard's height. The
   system keyboard comes back on its own for the compose line, which is a real text field.
 - **Compose a line**: **✎** on the key bar, or ⋮ → "Compose a line", opens a plain text field above the
   keys for the input that is a paragraph rather than a command — a prompt for an agent, a commit
