@@ -14,6 +14,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import kotlinx.coroutines.withTimeoutOrNull
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
@@ -155,7 +167,18 @@ private fun KeyCap(label: String, cap: Color, text: Color, modifier: Modifier = 
 }
 
 @Composable
-private fun ModifierCap(label: String, state: ModState, cap: Color, text: Color, modifier: Modifier = Modifier, onTap: () -> Unit, onLong: () -> Unit) {
+private fun ModifierCap(
+    label: String,
+    state: ModState,
+    cap: Color,
+    text: Color,
+    modifier: Modifier = Modifier,
+    onTap: () -> Unit,
+    onLong: () -> Unit,
+    /** Letters offered on a press-and-slide; empty leaves the long press alone. */
+    slideTargets: List<Char> = emptyList(),
+    onSlide: (Char) -> Unit = {},
+) {
     val haptic = LocalHapticFeedback.current
     val primary = MaterialTheme.colorScheme.primary
     val (bg, fg) = when (state) {
@@ -163,17 +186,75 @@ private fun ModifierCap(label: String, state: ModState, cap: Color, text: Color,
         ModState.ONCE -> primary.copy(alpha = 0.28f) to primary
         ModState.LOCKED -> primary to MaterialTheme.colorScheme.onPrimary
     }
+    // Where the finger is, in window coordinates, so the strip above can say
+    // which of its cells it is over. The cap only knows where it is itself.
+    var capLeft by remember { mutableFloatStateOf(0f) }
+    var sliding by remember { mutableStateOf(false) }
+    var slideAt by remember { mutableFloatStateOf(0f) }
+    val width = LocalConfiguration.current.screenWidthDp
+    val density = LocalDensity.current
+    val screenPx = with(density) { width.dp.toPx() }
+    // A plain function of a position rather than a remembered value: the gesture
+    // callbacks are built once, so anything they close over is whatever it was
+    // when the finger went down, and the answer has to be worked out when the
+    // finger lifts instead.
+    val pick: (Float) -> Char? = { at ->
+        if (slideTargets.isEmpty()) {
+            null
+        } else {
+            val cell = screenPx / slideTargets.size
+            slideTargets.getOrNull((at / cell).toInt().coerceIn(0, slideTargets.lastIndex))
+        }
+    }
+    val hovered = if (sliding) pick(slideAt) else null
+    if (sliding) SlideStrip(slideTargets, hovered)
     Box(
         modifier
             .height(38.dp)
             .clip(CapShape)
             .background(bg)
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onTap = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onTap() },
-                    onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLong() },
-                )
-            },
+            .then(
+                if (slideTargets.isEmpty()) {
+                    Modifier.pointerInput(Unit) {
+                        detectTapGestures(
+                            onTap = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onTap() },
+                            onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLong() },
+                        )
+                    }
+                } else {
+                    // Two detectors rather than one hand-rolled loop: the tap is
+                    // the ordinary arm-the-modifier, and the long press turns
+                    // into a drag that picks from the strip. Both are the stock
+                    // gesture helpers, which is why the timing matches every
+                    // other long press on the phone.
+                    Modifier
+                        .pointerInput(Unit) {
+                            detectTapGestures(
+                                onTap = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onTap() },
+                            )
+                        }
+                        .pointerInput(slideTargets) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { at ->
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    sliding = true
+                                    slideAt = capLeft + at.x
+                                },
+                                onDragEnd = {
+                                    val picked = pick(slideAt)
+                                    sliding = false
+                                    picked?.let { onSlide(it) }
+                                },
+                                onDragCancel = { sliding = false },
+                                onDrag = { change, amount ->
+                                    change.consume()
+                                    slideAt += amount.x
+                                },
+                            )
+                        }
+                },
+            )
+            .onGloballyPositioned { capLeft = it.positionInWindow().x },
         contentAlignment = Alignment.Center,
     ) {
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp, color = fg, maxLines = 1)
@@ -255,6 +336,9 @@ private fun RepeatCap(icon: ImageVector?, label: String, cap: Color, text: Color
     }
 }
 
+/** The letters a held Ctrl offers, in the order the shell needs them. */
+private val CTRL_SLIDE = listOf('c', 'd', 'z', 'l', 'a', 'e', 'r', 'w', 'u', 'k')
+
 /** What a cap can reach besides the terminal itself. */
 class BarActions(
     val view: TerminalView,
@@ -262,6 +346,8 @@ class BarActions(
     val onSearch: () -> Unit,
     val onCompose: () -> Unit,
     val onChords: (() -> Unit)?,
+    /** Whether holding Ctrl offers its common targets to slide onto. */
+    val slideCtrl: Boolean = true,
     val onInsertFile: () -> Unit,
 )
 
@@ -290,6 +376,8 @@ fun KeyFor(
                 def.label, state, cap, capText, modifier,
                 onTap = { view.toggleModifier(a.which) },
                 onLong = { chords?.invoke() ?: view.toggleModifier(a.which, lock = true) },
+                slideTargets = if (a.which == 'c' && actions.slideCtrl) CTRL_SLIDE else emptyList(),
+                onSlide = { c -> view.sendKey(dev.flint.term.core.KeyCode.Char(c.code.toUInt()), ctrl = true) },
             )
         }
         is ExtraKeys.Action.Key -> if (def.repeat) {
@@ -391,5 +479,44 @@ private fun PadSection(
     )
     FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         tokens.forEach { KeyFor(it, actions, mods, cap, capText, Modifier.widthIn(min = 46.dp)) }
+    }
+}
+
+/**
+ * The strip of Ctrl targets shown while a finger is held on the Ctrl cap.
+ *
+ * A popup rather than part of the bar, so it can sit above it without the bar
+ * growing, and full width so that mapping a finger to a cell is a division
+ * rather than a hit test against something that may have scrolled.
+ */
+@Composable
+private fun SlideStrip(targets: List<Char>, hovered: Char?) {
+    if (targets.isEmpty()) return
+    Popup(alignment = Alignment.TopCenter, offset = IntOffset(0, 0)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            targets.forEach { c ->
+                val on = c == hovered
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .height(44.dp)
+                        .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "^${c.uppercaseChar()}",
+                        fontSize = 15.sp,
+                        fontFamily = MonoFamily,
+                        fontWeight = FontWeight.Bold,
+                        color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+        }
     }
 }
