@@ -1421,9 +1421,9 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      */
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
-        if (!hasWindowFocus || !settings.builtInKeyboard || !builtInKeyboardUp) return
+        if (!hasWindowFocus || !settings.builtInKeyboard || !isFocused) return
         post {
-            if (builtInKeyboardUp) {
+            if (settings.builtInKeyboard && isFocused) {
                 context.getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(windowToken, 0)
             }
         }
@@ -1435,7 +1435,16 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         imm.hideSoftInputFromWindow(windowToken, 0)
     }
 
-    override fun onCheckIsTextEditor(): Boolean = true
+    /**
+     * Whether the system should offer an input method for this view.
+     *
+     * No, while the app draws a keyboard of its own: this is what the framework
+     * asks before putting the system keyboard back up for the focused view, and
+     * answering yes is how coming back from another app ended up with the wrong
+     * keyboard, or with two. The compose line is a real text field and answers
+     * for itself.
+     */
+    override fun onCheckIsTextEditor(): Boolean = !settings.builtInKeyboard
 
     /**
      * The keyboard's own way in, and the only one that can hand over a picture.
