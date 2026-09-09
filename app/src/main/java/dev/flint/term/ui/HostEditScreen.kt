@@ -40,6 +40,8 @@ import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Lan
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Visibility
@@ -162,6 +164,7 @@ fun HostEditScreen(nav: NavController, id: String) {
     var showInFiles by remember { mutableStateOf(existing?.showInFiles ?: false) }
     var recordSessions by remember { mutableStateOf(existing?.recordSessions ?: false) }
     var addresses by remember { mutableStateOf(existing?.addresses ?: emptyList()) }
+    var openAddress by remember { mutableStateOf<String?>(null) }
     // Which address the VPN sheet is picking for: null is the host's own.
     var vpnFor by remember { mutableStateOf<String?>(null) }
     var protocol by remember { mutableStateOf(existing?.protocol ?: Protocol.SSH) }
@@ -538,49 +541,127 @@ fun HostEditScreen(nav: NavController, id: String) {
                     icon = Icons.Rounded.SwapHoriz,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     trailing = {
-                        TextButton(onClick = { addresses = addresses + HostAddress() }) { Text("Add") }
+                        TextButton(
+                            onClick = {
+                                // The port a second address wants is almost always the one
+                                // the first uses; filling it in is one field fewer to type.
+                                val fresh = HostAddress(port = port.toIntOrNull() ?: 22)
+                                addresses = addresses + fresh
+                                openAddress = fresh.id
+                            },
+                        ) { Text("Add") }
                     },
                 )
                 addresses.forEachIndexed { i, address ->
-                    Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Field(
-                                address.hostname, { v -> addresses = addresses.map { if (it.id == address.id) it.copy(hostname = v) else it } },
-                                "Address", Modifier.weight(1f), placeholder = "192.168.1.10", mono = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    val t = tunnels.firstOrNull { it.id == address.tunnelId }
+                    val ts = tailnets.firstOrNull { it.id == address.tailscaleId }
+                    val via = when {
+                        ts != null -> "through ${ts.name.ifBlank { "Tailscale" }}"
+                        t != null -> "through ${t.name}"
+                        else -> "direct"
+                    }
+                    val open = openAddress == address.id
+                    fun change(f: (HostAddress) -> HostAddress) {
+                        addresses = addresses.map { if (it.id == address.id) f(it) else it }
+                    }
+                    // Folded to a line each: a host with four addresses is a
+                    // list to read down, not four forms to scroll past.
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { openAddress = if (open) null else address.id }
+                            .padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                address.label.ifBlank { address.hostname.ifBlank { "New address" } },
+                                style = MaterialTheme.typography.bodyLarge,
+                                maxLines = 1,
                             )
-                            Field(
-                                address.port.takeIf { it > 0 }?.toString() ?: "",
-                                { v -> addresses = addresses.map { if (it.id == address.id) it.copy(port = v.filter { c -> c.isDigit() }.take(5).toIntOrNull() ?: 0) else it } },
-                                "Port", Modifier.width(104.dp), mono = true, placeholder = port,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            Text(
+                                listOfNotNull(
+                                    address.hostname.takeIf { it.isNotBlank() && address.label.isNotBlank() }
+                                        ?.let { "$it:${address.port.takeIf { p -> p > 0 } ?: port}" },
+                                    via,
+                                ).joinToString("  ·  "),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
                             )
                         }
-                        Field(
-                            address.label, { v -> addresses = addresses.map { if (it.id == address.id) it.copy(label = v) else it } },
-                            "Name (optional)", placeholder = "Home LAN",
+                        // Order is what "tried in order" means, so it is moved
+                        // here rather than by editing and re-adding the list.
+                        IconButton(
+                            onClick = { addresses = addresses.toMutableList().also { it.add(i - 1, it.removeAt(i)) } },
+                            enabled = i > 0,
+                        ) { Icon(Icons.Rounded.KeyboardArrowUp, "Try this one sooner") }
+                        IconButton(
+                            onClick = { addresses = addresses.toMutableList().also { it.add(i + 1, it.removeAt(i)) } },
+                            enabled = i < addresses.lastIndex,
+                        ) { Icon(Icons.Rounded.KeyboardArrowDown, "Try this one later") }
+                        Icon(
+                            if (open) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                            if (open) "Close" else "Edit",
+                            Modifier.padding(end = 8.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            val t = tunnels.firstOrNull { it.id == address.tunnelId }
-                            val ts = tailnets.firstOrNull { it.id == address.tailscaleId }
-                            TextButton(onClick = { vpnFor = address.id; vpnSheet = true }, modifier = Modifier.weight(1f)) {
-                                Icon(if (ts != null) Icons.Rounded.Hub else Icons.Rounded.VpnLock, null, Modifier.width(16.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    when {
-                                        ts != null -> "Through ${ts.name.ifBlank { "Tailscale" }}"
-                                        t != null -> "Through ${t.name}"
-                                        else -> "No VPN"
-                                    },
-                                    maxLines = 1,
+                    }
+                    if (open) {
+                        Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Field(
+                                    address.hostname, { v -> change { it.copy(hostname = v) } },
+                                    "Address", Modifier.weight(1f), placeholder = "192.168.1.10", mono = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                                )
+                                Field(
+                                    address.port.takeIf { it > 0 }?.toString() ?: "",
+                                    { v -> change { a -> a.copy(port = v.filter { c -> c.isDigit() }.take(5).toIntOrNull() ?: 0) } },
+                                    "Port", Modifier.width(104.dp), mono = true, placeholder = port,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 )
                             }
-                            IconButton(onClick = { addresses = addresses.filterNot { it.id == address.id } }) {
-                                Icon(Icons.Rounded.Delete, "Remove address", tint = MaterialTheme.colorScheme.error)
+                            Field(
+                                address.label, { v -> change { it.copy(label = v) } },
+                                "Name (optional)", placeholder = "Home LAN",
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { vpnFor = address.id; vpnSheet = true }, modifier = Modifier.weight(1f)) {
+                                    Icon(if (ts != null) Icons.Rounded.Hub else Icons.Rounded.VpnLock, null, Modifier.width(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        when {
+                                            ts != null -> "Through ${ts.name.ifBlank { "Tailscale" }}"
+                                            t != null -> "Through ${t.name}"
+                                            else -> "No VPN"
+                                        },
+                                        maxLines = 1,
+                                    )
+                                }
+                                IconButton(onClick = { addresses = addresses.filterNot { it.id == address.id } }) {
+                                    Icon(Icons.Rounded.Delete, "Remove address", tint = MaterialTheme.colorScheme.error)
+                                }
+                            }
+                            // Tailscale has no "try it directly first": the node is
+                            // the route, and there is nothing to fall back from.
+                            if (t != null && ts == null) {
+                                Segmented(TunnelMode.entries.map { it.label }, address.tunnelMode.ordinal) { m ->
+                                    change { it.copy(tunnelMode = TunnelMode.entries[m]) }
+                                }
+                                Text(
+                                    if (address.tunnelMode == TunnelMode.WHEN_NEEDED) {
+                                        "Dialled directly while this phone is on the same network as it (or while it answers directly); ${t.name} otherwise."
+                                    } else {
+                                        "This address always goes through ${t.name}."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
-                        if (i < addresses.lastIndex) HorizontalDivider()
                     }
+                    if (i < addresses.lastIndex) HorizontalDivider()
                 }
                 RowDivider()
                 GroupRow(
