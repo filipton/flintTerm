@@ -221,8 +221,8 @@ Everything the app does, at length. The short list is in the [README](../README.
   pane that called (see [automation](automation.md)).
 - **Completion from history**: the rest of the command you are typing appears in gray after the
   cursor (ranked by how often you run it, then how recently), Tab takes it, and pausing brings up the
-  other matches under the cursor. Double-tapping the terminal sends Tab. All three are switchable in
-  Settings → Keyboard & gestures.
+  other matches under the cursor. Double-tapping the terminal sends Tab. The completion switches are
+  in Settings → Terminal, the double tap in Settings → Keyboard & input.
 - **Completion from what you have actually run**: commands are remembered per host and offered as
   chips above the keyboard as you type; tapping one finishes the line. A host's own
   `~/.zsh_history` / `~/.bash_history` can be imported from its menu, so the suggestions are useful
@@ -258,9 +258,23 @@ Everything the app does, at length. The short list is in the [README](../README.
   the tap after that — the first tap still fires at once, so nothing feels delayed. Two more caps to add from
   the editor: **⇧⇥** sends Shift+Tab, and **📎** opens the file picker, sending what is picked to the
   host and typing the path where the cursor is.
-- Configurable extra-keys bar (order, custom text keys, both rows), hidden when a hardware keyboard
-  is attached; volume buttons bindable to any key, modifier (sticky, hold or toggle), snippet picker or
-  text; Ctrl+Shift+C/V on hardware keyboards.
+- Configurable extra-keys bar, hidden when a hardware keyboard is attached; volume buttons bindable
+  to any key, modifier (sticky, hold or toggle), snippet picker or text; Ctrl+Shift+C/V on hardware
+  keyboards. Five presets — the default, one row, tmux, agents, vim — and from there: **drag a cap to
+  move it**, with the four arrows moving as one block unless they are ungrouped; a second row that
+  can be switched off; and a fixed **…** at the right of the first row that opens the rest as a pad
+  over the keyboard, F keys and all, so two rows are rarely worth the screen.
+- **Hold Ctrl and slide** onto a letter to send that chord in one gesture, rather than tapping Ctrl
+  and then hunting for the letter. The strip that appears under your finger carries the ten a
+  terminal actually uses — c, d, z, l, a, e, r, w, u, k — and lifting anywhere else sends nothing.
+  It works the same on the key bar and on the app's own keyboard.
+- **A keyboard of the app's own**, off by default, in Settings → Keyboard & input. Not an input
+  method: it is drawn inside the app, types into the terminal alone, and asks for nothing in system
+  settings. The layout is the one every Android keyboard already uses, down to the half-key indent
+  on the home row, because a keyboard that moves the letters is one nobody can type on; the
+  difference is the bottom row, where Ctrl sits where the emoji key was. Three layers — letters,
+  symbols, and function keys with the arrows and F1–F12 — and the number row can be turned off. The
+  system keyboard comes back on its own for the compose line, which is a real text field.
 - **Compose a line**: **✎** on the key bar, or ⋮ → "Compose a line", opens a plain text field above the
   keys for the input that is a paragraph rather than a command — a prompt for an agent, a commit
   message, a block of YAML. It is an ordinary Android field with nothing switched off, so autocorrect,

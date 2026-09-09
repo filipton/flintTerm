@@ -40,6 +40,8 @@
 - **WireGuard** and **Tailscale** built in, no root needed. Also telnet, USB serial and a local shell.
 - A real **terminal**. Kitty keyboard protocol, inline images with kitty and sixel, OSC 8 links,
   OSC 52 clipboard, OSC 133 prompt marks, scrollback search, tmux control mode.
+- **Typing that suits a terminal**: a customisable key bar, hold-Ctrl-and-slide chords, and an
+  optional keyboard of the app's own with Ctrl where the emoji key was.
 - **604 color schemes** with search. Import from Ghostty, Alacritty, Windows Terminal, iTerm2 and
   Xresources.
 - Sessions **survive being backgrounded**, reopen after the app is killed, and can float in a small

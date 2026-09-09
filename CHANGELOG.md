@@ -83,7 +83,12 @@ project` commit of 142 files that no generator would have anything to say about.
 
 #### Input
 
-- An **extra-key bar** with four presets, caps that carry modifiers, and what the volume keys do.
+- An **extra-key bar** above the keyboard: five presets, one row or two, caps you reorder by
+  dragging, arrows that move as a block, and a fixed key that opens the rest as a pad.
+- A **keyboard of the app's own**, off by default, laid out the way every phone keyboard is but with
+  Ctrl where the emoji key was, and layers for symbols, function keys and arrows.
+- **Ctrl by holding and sliding** onto a letter, which sends that chord in one gesture, from the bar
+  and from the app's keyboard alike.
 - **Chords rebound by pressing the keys**, hardware-keyboard shortcuts, Caps Lock as Escape or
   Control, a double tap that locks a modifier, and two fingers that walk the cursor.
 - A **compose line** for the prompts that are a paragraph rather than a command.
