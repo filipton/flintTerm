@@ -18,6 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.flint.term.terminal.TerminalView
@@ -40,12 +41,21 @@ import dev.flint.term.terminal.TerminalView
  */
 private class Key(val token: String, val weight: Float = 1f)
 
-private class KeyboardRow(val keys: List<Key>, val inset: Float = 0f)
+/** Uniform, so no row is a hair shorter than the one above it. */
+private val CAP_HEIGHT = 46.dp
 
-private fun row(vararg tokens: String, inset: Float = 0f) = KeyboardRow(tokens.map { Key(it) }, inset)
+/** The digit and function strips, which sit above the keyboard proper. */
+private val DIGIT_HEIGHT = 38.dp
+
+private class KeyboardRow(val keys: List<Key>, val inset: Float = 0f, val height: Dp = CAP_HEIGHT)
+
+private fun row(vararg tokens: String, inset: Float = 0f, height: Dp = CAP_HEIGHT) =
+    KeyboardRow(tokens.map { Key(it) }, inset, height)
 
 private val LETTERS = listOf(
-    row("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
+    // The digits are a strip above the keyboard rather than part of it, and a
+    // phone keyboard draws them shorter for exactly that reason.
+    row("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", height = DIGIT_HEIGHT),
     row("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
     // The half-key step that puts a under q and s under w, as on every phone.
     row("a", "s", "d", "f", "g", "h", "j", "k", "l", inset = 0.5f),
@@ -66,16 +76,16 @@ private val SYMBOLS = listOf(
 // F keys, arrows and the rest, so the bar's overflow is not the only way to
 // reach them while this keyboard is up.
 private val FUNCTIONS = listOf(
-    row("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10"),
-    row("F11", "F12", "ESC", "TAB", "STAB", "INS", "DEL", "HOME", "END", "ENTER"),
-    row("LEFT", "DOWN", "UP", "RIGHT", "PGUP", "PGDN", "NAV", "SEARCH", "PASTE", inset = 0.5f),
+    row("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", height = DIGIT_HEIGHT),
+    row("F11", "F12", "ESC", "TAB", "STAB", "INS", "DEL", "SEARCH", "PASTE", "ENTER"),
+    // Left, down, up, right: the order of hjkl, of the arrow cluster's bottom
+    // row, and of every other terminal's key bar. Kept adjacent so the eye finds
+    // the group rather than four keys that happen to be arrows.
+    row("LEFT", "DOWN", "UP", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV", inset = 0.5f),
     KeyboardRow(
         listOf(Key("ALT", 1.5f)) + listOf("SHIFT", "SNIPPETS", "COMPOSE", "FILE", "KEYBOARD", ",", ".").map { Key(it) } + Key("BKSP", 1.5f),
     ),
 )
-
-/** Uniform, so no row is a hair shorter than the one above it. */
-private val CAP_HEIGHT = 46.dp
 
 /** Keys that do something rather than type something, drawn a shade darker. */
 private val SPECIAL = setOf("SHIFT", "BKSP", "ENTER", "CTRL", "ALT", "ESC", "TAB", "STAB", "DEL", "INS")
@@ -113,7 +123,7 @@ fun TerminalKeyboard(
     val special = cap.copy(alpha = 0.04f).compositeOver(chrome)
 
     @Composable
-    fun RowScope.key(token: String, weight: Float) {
+    fun RowScope.key(token: String, weight: Float, height: Dp = CAP_HEIGHT) {
         val isSpecial = token in SPECIAL
         KeyFor(
             token,
@@ -123,7 +133,7 @@ fun TerminalKeyboard(
             capText,
             Modifier.weight(weight).padding(horizontal = 2.dp),
             compact = true,
-            capHeight = CAP_HEIGHT,
+            capHeight = height,
             labelOverride = LABELS[token],
         )
     }
@@ -137,7 +147,7 @@ fun TerminalKeyboard(
         rows.forEach { line ->
             Row(Modifier.fillMaxWidth()) {
                 if (line.inset > 0f) Spacer(Modifier.weight(line.inset))
-                line.keys.forEach { key(it.token, it.weight) }
+                line.keys.forEach { key(it.token, it.weight, line.height) }
                 if (line.inset > 0f) Spacer(Modifier.weight(line.inset))
             }
         }

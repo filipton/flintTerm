@@ -180,7 +180,15 @@ private fun KeyCap(
         Text(
             label,
             // One character has room to be read; a word among ten across does not.
-            fontSize = if (compact) (if (label.length <= 1) 16.sp else 11.sp) else if (mono) 16.sp else 12.sp,
+            // A letter is read at a letter's size; a glyph standing in for a whole
+            // key — shift, backspace, return, all of them well above U+2000 —
+            // is a picture, and at letter size it disappears into the cap.
+            fontSize = when {
+                !compact -> if (mono) 16.sp else 12.sp
+                label.length > 1 -> 11.sp
+                label.first().code > 0x2000 -> 22.sp
+                else -> 16.sp
+            },
             fontFamily = if (mono) MonoFamily else null,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = if (mono) 0.sp else 0.4.sp,
@@ -289,7 +297,14 @@ private fun ModifierCap(
             .onGloballyPositioned { capLeft = it.positionInWindow().x },
         contentAlignment = Alignment.Center,
     ) {
-        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp, color = fg, maxLines = 1)
+        Text(
+            label,
+            fontSize = if (label.length == 1 && label[0].code > 0x2000) 22.sp else 12.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.4.sp,
+            color = fg,
+            maxLines = 1,
+        )
     }
 }
 
