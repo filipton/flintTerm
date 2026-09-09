@@ -313,7 +313,14 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         rootView.keepScreenOn = settings.keepScreenOn
         onDispose { rootView.keepScreenOn = false }
     }
-    DisposableEffect(view) { onDispose { view.session = null } }
+    // Declared here rather than with the other sheets: the effect below needs it.
+    var softKeys by remember { mutableStateOf(false) }
+    DisposableEffect(view) {
+        view.onKeyboardWanted = { up -> softKeys = up }
+        onDispose { view.onKeyboardWanted = null; view.session = null }
+    }
+    LaunchedEffect(softKeys) { view.builtInKeyboardUp = softKeys }
+    LaunchedEffect(settings.builtInKeyboard) { if (!settings.builtInKeyboard) softKeys = false }
 
     var menu by remember { mutableStateOf(false) }
     var switcher by remember { mutableStateOf(false) }
@@ -854,6 +861,16 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             )
         } else {
             Spacer(Modifier.fillMaxWidth().navigationBarsPadding().imePadding())
+        }
+        if (settings.builtInKeyboard && softKeys) {
+            TerminalKeyboard(
+                view, chrome, onChrome, Modifier.fillMaxWidth().navigationBarsPadding(),
+                onSnippets = { snippets = true },
+                onSearch = { searching = !searching; if (!searching) view.searchHighlight = null },
+                onCompose = { compose.open = true },
+                onChords = if (settings.ctrlLongPressOpensChords) ({ chords = true }) else null,
+                numberRow = settings.keyboardNumberRow,
+            )
         }
     }
 

@@ -176,6 +176,7 @@ object PaletteCatalog {
         setting("Extra keys", "The bar above the keyboard: which keys, in which order", Routes.EXTRA_KEYS),
         setting("Chords", "The tmux, Ctrl and agent keys on the sheet you get by holding Ctrl", Routes.CHORDS),
         setting("Keyboard protocol", "Let a program tell Ctrl+[ from Escape, and see Shift+Enter at all", Routes.SETTINGS_KEYBOARD),
+        setting("Type with the app's keyboard", "A plain layout with Ctrl on the bottom row, drawn in the app", Routes.SETTINGS_KEYBOARD),
         setting("Ctrl keys stay a control byte", "Ctrl+C still interrupts a program that has taken the keyboard over", Routes.SETTINGS_KEYBOARD),
         setting("Keep the compose line open", "The ✎ field and what was being written in it survive leaving the session", Routes.SETTINGS_KEYBOARD),
         setting("Caps Lock acts as", "Escape, Ctrl, or Caps Lock", Routes.SETTINGS_KEYBOARD),

@@ -828,6 +828,16 @@ data class Settings(
      * arrangement. Off for anyone who wants them somewhere unusual.
      */
     val groupArrowKeys: Boolean = true,
+    /**
+     * Type with the app's own keyboard instead of the system one.
+     *
+     * Off, because the keyboard somebody already has knows their languages,
+     * their layout and their swiping, and this one knows none of that. It
+     * exists for the one thing the others cannot do: put Ctrl on the bottom row.
+     */
+    val builtInKeyboard: Boolean = false,
+    /** Whether that keyboard gives the digits a row of their own. */
+    val keyboardNumberRow: Boolean = true,
     /** Tapping a modifier cap twice quickly locks it, instead of clearing it. */
     val doubleTapLocksModifier: Boolean = true,
     /** Dragging two fingers on the terminal sends arrow keys. */

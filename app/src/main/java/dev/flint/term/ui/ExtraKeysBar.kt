@@ -135,7 +135,7 @@ fun ExtraKeysBar(
 private val CapShape = RoundedCornerShape(10.dp)
 
 @Composable
-private fun KeyCap(label: String, cap: Color, text: Color, modifier: Modifier = Modifier, mono: Boolean = false, accent: Boolean = false, onClick: () -> Unit) {
+private fun KeyCap(label: String, cap: Color, text: Color, modifier: Modifier = Modifier, mono: Boolean = false, accent: Boolean = false, compact: Boolean = false, onClick: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val primary = MaterialTheme.colorScheme.primary
     Box(
@@ -150,12 +150,12 @@ private fun KeyCap(label: String, cap: Color, text: Color, modifier: Modifier = 
                     onClick()
                 })
             }
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = if (compact) 2.dp else 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             label,
-            fontSize = if (mono) 16.sp else 12.sp,
+            fontSize = if (compact) 11.sp else if (mono) 16.sp else 12.sp,
             fontFamily = if (mono) MonoFamily else null,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = if (mono) 0.sp else 0.4.sp,
@@ -336,6 +336,12 @@ private fun RepeatCap(icon: ImageVector?, label: String, cap: Color, text: Color
     }
 }
 
+/** A cap that is not a key at all: it does something to the keyboard drawing it. */
+@Composable
+fun KeyCapText(label: String, cap: Color, text: Color, modifier: Modifier = Modifier, onTap: () -> Unit) {
+    KeyCap(label, cap, text, modifier, onClick = onTap)
+}
+
 /** The letters a held Ctrl offers, in the order the shell needs them. */
 private val CTRL_SLIDE = listOf('c', 'd', 'z', 'l', 'a', 'e', 'r', 'w', 'u', 'k')
 
@@ -365,6 +371,8 @@ fun KeyFor(
     cap: Color,
     capText: Color,
     modifier: Modifier = Modifier,
+    /** Ten caps across a phone leaves little room; trims the padding and the text. */
+    compact: Boolean = false,
 ) {
     val view = actions.view
     val def = ExtraKeys.resolve(token)
@@ -394,15 +402,15 @@ fun KeyFor(
                 def.label, cap, capText, modifier,
             ) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
         } else {
-            KeyCap(def.label, cap, capText, modifier, mono = def.mono) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
+            KeyCap(def.label, cap, capText, modifier, mono = def.mono, compact = compact) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
         }
-        is ExtraKeys.Action.Text -> KeyCap(def.label, cap, capText, modifier, mono = def.mono) { view.sendText(a.text) }
-        ExtraKeys.Action.Snippets -> KeyCap(def.label, cap, capText, modifier, mono = true, accent = true) { actions.onSnippets() }
-        ExtraKeys.Action.Search -> KeyCap(def.label, cap, capText, modifier, mono = true) { actions.onSearch() }
-        ExtraKeys.Action.ToggleKeyboard -> KeyCap(def.label, cap, capText, modifier, mono = true) { view.toggleKeyboard() }
-        ExtraKeys.Action.Paste -> KeyCap(def.label, cap, capText, modifier) { view.paste() }
-        ExtraKeys.Action.InsertFile -> KeyCap(def.label, cap, capText, modifier, mono = true) { actions.onInsertFile() }
-        ExtraKeys.Action.Compose -> KeyCap(def.label, cap, capText, modifier, mono = true) { actions.onCompose() }
+        is ExtraKeys.Action.Text -> KeyCap(def.label, cap, capText, modifier, mono = def.mono, compact = compact) { view.sendText(a.text) }
+        ExtraKeys.Action.Snippets -> KeyCap(def.label, cap, capText, modifier, mono = true, accent = true, compact = compact) { actions.onSnippets() }
+        ExtraKeys.Action.Search -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact) { actions.onSearch() }
+        ExtraKeys.Action.ToggleKeyboard -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact) { view.toggleKeyboard() }
+        ExtraKeys.Action.Paste -> KeyCap(def.label, cap, capText, modifier, compact = compact) { view.paste() }
+        ExtraKeys.Action.InsertFile -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact) { actions.onInsertFile() }
+        ExtraKeys.Action.Compose -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact) { actions.onCompose() }
         ExtraKeys.Action.Nav -> NavCap(def.label, cap, capText, modifier, view)
     }
 }

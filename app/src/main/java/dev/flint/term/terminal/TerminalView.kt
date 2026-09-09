@@ -1381,18 +1381,39 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     // ---- keyboard ---------------------------------------------------------
 
+    /**
+     * Told when the terminal wants a keyboard up or down, so the screen can
+     * raise the app's own instead of the system one.
+     */
+    var onKeyboardWanted: ((Boolean) -> Unit)? = null
+
     fun showKeyboard() {
         requestFocus()
+        if (settings.builtInKeyboard) {
+            // Ours is a view on the screen, not an input method, so asking the
+            // system for one as well would put two keyboards on the phone.
+            hideKeyboard()
+            onKeyboardWanted?.invoke(true)
+            return
+        }
         val imm = context.getSystemService(InputMethodManager::class.java)
         imm.showSoftInput(this, InputMethodManager.SHOW_IMPLICIT)
     }
 
     fun toggleKeyboard() {
+        if (settings.builtInKeyboard) {
+            onKeyboardWanted?.invoke(!builtInKeyboardUp)
+            return
+        }
         val imm = context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
         if (imm.isAcceptingText && imm.isActive(this)) hideKeyboard() else showKeyboard()
     }
 
+    /** Whether the app's own keyboard is on screen, as the screen last reported. */
+    var builtInKeyboardUp: Boolean = false
+
     fun hideKeyboard() {
+        onKeyboardWanted?.invoke(false)
         val imm = context.getSystemService(InputMethodManager::class.java)
         imm.hideSoftInputFromWindow(windowToken, 0)
     }

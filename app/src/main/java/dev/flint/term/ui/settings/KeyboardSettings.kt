@@ -80,6 +80,24 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
+                title = "Type with the app's keyboard",
+                subtitle = "A plain layout drawn in the app, with Ctrl and Alt on the bottom row. It has no dictionary, no autocorrect and no swiping, so leave it off unless the missing Ctrl is what bothers you.",
+                icon = Icons.Rounded.Keyboard,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                checked = settings.builtInKeyboard,
+                onCheckedChange = { v -> app.store.updateSettings { it.copy(builtInKeyboard = v) } },
+            )
+            RowDivider()
+            GroupRow(
+                title = "Number row",
+                subtitle = "A row of digits above the letters on the app's keyboard",
+                icon = Icons.Rounded.Keyboard,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                checked = settings.keyboardNumberRow,
+                onCheckedChange = { v -> app.store.updateSettings { it.copy(keyboardNumberRow = v) } },
+            )
+            RowDivider()
+            GroupRow(
                 title = "Ctrl keys stay a control byte",
                 subtitle = "Ctrl+C from the key bar or the menu sends the byte itself, so it still interrupts a program that has taken the keyboard over. Tab, Enter, Backspace and Escape are never affected.",
                 icon = Icons.Rounded.Bolt,
