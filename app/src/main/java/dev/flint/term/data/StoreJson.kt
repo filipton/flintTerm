@@ -201,7 +201,7 @@ object StoreJson {
                     put(JSONObject().apply { put("at", c.at); put("caller", c.caller); put("what", c.what); put("result", c.result) })
                 }
             })
-            put("keyboardProtocol", s.keyboardProtocol); put("rawControlKeys", s.rawControlKeys); put("extraKeysRows", s.extraKeysRows); put("builtInKeyboard", s.builtInKeyboard); put("keyboardNumberRow", s.keyboardNumberRow); put("groupArrowKeys", s.groupArrowKeys); put("doubleTapLocksModifier", s.doubleTapLocksModifier)
+            put("keyboardProtocol", s.keyboardProtocol); put("rawControlKeys", s.rawControlKeys); put("extraKeysRows", s.extraKeysRows); put("builtInKeyboard", s.builtInKeyboard); put("groupArrowKeys", s.groupArrowKeys); put("doubleTapLocksModifier", s.doubleTapLocksModifier)
             put("twoFingerDragArrows", s.twoFingerDragArrows); put("capsLockAs", s.capsLockAs.name)
             put("composeRemembersState", s.composeRemembersState)
             put("tmuxControls", s.tmuxControls); put("ctrlLongPressOpensChords", s.ctrlLongPressOpensChords)
@@ -597,7 +597,6 @@ object StoreJson {
                 rawControlKeys = o.optBoolean("rawControlKeys", true),
                 extraKeysRows = o.optInt("extraKeysRows", 2),
                 builtInKeyboard = o.optBoolean("builtInKeyboard", false),
-                keyboardNumberRow = o.optBoolean("keyboardNumberRow", true),
                 groupArrowKeys = o.optBoolean("groupArrowKeys", true),
                 doubleTapLocksModifier = o.optBoolean("doubleTapLocksModifier", true),
                 twoFingerDragArrows = o.optBoolean("twoFingerDragArrows", true),

@@ -869,7 +869,6 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 onSearch = { searching = !searching; if (!searching) view.searchHighlight = null },
                 onCompose = { softKeys = false; compose.open = true },
                 onChords = if (settings.ctrlLongPressOpensChords) ({ chords = true }) else null,
-                numberRow = settings.keyboardNumberRow,
             )
         }
     }

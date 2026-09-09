@@ -44,8 +44,12 @@ private class Key(val token: String, val weight: Float = 1f)
 /** Uniform, so no row is a hair shorter than the one above it. */
 private val CAP_HEIGHT = 46.dp
 
-/** The digit and function strips, which sit above the keyboard proper. */
-private val DIGIT_HEIGHT = 38.dp
+/**
+ * The strip every layer opens with — digits, top symbols, F keys. Shorter than
+ * a cap, and the same on all three layers, so switching layer does not change
+ * the keyboard's height and shove the terminal up and down.
+ */
+private val STRIP_HEIGHT = 38.dp
 
 private class KeyboardRow(val keys: List<Key>, val inset: Float = 0f, val height: Dp = CAP_HEIGHT)
 
@@ -55,7 +59,7 @@ private fun row(vararg tokens: String, inset: Float = 0f, height: Dp = CAP_HEIGH
 private val LETTERS = listOf(
     // The digits are a strip above the keyboard rather than part of it, and a
     // phone keyboard draws them shorter for exactly that reason.
-    row("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", height = DIGIT_HEIGHT),
+    row("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", height = STRIP_HEIGHT),
     row("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
     // The half-key step that puts a under q and s under w, as on every phone.
     row("a", "s", "d", "f", "g", "h", "j", "k", "l", inset = 0.5f),
@@ -64,26 +68,31 @@ private val LETTERS = listOf(
     ),
 )
 
+// Page one of two, laid out where a phone keyboard's symbol page puts these
+// keys, down to the digits on top and the page key under the shift. Only the
+// two a phone spends on multiply and divide are given over to ~ and `, which a
+// shell needs and a phone has no use for.
 private val SYMBOLS = listOf(
-    row("~", "`", "|", "\\", "/", "<", ">", "[", "]", "="),
+    row("1", "2", "3", "4", "5", "6", "7", "8", "9", "0", height = STRIP_HEIGHT),
+    row("+", "~", "`", "=", "/", "_", "<", ">", "[", "]"),
     row("!", "@", "#", "$", "%", "^", "&", "*", "(", ")"),
-    row("-", "_", "+", "{", "}", ":", ";", "'", "\"", inset = 0.5f),
     KeyboardRow(
-        listOf(Key("ALT", 1.5f)) + listOf("?", ",", ".", "STAB", "TAB", "ESC", "DEL").map { Key(it) } + Key("BKSP", 1.5f),
+        listOf(Key(PAGE, 1.5f)) + listOf("-", "'", "\"", ":", ";", "?", "|").map { Key(it) } + Key("BKSP", 1.5f),
     ),
 )
 
-// F keys, arrows and the rest, so the bar's overflow is not the only way to
-// reach them while this keyboard is up.
+// Page two: F keys, arrows and the rest, so the bar's overflow is not the only
+// way to reach them while this keyboard is up. It also carries the three
+// symbols page one had no room for.
 private val FUNCTIONS = listOf(
-    row("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", height = DIGIT_HEIGHT),
-    row("F11", "F12", "ESC", "TAB", "STAB", "INS", "DEL", "SEARCH", "PASTE", "ENTER"),
+    row("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", height = STRIP_HEIGHT),
+    row("F11", "F12", "\\", "{", "}", "ESC", "TAB", "INS", "DEL", "PASTE"),
     // Left, down, up, right: the order of hjkl, of the arrow cluster's bottom
     // row, and of every other terminal's key bar. Kept adjacent so the eye finds
     // the group rather than four keys that happen to be arrows.
     row("LEFT", "DOWN", "UP", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV", inset = 0.5f),
     KeyboardRow(
-        listOf(Key("ALT", 1.5f)) + listOf("SHIFT", "SNIPPETS", "COMPOSE", "FILE", "KEYBOARD", ",", ".").map { Key(it) } + Key("BKSP", 1.5f),
+        listOf(Key(PAGE, 1.5f)) + listOf("ALT", "SHIFT", "STAB", "SNIPPETS", "COMPOSE", "FILE", "KEYBOARD").map { Key(it) } + Key("BKSP", 1.5f),
     ),
 )
 
@@ -93,8 +102,14 @@ private val SPECIAL = setOf("SHIFT", "BKSP", "ENTER", "CTRL", "ALT", "ESC", "TAB
 /** What a key reads as here, where a word would not fit or a glyph says it better. */
 private val LABELS = mapOf("SHIFT" to "⇧", "ENTER" to "⏎", "BKSP" to "⌫")
 
-/** The three layers, and what the bottom-left key says to get to the next one. */
-private enum class Layer(val next: String) { LETTERS("?123"), SYMBOLS("Fn"), FUNCTIONS("abc") }
+/**
+ * Not a key of this keyboard: the cap in the shift position on the symbol and
+ * function pages, which turns to the other one. Named rather than typed, so it
+ * cannot collide with a token the bar knows.
+ */
+private const val PAGE = "@page"
+
+private enum class Layer { LETTERS, SYMBOLS, FUNCTIONS }
 
 @Composable
 fun TerminalKeyboard(
@@ -106,8 +121,6 @@ fun TerminalKeyboard(
     onSearch: () -> Unit = {},
     onCompose: () -> Unit = {},
     onChords: (() -> Unit)? = null,
-    /** Whether the digits get a row of their own, as on a phone keyboard. */
-    numberRow: Boolean = true,
 ) {
     val mods by view.modifiers.collectAsStateWithLifecycle()
     val pickToInsert = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -138,16 +151,36 @@ fun TerminalKeyboard(
         )
     }
 
-    Column(modifier.background(chrome).padding(horizontal = 3.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+    // Little padding at the top: the key bar sits directly above with padding
+    // of its own, and two lots of it read as a gap between the two halves of
+    // what is really one keyboard.
+    Column(
+        modifier.background(chrome).padding(start = 3.dp, end = 3.dp, top = 1.dp, bottom = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
         val rows = when (layer) {
-            Layer.LETTERS -> if (numberRow) LETTERS else LETTERS.drop(1)
+            Layer.LETTERS -> LETTERS
             Layer.SYMBOLS -> SYMBOLS
             Layer.FUNCTIONS -> FUNCTIONS
         }
         rows.forEach { line ->
             Row(Modifier.fillMaxWidth()) {
                 if (line.inset > 0f) Spacer(Modifier.weight(line.inset))
-                line.keys.forEach { key(it.token, it.weight, line.height) }
+                line.keys.forEach {
+                    if (it.token == PAGE) {
+                        // Where a phone keyboard says 1/2, and for the same
+                        // reason: the second page of everything that is not a
+                        // letter, one tap away and one tap back.
+                        KeyCapText(
+                            if (layer == Layer.SYMBOLS) "1/2" else "2/2",
+                            special, capText, Modifier.weight(it.weight).padding(horizontal = 2.dp), line.height,
+                        ) {
+                            layer = if (layer == Layer.SYMBOLS) Layer.FUNCTIONS else Layer.SYMBOLS
+                        }
+                    } else {
+                        key(it.token, it.weight, line.height)
+                    }
+                }
                 if (line.inset > 0f) Spacer(Modifier.weight(line.inset))
             }
         }
@@ -155,8 +188,14 @@ fun TerminalKeyboard(
         // comma keeps its place beside it, and space, full stop and enter keep
         // theirs, so the row still reads the way the hand expects.
         Row(Modifier.fillMaxWidth()) {
-            KeyCapText(layer.next, special, capText, Modifier.weight(1.35f).padding(horizontal = 2.dp), CAP_HEIGHT) {
-                layer = Layer.entries[(layer.ordinal + 1) % Layer.entries.size]
+            // Letters and symbols under one key, as on a phone: from either
+            // page away from the letters this reads abc and goes straight
+            // back, rather than being the next stop on a cycle through three.
+            KeyCapText(
+                if (layer == Layer.LETTERS) "?123" else "abc",
+                special, capText, Modifier.weight(1.35f).padding(horizontal = 2.dp), CAP_HEIGHT,
+            ) {
+                layer = if (layer == Layer.LETTERS) Layer.SYMBOLS else Layer.LETTERS
             }
             key("CTRL", 1.2f)
             key(",", 0.9f)

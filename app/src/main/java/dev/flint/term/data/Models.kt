@@ -836,8 +836,6 @@ data class Settings(
      * exists for the one thing the others cannot do: put Ctrl on the bottom row.
      */
     val builtInKeyboard: Boolean = false,
-    /** Whether that keyboard gives the digits a row of their own. */
-    val keyboardNumberRow: Boolean = true,
     /** Tapping a modifier cap twice quickly locks it, instead of clearing it. */
     val doubleTapLocksModifier: Boolean = true,
     /** Dragging two fingers on the terminal sends arrow keys. */

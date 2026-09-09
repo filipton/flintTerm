@@ -89,16 +89,6 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Number row",
-                subtitle = "A row of digits above the letters on the app's keyboard",
-                icon = Icons.Rounded.Keyboard,
-                iconTint = MaterialTheme.colorScheme.secondary,
-                checked = settings.keyboardNumberRow,
-                onCheckedChange = { v -> app.store.updateSettings { it.copy(keyboardNumberRow = v) } },
-                enabled = settings.builtInKeyboard,
-            )
-            RowDivider()
-            GroupRow(
                 title = "Ctrl keys stay a control byte",
                 subtitle = "Ctrl+C from the key bar or the menu sends the byte itself, so it still interrupts a program that has taken the keyboard over. Tab, Enter, Backspace and Escape are never affected.",
                 icon = Icons.Rounded.Bolt,
