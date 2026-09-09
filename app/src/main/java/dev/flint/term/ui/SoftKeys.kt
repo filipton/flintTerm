@@ -90,7 +90,11 @@ private val FUNCTIONS = listOf(
     // Left, down, up, right: the order of hjkl, of the arrow cluster's bottom
     // row, and of every other terminal's key bar. Kept adjacent so the eye finds
     // the group rather than four keys that happen to be arrows.
-    row("LEFT", "DOWN", "UP", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV", inset = 0.5f),
+    //
+    // Ten across and flush, like every other row on both pages: a row indented
+    // by half a key puts this page's caps between the other page's, and paging
+    // between the two then moves every key under the thumb.
+    row("LEFT", "DOWN", "UP", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV", "SEARCH"),
     KeyboardRow(
         listOf(Key(PAGE, 1.5f)) + listOf("ALT", "SHIFT", "STAB", "SNIPPETS", "COMPOSE", "FILE", "KEYBOARD").map { Key(it) } + Key("BKSP", 1.5f),
     ),
