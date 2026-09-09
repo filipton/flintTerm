@@ -46,6 +46,7 @@ fun FilesSettings(nav: NavController) {
                 title = "Keep a .bak", subtitle = "Copy the file on the host before saving over it",
                 icon = Icons.Rounded.Backup, iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.editorBackup, onCheckedChange = { v -> app.store.updateSettings { it.copy(editorBackup = v) } },
+                enabled = settings.editor == EditorChoice.BUILT_IN,
             )
         }
 

@@ -154,6 +154,7 @@ fun AppearanceSettings(nav: NavController) {
                 title = "Ligatures", subtitle = if (family.ligatures) "Join => -> != into single glyphs" else "${family.label} has no ligatures",
                 icon = Icons.Rounded.Link, iconTint = MaterialTheme.colorScheme.secondary,
                 trailing = { AppSwitch(settings.ligatures && family.ligatures, { v -> app.store.updateSettings { it.copy(ligatures = v) } }, enabled = family.ligatures) },
+                enabled = family.ligatures,
             )
             RowDivider()
             GroupRow(

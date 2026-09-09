@@ -95,6 +95,7 @@ fun KeyboardSettings(nav: NavController) {
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.keyboardNumberRow,
                 onCheckedChange = { v -> app.store.updateSettings { it.copy(keyboardNumberRow = v) } },
+                enabled = settings.builtInKeyboard,
             )
             RowDivider()
             GroupRow(

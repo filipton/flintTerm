@@ -229,13 +229,20 @@ fun GroupRow(
     checked: Boolean? = null,
     onCheckedChange: ((Boolean) -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
+    /**
+     * False for a row whose parent setting is off. The row stays where it is,
+     * dimmed and inert, so it is clear the option exists and clear why it is
+     * doing nothing; hiding it would just make it look missing.
+     */
+    enabled: Boolean = true,
 ) {
     val toggle = if (checked != null && onCheckedChange != null) ({ onCheckedChange(!checked) }) else null
-    val click = onClick ?: toggle
+    val click = (onClick ?: toggle)?.takeIf { enabled }
     Row(
         (if (click != null) Modifier.clickable(onClick = click) else Modifier)
             .fillMaxWidth()
             .defaultMinSize(minHeight = 50.dp)
+            .alpha(if (enabled) 1f else 0.38f)
             .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -265,7 +272,7 @@ fun GroupRow(
         if (trailing != null || checked != null) {
             Spacer(Modifier.width(12.dp))
             if (trailing != null) trailing()
-            if (checked != null && onCheckedChange != null) AppSwitch(checked, onCheckedChange)
+            if (checked != null && onCheckedChange != null) AppSwitch(checked, onCheckedChange, enabled = enabled)
         }
     }
 }

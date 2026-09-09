@@ -121,17 +121,16 @@ fun TerminalSettings(nav: NavController) {
                 checked = settings.completeFromHistory,
                 onCheckedChange = { v -> app.store.updateSettings { it.copy(completeFromHistory = v) } },
             )
-            if (settings.completeFromHistory) {
-                RowDivider()
-                GroupRow(
-                    title = "Tab takes the suggestion",
-                    subtitle = "Only while one is showing; otherwise Tab is the shell's own completion",
-                    icon = Icons.Rounded.KeyboardTab,
-                    iconTint = MaterialTheme.colorScheme.primary,
-                    checked = settings.tabAcceptsSuggestion,
+            RowDivider()
+            GroupRow(
+                title = "Tab takes the suggestion",
+                subtitle = "Only while one is showing; otherwise Tab is the shell's own completion",
+                icon = Icons.Rounded.KeyboardTab,
+                iconTint = MaterialTheme.colorScheme.primary,
+                checked = settings.tabAcceptsSuggestion,
                 onCheckedChange = { v -> app.store.updateSettings { it.copy(tabAcceptsSuggestion = v) } },
-                )
-            }
+                enabled = settings.completeFromHistory,
+            )
         }
 
         Group("Recording") {
