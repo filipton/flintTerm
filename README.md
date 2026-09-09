@@ -20,12 +20,35 @@
 > behaves, what was worth building and what was not. I made those calls and drove the work. If
 > something in here is a bad idea, it is my bad idea.
 
-<p align="center">
-  <img src="docs/screenshots/hosts.png" width="205" alt="The host list">
-  <img src="docs/screenshots/terminal.png" width="205" alt="A session">
-  <img src="docs/screenshots/themes.png" width="205" alt="Color schemes">
-  <img src="docs/screenshots/files.png" width="205" alt="The file browser">
-</p>
+<table align="center">
+  <tr>
+    <td width="33%"><img src="docs/screenshots/hosts.png" width="100%" alt="The host list, hosts grouped by folder"></td>
+    <td width="33%"><img src="docs/screenshots/terminal.png" width="100%" alt="htop running full screen over SSH"></td>
+    <td width="33%"><img src="docs/screenshots/themes.png" width="100%" alt="The color scheme picker"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Hosts, grouped, each in its own color</sub></td>
+    <td align="center"><sub>htop over SSH, full screen</sub></td>
+    <td align="center"><sub>604 schemes, each a live preview</sub></td>
+  </tr>
+</table>
+
+<details>
+<summary align="center"><b>More: a shell, the file browser, the app's own keyboard</b></summary>
+<br>
+<table align="center">
+  <tr>
+    <td width="33%"><img src="docs/screenshots/shell.png" width="100%" alt="A shell session"></td>
+    <td width="33%"><img src="docs/screenshots/files.png" width="100%" alt="The SFTP file browser"></td>
+    <td width="33%"><img src="docs/screenshots/keyboard.png" width="100%" alt="The app's own keyboard"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>A session, with the extra-key bar</sub></td>
+    <td align="center"><sub>SFTP, a tab of the same session</sub></td>
+    <td align="center"><sub>The app's keyboard, Ctrl on the bottom row</sub></td>
+  </tr>
+</table>
+</details>
 
 ## What it does
 
