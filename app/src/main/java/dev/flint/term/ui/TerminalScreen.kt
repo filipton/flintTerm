@@ -363,7 +363,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     DisposableEffect(sessionId) {
         onDispose { if (!app.store.settings.value.composeRemembersState) ComposeLines.forget(sessionId) }
     }
-    view.onCompose = { compose.open = true }
+    view.onCompose = { softKeys = false; compose.open = true }
 
     var snippets by remember { mutableStateOf(false) }
     var pad by remember { mutableStateOf(false) }
@@ -855,7 +855,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 row2 = if (barRows >= 2) settings.extraKeysRow2 ?: ExtraKeys.defaultRow2 else emptyList(),
                 onSnippets = { snippets = true },
                 onSearch = { searching = !searching; if (!searching) view.searchHighlight = null },
-                onCompose = { compose.open = true },
+                onCompose = { softKeys = false; compose.open = true },
                 onChords = if (settings.ctrlLongPressOpensChords) ({ chords = true }) else null,
                 onMore = { pad = true },
             )
@@ -867,7 +867,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 view, chrome, onChrome, Modifier.fillMaxWidth().navigationBarsPadding(),
                 onSnippets = { snippets = true },
                 onSearch = { searching = !searching; if (!searching) view.searchHighlight = null },
-                onCompose = { compose.open = true },
+                onCompose = { softKeys = false; compose.open = true },
                 onChords = if (settings.ctrlLongPressOpensChords) ({ chords = true }) else null,
                 numberRow = settings.keyboardNumberRow,
             )
@@ -880,7 +880,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             onDismiss = { pad = false },
             onSnippets = { pad = false; snippets = true },
             onSearch = { pad = false; searching = !searching; if (!searching) view.searchHighlight = null },
-            onCompose = { pad = false; compose.open = true },
+            onCompose = { pad = false; softKeys = false; compose.open = true },
             onChords = if (settings.ctrlLongPressOpensChords) ({ pad = false; chords = true }) else null,
         )
     }
@@ -1169,7 +1169,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             ) + menuGroup(
                 "Type",
                 SheetAction("Compose a line", Icons.Rounded.EditNote, subtitle = "Write it with autocorrect and voice, then send the lot") {
-                    menu = false; compose.open = true
+                    menu = false; softKeys = false; compose.open = true
                 },
                 other?.let {
                     SheetAction(
