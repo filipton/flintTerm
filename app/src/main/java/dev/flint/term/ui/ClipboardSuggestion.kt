@@ -2,6 +2,7 @@ package dev.flint.term.ui
 
 import android.content.ClipDescription
 import android.content.ClipboardManager
+import android.view.ViewTreeObserver
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -87,27 +89,37 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
     // says so rather than promising a paste.
     var picture by remember { mutableStateOf(false) }
 
-    DisposableEffect(clipboard, owner) {
-        fun look() {
-            val d = runCatching { clipboard.primaryClipDescription }.getOrNull()
-            val stamp = d?.timestamp ?: 0L
-            val image = d?.hasMimeType("image/*") == true
-            val text = d?.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) == true ||
-                d?.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML) == true
-            val fresh = stamp > System.currentTimeMillis() - FRESH_MS
-            picture = image && !text
-            offered = if ((text || image) && fresh && stamp > Settled.stamp) stamp else 0L
-        }
+    // Anything but text is a file: a screenshot, a PDF, a download. It cannot be
+    // typed, so the offer says "send" and the paste takes the road files take.
+    fun look() {
+        val d = runCatching { clipboard.primaryClipDescription }.getOrNull()
+        val stamp = d?.timestamp ?: 0L
+        val text = d?.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) == true ||
+            d?.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML) == true
+        val something = (d?.mimeTypeCount ?: 0) > 0
+        val fresh = stamp > System.currentTimeMillis() - FRESH_MS
+        picture = something && !text
+        offered = if (something && fresh && stamp > Settled.stamp) stamp else 0L
+    }
+
+    val host = LocalView.current
+    DisposableEffect(clipboard, owner, host) {
         val onClip = ClipboardManager.OnPrimaryClipChangedListener { look() }
-        // Resume as well as the listener: a copy made in another app happens
-        // while this one is stopped, and the listener is not running then.
+        // Three ways to hear about a copy, because one is never enough. The
+        // listener only runs while this window has focus; a copy made in another
+        // app happens while this one is stopped, which resume covers; and a
+        // screenshot's own toolbar takes the focus without ever pausing the app,
+        // which leaves the window regaining it as the only thing that fires.
         val onLifecycle = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) look() }
+        val onFocus = ViewTreeObserver.OnWindowFocusChangeListener { has -> if (has) look() }
         clipboard.addPrimaryClipChangedListener(onClip)
         owner.lifecycle.addObserver(onLifecycle)
+        host.viewTreeObserver.addOnWindowFocusChangeListener(onFocus)
         look()
         onDispose {
             clipboard.removePrimaryClipChangedListener(onClip)
             owner.lifecycle.removeObserver(onLifecycle)
+            runCatching { host.viewTreeObserver.removeOnWindowFocusChangeListener(onFocus) }
         }
     }
 
@@ -145,7 +157,7 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
                 null, Modifier.size(15.dp), tint = onChrome.copy(alpha = 0.75f),
             )
             Text(
-                if (picture) "Send the picture you copied" else "Paste what you copied",
+                if (picture) "Send the file you copied" else "Paste what you copied",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = onChrome.copy(alpha = 0.85f),
