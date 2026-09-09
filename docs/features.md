@@ -27,8 +27,12 @@ Everything the app does, at length. The short list is in the [README](../README.
 - A host picks its route from one **VPN** list — direct, a WireGuard tunnel, or a Tailscale account —
   rather than a switch per kind, since it only ever uses one.
 - **Several addresses per host, each with its own route**: a LAN address dialled directly, a tailnet
-  name through Tailscale, a remote address through WireGuard. They are tried in order and the first
-  that answers wins, so the same host works from the sofa and from a train without editing anything.
+  name through Tailscale, a remote address through WireGuard. Each carries its own VPN *and* its own
+  answer to when that VPN is used, so a wired LAN address can be dialled directly at home and fall
+  back to the tunnel from anywhere else — the same choice the host's own address has, asked once per
+  address. They are tried in order and the first that answers wins, so the same host works from the
+  sofa and from a train without editing anything. In the editor each one folds to a line, and the
+  order they are tried in is moved with the arrows beside it.
   Being turned away (bad password, rejected host key) stops the search — only silence moves on. Mosh
   and file access follow the address that answered, not the first one in the list. The order is the
   one you wrote, with one exception: a private address belonging to a network the phone is not on has
