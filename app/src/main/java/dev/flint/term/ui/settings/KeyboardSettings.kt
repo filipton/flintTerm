@@ -80,12 +80,12 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Menu Ctrl+C is a raw interrupt",
-                subtitle = "The \u22ee menu's Ctrl+C and Ctrl+D send the control byte itself, so they still reach a program that has taken the keyboard over",
+                title = "Ctrl keys stay a control byte",
+                subtitle = "Ctrl+C from the key bar or the menu sends the byte itself, so it still interrupts a program that has taken the keyboard over. Tab, Enter, Backspace and Escape are never affected.",
                 icon = Icons.Rounded.Bolt,
                 iconTint = MaterialTheme.colorScheme.secondary,
-                checked = settings.rawMenuControls,
-                onCheckedChange = { v -> app.store.updateSettings { it.copy(rawMenuControls = v) } },
+                checked = settings.rawControlKeys,
+                onCheckedChange = { v -> app.store.updateSettings { it.copy(rawControlKeys = v) } },
             )
             RowDivider()
             GroupRow(

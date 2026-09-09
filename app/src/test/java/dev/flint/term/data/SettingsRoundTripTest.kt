@@ -17,7 +17,7 @@ class SettingsRoundTripTest {
     @Test fun `settings survive the file`() {
         val settings = Settings(
             keyboardProtocol = false,
-            rawMenuControls = false,
+            rawControlKeys = false,
             doubleTapLocksModifier = false,
             twoFingerDragArrows = false,
             capsLockAs = CapsLockAction.CTRL,

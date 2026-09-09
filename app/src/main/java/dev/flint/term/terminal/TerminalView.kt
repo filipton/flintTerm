@@ -1454,7 +1454,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         if (text.length == 1 && (mods.ctrl != ModState.OFF || mods.alt != ModState.OFF || mods.shift != ModState.OFF)) {
             var ch = text[0]
             if (mods.shift != ModState.OFF && ch.isLetter()) ch = ch.uppercaseChar()
-            sink.key(KeyPress(KeyCode.Char(ch.code.toUInt()), mods.ctrl != ModState.OFF, mods.alt != ModState.OFF, false, KeyEventKind.PRESS))
+            sendPress(KeyCode.Char(ch.code.toUInt()), mods.ctrl != ModState.OFF, mods.alt != ModState.OFF, false, KeyEventKind.PRESS)
             consumeOnceModifiers()
         } else if (text == "\n") {
             sendKey(KeyCode.Enter)
@@ -1515,18 +1515,45 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             }
         }
         val mods = modifierState.value
-        sink.key(
-            KeyPress(
-                key,
-                ctrl || mods.ctrl != ModState.OFF,
-                alt || mods.alt != ModState.OFF,
-                shift || mods.shift != ModState.OFF,
-                kind,
-            ),
-        )
+        val wantsCtrl = ctrl || mods.ctrl != ModState.OFF
+        val wantsAlt = alt || mods.alt != ModState.OFF
+        val wantsShift = shift || mods.shift != ModState.OFF
+        sendPress(key, wantsCtrl, wantsAlt, wantsShift, kind)
         // A sticky modifier is spent by the press; letting go of the key is not
         // a second keystroke.
         if (press) consumeOnceModifiers()
+    }
+
+    /**
+     * The C0 byte a Ctrl+letter stands for, when that is what should go out
+     * instead of a key event.
+     *
+     * Ctrl+C from the cap above the keyboard is the only interrupt a phone
+     * has. Under the keyboard protocol it would leave as `CSI 99;5u`, which is
+     * correct and which a wedged program will never read, so the byte goes
+     * instead. Five letters are left alone: their control code *is* another
+     * key — Ctrl+I is Tab, Ctrl+M is Enter, Ctrl+H is Backspace, Ctrl+J is a
+     * line feed, Ctrl+[ is Escape — and telling those apart is the whole
+     * reason the protocol exists. Nothing changes while it is switched off,
+     * where the encoder already produces exactly these bytes.
+     */
+    /**
+     * The one place a press leaves by. Keys arrive here from three directions —
+     * the key bar, the soft keyboard with a sticky modifier, and a hardware
+     * keyboard — and a rule applied to only one of them is a rule that holds
+     * until somebody presses the same key a different way.
+     */
+    private fun sendPress(key: KeyCode, ctrl: Boolean, alt: Boolean, shift: Boolean, kind: KeyEventKind) {
+        val raw = if (kind != KeyEventKind.RELEASE && settings.rawControlKeys) controlByte(key, ctrl, alt, shift) else null
+        if (raw != null) sink.text(raw.toString()) else sink.key(KeyPress(key, ctrl, alt, shift, kind))
+    }
+
+    private fun controlByte(key: KeyCode, ctrl: Boolean, alt: Boolean, shift: Boolean): Char? {
+        if (!ctrl || alt || shift) return null
+        val cp = (key as? KeyCode.Char)?.codepoint?.toInt() ?: return null
+        val letter = cp.toChar().lowercaseChar()
+        if (letter !in 'a'..'z' || letter in AMBIGUOUS_CONTROL) return null
+        return (letter - 'a' + 1).toChar()
     }
 
     /**
@@ -1729,14 +1756,12 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         val ch = event.getUnicodeChar(HardwareKeyMap.unicodeMeta(event.metaState, settings.capsLockAs))
         if (ch != 0 && ch and KeyCharacterMap.COMBINING_ACCENT == 0) {
             keepCursorLit()
-            sink.key(
-                KeyPress(
-                    KeyCode.Char(ch.toUInt()),
-                    event.isCtrlPressed || modifierState.value.ctrl != ModState.OFF,
-                    event.isAltPressed || modifierState.value.alt != ModState.OFF,
-                    false,
-                    kind,
-                ),
+            sendPress(
+                KeyCode.Char(ch.toUInt()),
+                event.isCtrlPressed || modifierState.value.ctrl != ModState.OFF,
+                event.isAltPressed || modifierState.value.alt != ModState.OFF,
+                false,
+                kind,
             )
             consumeOnceModifiers()
             return true
@@ -1793,6 +1818,9 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
         /** What the keyboard may hand over besides text; GIFs count as images. */
         private val IMAGE_MIME_TYPES = arrayOf("image/*")
+
+        /** Ctrl+these are another key's byte, so they stay a key event. */
+        private val AMBIGUOUS_CONTROL = setOf('i', 'm', 'h', 'j')
 
         /** Half a blink, the rate xterm has used since forever. */
         private const val BLINK_MS = 530L

@@ -803,16 +803,16 @@ data class Settings(
      */
     val keyboardProtocol: Boolean = true,
     /**
-     * Whether the menu's Ctrl+C and Ctrl+D write the control byte itself
-     * rather than going out as a keypress.
+     * Whether Ctrl+letter writes the control byte itself rather than going out
+     * as a key event, from the key bar and from the menu alike.
      *
-     * On, because those two entries exist for the moment a program has stopped
-     * listening, and a program that has taken the keyboard over gets Ctrl+C as
-     * `CSI 99;5u` instead of an interrupt. That is correct, and it is useless
-     * when the point of reaching for the menu was that the program is wedged.
-     * Off is the strictly protocol-faithful behavior.
+     * On, because Ctrl+C is the only interrupt a phone has. Under the keyboard
+     * protocol it would leave as `CSI 99;5u`, which is correct and which a
+     * program that has stopped listening will never read. The letters whose
+     * control code is another key are left alone either way, so Ctrl+[ and
+     * Escape stay distinguishable. Off is strictly protocol-faithful.
      */
-    val rawMenuControls: Boolean = true,
+    val rawControlKeys: Boolean = true,
     /** Tapping a modifier cap twice quickly locks it, instead of clearing it. */
     val doubleTapLocksModifier: Boolean = true,
     /** Dragging two fingers on the terminal sends arrow keys. */
