@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Nothing this app stores leaves the phone by itself.
+
+    Cloud backup is off anyway (allowBackup="false"), but on Android 12 and
+    later a device-to-device transfer is governed by this file instead, and it
+    would otherwise copy the store to a new phone. The secrets in it — every
+    password, passphrase and private key — are sealed with a key that lives in
+    this phone's keystore and cannot travel, so what would arrive is a host
+    list whose logins have all silently become empty strings.
+
+    Moving to a new phone goes through Settings, Backup: an encrypted file that
+    carries the secrets with it, which is the only path that actually works.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>
