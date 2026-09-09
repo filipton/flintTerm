@@ -1412,6 +1412,23 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     /** Whether the app's own keyboard is on screen, as the screen last reported. */
     var builtInKeyboardUp: Boolean = false
 
+    /**
+     * Coming back from a screenshot, a share sheet or the recents list, the
+     * framework puts the system keyboard back up for whatever had focus. With
+     * this app's own keyboard already drawn on the screen that is two
+     * keyboards, so it goes away again — posted, because the restore happens
+     * after focus is handed back.
+     */
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        if (!hasWindowFocus || !settings.builtInKeyboard || !builtInKeyboardUp) return
+        post {
+            if (builtInKeyboardUp) {
+                context.getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(windowToken, 0)
+            }
+        }
+    }
+
     fun hideKeyboard() {
         onKeyboardWanted?.invoke(false)
         val imm = context.getSystemService(InputMethodManager::class.java)

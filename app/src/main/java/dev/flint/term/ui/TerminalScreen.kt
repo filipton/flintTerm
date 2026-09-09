@@ -587,6 +587,10 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     BackHandler {
         if (searching) { searching = false; view.searchHighlight = null; return@BackHandler }
         if (compose.open) { compose.open = false; return@BackHandler }
+        // What back does to the system keyboard, done for this one: the
+        // gesture that puts a keyboard away should not also close the session
+        // it was being typed into.
+        if (softKeys) { softKeys = false; return@BackHandler }
         view.hideKeyboard()
         nav.popBackStack()
     }
