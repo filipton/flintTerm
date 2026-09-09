@@ -123,8 +123,7 @@ Bundled color schemes: six hundred from [iTerm2-Color-Schemes](https://github.co
 
 Bundled fonts: the Nerd Font symbols under the MIT license (see
 `app/FONT_LICENSE_SymbolsNerdFont.txt`), JetBrains Mono under the SIL Open Font License (see
-`app/FONT_LICENSE_JetBrainsMono.txt`), Fira Code (SIL OFL 1.1) and Hack (Hack Open Font License —
-MIT plus the Bitstream Vera license). **TODO:** add the license texts for Fira Code and Hack next to
-the JetBrains Mono one before shipping.
+`app/FONT_LICENSE_JetBrainsMono.txt`), Fira Code (SIL OFL 1.1, `app/FONT_LICENSE_FiraCode.txt`) and
+Hack (MIT plus the Bitstream Vera license, `app/FONT_LICENSE_Hack.txt`). `NOTICE` lists all four.
 
 [← back to the README](../README.md)
