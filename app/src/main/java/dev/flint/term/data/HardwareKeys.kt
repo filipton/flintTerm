@@ -1,5 +1,6 @@
 package dev.flint.term.data
 
+import android.annotation.SuppressLint
 import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
@@ -91,6 +92,9 @@ object HardwareKeys {
      * nothing to prove who is holding it cannot have such a key at all, and gets
      * an ordinary one — [Info.userAuthRequired] says which it was.
      */
+    // Both flags below are Android 9, and [ladder] is what keeps them off an
+    // older phone; lint cannot see a version check it did not make itself.
+    @SuppressLint("NewApi")
     fun generate(id: String, requireAuth: Boolean = false): Info {
         val alias = aliasFor(id)
         var last: Exception? = null

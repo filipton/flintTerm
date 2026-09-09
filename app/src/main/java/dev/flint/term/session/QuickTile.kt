@@ -1,5 +1,6 @@
 package dev.flint.term.session
 
+import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Build
@@ -40,6 +41,9 @@ class QuickTile : TileService() {
         if (isLocked) unlockAndRun { launch(intent) } else launch(intent)
     }
 
+    // Android 14 made the Intent form throw, which is what the branch below is
+    // for; lint flags the call anyway, guarded or not.
+    @SuppressLint("StartActivityAndCollapseDeprecated")
     private fun launch(intent: Intent) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
