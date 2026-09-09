@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The dark half of res/values/widget.xml, taken from the app's own surfaces. -->
+<resources>
+    <color name="widget_bg">#FF12161F</color>
+    <color name="widget_text">#FFE8ECF4</color>
+    <color name="widget_muted">#FF98A2B8</color>
+    <color name="widget_chip">#22FFFFFF</color>
+    <color name="widget_accent">#FF7AA2F7</color>
+</resources>

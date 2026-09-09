@@ -1,0 +1,12 @@
+[package]
+name = "term-diff"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Runs the two terminal backends on the same input and reports where they disagree"
+publish = false
+
+[dependencies]
+term-core.workspace = true
+term-alacritty.workspace = true
+term-ghostty.workspace = true

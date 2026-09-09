@@ -1,0 +1,15 @@
+[package]
+name = "tun2ssh"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp", "alloc"] }
+tokio.workspace = true
+log.workspace = true
+thiserror.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+env_logger = "0.11"

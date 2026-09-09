@@ -1,0 +1,8 @@
+[package]
+name = "ghostty-vt-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# Claims the native library so two crates cannot link it twice, and lets the
+# build script publish `DEP_GHOSTTY_VT_*` metadata.
+links = "ghostty-vt"

@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/status_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <!-- An ImageView, not a View: RemoteViews inflates only classes it
+             knows, and android.view.View is not one of them. -->
+        <ImageView
+            android:id="@+id/status_accent"
+            android:layout_width="4dp"
+            android:layout_height="18dp"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/status_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:textColor="@color/widget_text"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/status_empty"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="@string/widget_status_empty"
+        android:textColor="@color/widget_muted"
+        android:textSize="12sp" />
+
+    <LinearLayout
+        android:id="@+id/status_body"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:layout_marginTop="8dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/widget_status_load"
+                android:textColor="@color/widget_muted"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/status_load"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text"
+                android:textSize="12sp"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/widget_status_memory"
+                android:textColor="@color/widget_muted"
+                android:textSize="11sp" />
+
+            <TextView
+                android:id="@+id/status_memory"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text"
+                android:textSize="12sp"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/status_memory_bar"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="3dp"
+            android:max="100"
+            android:progressTint="@color/widget_accent"
+            android:progressBackgroundTint="@color/widget_chip" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="6dp">
+
+            <TextView
+                android:id="@+id/status_disk_label"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/widget_status_disk"
+                android:textColor="@color/widget_muted"
+                android:textSize="11sp"
+                android:maxLines="1"
+                android:ellipsize="middle" />
+
+            <TextView
+                android:id="@+id/status_disk"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/widget_text"
+                android:textSize="12sp"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/status_disk_bar"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginTop="3dp"
+            android:max="100"
+            android:progressTint="@color/widget_accent"
+            android:progressBackgroundTint="@color/widget_chip" />
+    </LinearLayout>
+
+    <!-- Outside the numbers, because it is the one line worth having when
+         there are no numbers: when the last reading was taken, or why there
+         is not a newer one. -->
+    <TextView
+        android:id="@+id/status_taken"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textColor="@color/widget_muted"
+        android:textSize="10sp"
+        android:maxLines="2"
+        android:ellipsize="end" />
+</LinearLayout>

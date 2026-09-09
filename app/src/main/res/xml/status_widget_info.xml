@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    updatePeriodMillis is 0 on purpose: this widget is refreshed by WorkManager
+    at the interval its config activity was told, which the launcher's own
+    schedule knows nothing about — and which can be held off entirely when data
+    saving says so.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="110dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_status_description"
+    android:initialLayout="@layout/widget_status"
+    android:previewLayout="@layout/widget_status"
+    android:configure="dev.flint.term.ui.StatusWidgetConfigActivity"
+    android:updatePeriodMillis="0" />

@@ -1,0 +1,9 @@
+[package]
+name = "pty"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+nix.workspace = true
+libc.workspace = true
+log.workspace = true
+thiserror.workspace = true

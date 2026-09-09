@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_row"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:minHeight="46dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/widget_row"
+    android:paddingStart="6dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="5dp"
+    android:paddingBottom="5dp">
+
+    <!--
+        Colored by the factory: the host's accent, the same one its card carries.
+        An ImageView rather than a plain View because RemoteViews will only
+        inflate the handful of classes it knows, and android.view.View is not
+        one of them — it fails at inflation, so the whole row goes missing.
+    -->
+    <ImageView
+        android:id="@+id/widget_row_accent"
+        android:layout_width="4dp"
+        android:layout_height="26dp"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="10dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_row_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/widget_text"
+            android:textSize="14sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/widget_row_target"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/widget_muted"
+            android:textSize="11sp"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_row_open"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/widget_chip"
+        android:paddingStart="7dp"
+        android:paddingEnd="7dp"
+        android:paddingTop="2dp"
+        android:paddingBottom="2dp"
+        android:text="@string/widget_row_open"
+        android:textColor="@color/widget_muted"
+        android:textSize="10sp"
+        android:visibility="gone" />
+</LinearLayout>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Local copies handed to other apps for editing. -->
+    <cache-path name="edit" path="edit/" />
+    <!-- Session recordings, so one can be shared or opened elsewhere. -->
+    <external-files-path name="recordings" path="recordings/" />
+    <!-- A scrollback on its way to the share sheet; too big for an intent extra. -->
+    <cache-path name="scrollback" path="scrollback/" />
+    <!-- A custom color scheme written out as a Ghostty theme for the share sheet. -->
+    <cache-path name="schemes" path="schemes/" />
+</paths>

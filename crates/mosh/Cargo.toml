@@ -1,0 +1,15 @@
+[package]
+name = "mosh"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Independent client implementation of mosh's State Synchronization Protocol"
+
+[dependencies]
+aes = "0.8"
+ocb3 = "0.1"
+flate2 = "1"
+thiserror.workspace = true
+log.workspace = true
+
+[dev-dependencies]

@@ -1,0 +1,51 @@
+[package]
+name = "flintterm"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "flintterm"
+
+[dependencies]
+term-core.workspace = true
+term-alacritty = { workspace = true, optional = true }
+term-ghostty = { workspace = true, optional = true }
+ssh-core.workspace = true
+mosh.workspace = true
+russh = { workspace = true, default-features = false, features = ["ring"] }
+wg-tunnel = { path = "../wg" }
+tun2ssh = { path = "../tun2ssh" }
+boringtun = { version = "0.7", default-features = false }
+rand = "0.8"
+argon2 = { version = "0.6", default-features = false, features = ["alloc"] }
+chacha20poly1305 = { version = "0.10", default-features = false, features = ["alloc"] }
+# Reading PuTTY's .ppk files; see src/putty.rs for what each is for.
+aes = "0.9"
+cbc = "0.2"
+hmac = "0.13"
+sha1 = { version = "0.11", default-features = false }
+sha2 = { version = "0.11", default-features = false }
+regex.workspace = true
+serde_json = { version = "1", optional = true }
+pty.workspace = true
+uniffi.workspace = true
+tokio.workspace = true
+log.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+bytes.workspace = true
+libc.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger.workspace = true
+
+[features]
+default = ["alacritty"]
+# The terminal emulator backend. `alacritty` is the default; `ghostty` swaps in
+# libghostty-vt and needs a Zig toolchain to build (see ghostty-vt-sys).
+# Enabling both is allowed and picks ghostty.
+alacritty = ["dep:term-alacritty"]
+ghostty = ["dep:term-ghostty"]
+# Embedded Tailscale via libtailscale.so (see build-tailscale.sh).
+tailscale = ["serde_json"]

@@ -1,0 +1,6 @@
+[bindings.kotlin]
+package_name = "dev.flint.term.core"
+cdylib_name = "flintterm"
+android = true
+android_cleaner = true
+generate_immutable_records = true

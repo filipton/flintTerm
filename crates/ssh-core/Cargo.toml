@@ -1,0 +1,15 @@
+[package]
+name = "ssh-core"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+russh = { workspace = true, default-features = false, features = ["ring", "flate2", "rsa"] }
+russh-sftp.workspace = true
+tokio.workspace = true
+log.workspace = true
+thiserror.workspace = true
+bytes.workspace = true
+rsa = { version = "0.9", default-features = false, features = ["std", "sha2"] }
+sha2 = "0.10"
+
+[dev-dependencies]

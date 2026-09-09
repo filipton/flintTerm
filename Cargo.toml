@@ -1,0 +1,54 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/term-core",
+    "crates/term-alacritty",
+    "crates/ghostty-vt-sys",
+    "crates/term-ghostty",
+    "crates/term-diff",
+    "crates/ssh-core",
+    "crates/pty",
+    "crates/mosh",
+    "crates/wg",
+    "crates/tun2ssh",
+    "crates/ffi",
+    "crates/uniffi-bindgen",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+term-core = { path = "crates/term-core" }
+term-alacritty = { path = "crates/term-alacritty" }
+term-ghostty = { path = "crates/term-ghostty" }
+ghostty-vt-sys = { path = "crates/ghostty-vt-sys" }
+ssh-core = { path = "crates/ssh-core" }
+mosh = { path = "crates/mosh" }
+tun2ssh = { path = "crates/tun2ssh" }
+pty = { path = "crates/pty" }
+
+alacritty_terminal = "0.26"
+russh = { version = "0.63", default-features = false }
+russh-sftp = "2.4"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "sync", "time", "macros", "fs"] }
+uniffi = "0.32"
+nix = { version = "0.31", features = ["term", "process", "fs", "signal", "poll"] }
+libc = "0.2"
+log = "0.4"
+regex = "1"
+android_logger = "0.15"
+thiserror = "2"
+parking_lot = "0.12"
+bytes = "1"
+rand = "0.9"
+unicode-width = "0.2"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+panic = "unwind"
+strip = "debuginfo"

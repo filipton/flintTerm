@@ -1,0 +1,9 @@
+[package]
+name = "term-core"
+version.workspace = true
+edition.workspace = true
+[dependencies]
+base64 = "0.22"
+flate2 = "1.1.10"
+png = "0.18.1"
+unicode-width.workspace = true

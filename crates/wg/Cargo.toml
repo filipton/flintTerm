@@ -1,0 +1,18 @@
+[package]
+name = "wg-tunnel"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+boringtun = { version = "0.7", default-features = false }
+smoltcp = { version = "0.12", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp", "socket-icmp", "alloc"] }
+tokio.workspace = true
+log.workspace = true
+thiserror.workspace = true
+bytes.workspace = true
+base64 = "0.22"
+rand = "0.8"
+
+[dev-dependencies]
+ssh-core = { path = "../ssh-core" }
+env_logger = "0.11"

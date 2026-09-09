@@ -1,0 +1,18 @@
+/target
+/app/build
+/build
+/.gradle
+/local.properties
+
+/.idea
+*.iml
+/.kotlin
+
+# release signing (created by build-apk.sh)
+/keystore.properties
+*.jks
+*.keystore
+/dist
+/app/src/main/jniLibs
+
+/.claude

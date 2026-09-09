@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Touch feedback the launcher cannot give us: a widget row is not a list item
+    of the host app, so ?selectableItemBackground would resolve against a theme
+    we know nothing about.
+-->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android" android:color="#33808080">
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <corners android:radius="14dp" />
+            <solid android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+</ripple>

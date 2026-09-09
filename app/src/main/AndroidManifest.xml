@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!--
+        Finding servers on the network the phone is on, and reaching them. From
+        Android 17 the local network is behind a permission of its own; below
+        that, NsdManager takes the multicast lock for a foreground app itself,
+        so nothing else is needed for discovery.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
+    <!-- Reader mode, for a FIDO2 security key held against the back of the phone. -->
+    <uses-permission android:name="android.permission.NFC" />
+
+    <!-- USB serial consoles over OTG and USB security keys; optional so the app
+         still installs on a phone without OTG, which the Keys screen says. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+
+    <!-- So "Open in…" / "Edit in…" can see which apps handle a file (Android 11+ visibility). -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="*/*" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.EDIT" />
+            <data android:mimeType="*/*" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".App"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.FlintTerm"
+        android:enableOnBackInvokedCallback="true">
+
+        <!--
+            supportsPictureInPicture puts the terminal in a window that floats
+            over other apps. The size changes it brings are handled in the
+            activity rather than by restarting it — screenSize, smallestScreenSize,
+            screenLayout and orientation, which configChanges already carries —
+            because a restart would take the session's view down with it.
+        -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
+            android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|uiMode|density|smallestScreenSize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Share sheet: send files here to upload them to a host -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <!-- Offer the app when a USB serial adapter is plugged in -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
+
+            <!-- ssh://user@host:port and sftp:// links -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="ssh" />
+                <data android:scheme="sftp" />
+            </intent-filter>
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!--
+            Puts each host into the system file picker and the Files app. The
+            MANAGE_DOCUMENTS permission is held by the system alone, so only the
+            document UI can bind this; other apps reach it through the picker.
+        -->
+        <provider
+            android:name=".files.SftpDocumentsProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
+        <service
+            android:name=".session.SessionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps SSH terminal sessions alive while the app is in the background" />
+        </service>
+        <!--
+            The phone's traffic, carried by an SSH session. BIND_VPN_SERVICE is
+            held by the system, so only Android itself can start this.
+        -->
+        <service
+            android:name=".session.SshVpnService"
+            android:exported="false"
+            android:permission="android.permission.BIND_VPN_SERVICE"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Carries the phone's traffic through an SSH host acting as a VPN" />
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+        <service
+            android:name=".transfer.TransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+        <!--
+            One tap from the pull-down to the last host used. BIND_QUICK_SETTINGS_TILE
+            is held by the system, so only the quick settings panel can bind this.
+        -->
+        <service
+            android:name=".session.QuickTile"
+            android:exported="true"
+            android:icon="@drawable/ic_terminal"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- The host list on the home screen; the rows send the shortcut intents. -->
+        <receiver
+            android:name=".session.HostsWidget"
+            android:exported="true"
+            android:label="@string/widget_hosts_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/hosts_widget_info" />
+        </receiver>
+        <!--
+            Fills those rows. BIND_REMOTEVIEWS is held by the system, so only the
+            launcher can bind it.
+        -->
+        <service
+            android:name=".session.HostsWidgetService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+
+        <!-- One host's load, memory and fullest disk; WorkManager refreshes it. -->
+        <receiver
+            android:name=".session.StatusWidget"
+            android:exported="true"
+            android:label="@string/widget_status_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/status_widget_info" />
+        </receiver>
+        <!--
+            Asks which host and how often while the widget is being placed.
+            Exported because the launcher is what starts it, and it is handed
+            nothing but the widget id the launcher just made.
+        -->
+        <activity
+            android:name=".ui.StatusWidgetConfigActivity"
+            android:exported="true"
+            android:label="@string/widget_status_label"
+            android:theme="@style/Theme.FlintTerm">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Automation. Exported on purpose — the point is that Tasker, a
+            shortcut app or adb can reach it — and guarded where the guard can
+            actually be seen: the switch in Settings, off until it is turned on,
+            and a list of the apps allowed to call. A manifest permission was
+            tried here first and thrown out: at "normal" it is granted to
+            anything that asks for it, so it named the caller without stopping
+            it, while shutting out every tool that cannot declare a permission
+            of ours — which is all of them.
+        -->
+        <receiver
+            android:name=".session.AutomationReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="dev.flint.term.action.CONNECT" />
+                <action android:name="dev.flint.term.action.RUN" />
+                <action android:name="dev.flint.term.action.SNIPPET" />
+                <action android:name="dev.flint.term.action.DISCONNECT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

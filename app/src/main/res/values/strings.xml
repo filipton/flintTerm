@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">flintTerm</string>
+    <string name="notification_channel">Active sessions</string>
+    <string name="notification_channel_transfers">File transfers</string>
+</resources>

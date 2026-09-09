@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A widget is drawn by the launcher, in the launcher's theme, so it cannot
+    inherit the app's palette. These are the light values; res/values-night
+    carries the dark ones.
+-->
+<resources>
+    <color name="widget_bg">#FFFFFFFF</color>
+    <color name="widget_text">#FF12161F</color>
+    <color name="widget_muted">#FF5B6478</color>
+    <color name="widget_chip">#14000000</color>
+    <color name="widget_accent">#FF3D6BE0</color>
+
+    <string name="widget_hosts_label">Hosts</string>
+    <string name="widget_hosts_description">Your hosts, one tap from a shell</string>
+    <string name="widget_hosts_empty">No hosts yet.\nAdd one in flintTerm.</string>
+    <string name="widget_row_open">open</string>
+
+    <string name="widget_status_label">Server status</string>
+    <string name="widget_status_description">Load, memory and the fullest disk for one host</string>
+    <string name="widget_status_empty">No reading yet.</string>
+    <string name="widget_status_load">Load</string>
+    <string name="widget_status_memory">Memory</string>
+    <string name="widget_status_disk">Disk</string>
+    <string name="widget_status_just_now">just now</string>
+
+</resources>
