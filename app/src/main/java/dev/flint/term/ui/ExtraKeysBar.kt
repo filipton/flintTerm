@@ -107,7 +107,7 @@ fun ExtraKeysBar(
     Column(modifier.background(chrome).padding(horizontal = 6.dp, vertical = 5.dp)) {
         if (row1.isNotEmpty()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                row1.forEach { t -> render(t, if (t == "SHIFT") 1.1f else if (t in setOf("UP", "DOWN", "LEFT", "RIGHT")) 0.85f else 1f) }
+                row1.forEach { t -> render(t, if (t == "SHIFT") 1.1f else if (t in ExtraKeys.ARROWS) 0.85f else 1f) }
             }
         }
         if (row2.isNotEmpty()) {

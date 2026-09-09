@@ -837,11 +837,14 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
 
         val conf = LocalConfiguration.current
         val hardwareKeyboard = conf.keyboard == Configuration.KEYBOARD_QWERTY && conf.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
-        if (!(hardwareKeyboard && settings.hideExtraKeysWithHardwareKeyboard)) {
+        val barRows = settings.extraKeysRows
+        if (barRows > 0 && !(hardwareKeyboard && settings.hideExtraKeysWithHardwareKeyboard)) {
             ExtraKeysBar(
                 view, chrome, onChrome, Modifier.fillMaxWidth().navigationBarsPadding().imePadding(),
                 row1 = settings.extraKeysRow1 ?: ExtraKeys.defaultRow1,
-                row2 = settings.extraKeysRow2 ?: ExtraKeys.defaultRow2,
+                // Hidden rather than emptied: the second row keeps whatever was
+                // arranged in it and comes back the way it was left.
+                row2 = if (barRows >= 2) settings.extraKeysRow2 ?: ExtraKeys.defaultRow2 else emptyList(),
                 onSnippets = { snippets = true },
                 onSearch = { searching = !searching; if (!searching) view.searchHighlight = null },
                 onCompose = { compose.open = true },

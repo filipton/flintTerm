@@ -813,6 +813,21 @@ data class Settings(
      * Escape stay distinguishable. Off is strictly protocol-faithful.
      */
     val rawControlKeys: Boolean = true,
+    /**
+     * How many rows of the extra-key bar are on screen: 2, 1, or 0 for no bar.
+     *
+     * Separate from what the rows contain, so turning the second one off for a
+     * while does not throw away what was arranged in it.
+     */
+    val extraKeysRows: Int = 2,
+    /**
+     * Whether the four arrows move as a block when a key is reordered.
+     *
+     * They are one control that happens to be four caps, and moving them one
+     * at a time to keep them together is four times the work for the same
+     * arrangement. Off for anyone who wants them somewhere unusual.
+     */
+    val groupArrowKeys: Boolean = true,
     /** Tapping a modifier cap twice quickly locks it, instead of clearing it. */
     val doubleTapLocksModifier: Boolean = true,
     /** Dragging two fingers on the terminal sends arrow keys. */

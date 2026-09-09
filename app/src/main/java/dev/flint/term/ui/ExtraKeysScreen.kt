@@ -125,11 +125,16 @@ fun ExtraKeysScreen(nav: NavController) {
                         RowDivider()
                         Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(ExtraKeys.resolve(tokens[sel.second]).label, Modifier.padding(start = 12.dp).weight(1f), style = MaterialTheme.typography.titleSmall)
-                            IconButton(enabled = sel.second > 0, onClick = {
-                                val l = tokens.toMutableList(); java.util.Collections.swap(l, sel.second, sel.second - 1); update(r, l); selected = r to sel.second - 1
+                            val grouped = settings.groupArrowKeys
+                            IconButton(enabled = ExtraKeys.groupAt(tokens, sel.second, grouped).first > 0, onClick = {
+                                ExtraKeys.moveGroup(tokens, sel.second, right = false, grouped = grouped)?.let { (l, at) ->
+                                    update(r, l); selected = r to at
+                                }
                             }) { Icon(Icons.Rounded.ChevronLeft, "Move left") }
-                            IconButton(enabled = sel.second < tokens.lastIndex, onClick = {
-                                val l = tokens.toMutableList(); java.util.Collections.swap(l, sel.second, sel.second + 1); update(r, l); selected = r to sel.second + 1
+                            IconButton(enabled = ExtraKeys.groupAt(tokens, sel.second, grouped).last < tokens.lastIndex, onClick = {
+                                ExtraKeys.moveGroup(tokens, sel.second, right = true, grouped = grouped)?.let { (l, at) ->
+                                    update(r, l); selected = r to at
+                                }
                             }) { Icon(Icons.Rounded.ChevronRight, "Move right") }
                             IconButton(onClick = {
                                 val other = 1 - r
@@ -157,6 +162,24 @@ fun ExtraKeysScreen(nav: NavController) {
             }
 
             Group("Behaviour") {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Rows on screen", style = MaterialTheme.typography.bodyLarge)
+                    Segmented(listOf("Two", "One", "None"), 2 - settings.extraKeysRows.coerceIn(0, 2)) { i ->
+                        app.store.updateSettings { it.copy(extraKeysRows = 2 - i) }
+                    }
+                    Text(
+                        "Turning the second row off keeps what is arranged in it.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                RowDivider()
+                GroupRow(
+                    title = "Move the arrows together",
+                    subtitle = "They are one control drawn as four caps, so reordering treats them as one",
+                    icon = Icons.Rounded.Keyboard, iconTint = MaterialTheme.colorScheme.secondary,
+                    checked = settings.groupArrowKeys, onCheckedChange = { v -> app.store.updateSettings { it.copy(groupArrowKeys = v) } },
+                )
+                RowDivider()
                 GroupRow(
                     title = "Hide with a hardware keyboard", subtitle = "Free the space when a physical keyboard is connected",
                     icon = Icons.Rounded.Keyboard, iconTint = MaterialTheme.colorScheme.secondary,
@@ -232,7 +255,14 @@ fun ExtraKeysScreen(nav: NavController) {
                     }
                 }
             },
-            confirmButton = { FilledTonalButton(onClick = { save(p.row1, p.row2); selected = null; preset = null }) { Text("Replace") } },
+            confirmButton = {
+                FilledTonalButton(onClick = {
+                    // The arrangement includes how many rows it wants on screen.
+                    app.store.updateSettings { it.copy(extraKeysRow1 = p.row1, extraKeysRow2 = p.row2, extraKeysRows = p.rows) }
+                    selected = null
+                    preset = null
+                }) { Text("Replace") }
+            },
             dismissButton = { TextButton(onClick = { preset = null }) { Text("Cancel") } },
         )
     }

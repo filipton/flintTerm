@@ -201,7 +201,7 @@ object StoreJson {
                     put(JSONObject().apply { put("at", c.at); put("caller", c.caller); put("what", c.what); put("result", c.result) })
                 }
             })
-            put("keyboardProtocol", s.keyboardProtocol); put("rawControlKeys", s.rawControlKeys); put("doubleTapLocksModifier", s.doubleTapLocksModifier)
+            put("keyboardProtocol", s.keyboardProtocol); put("rawControlKeys", s.rawControlKeys); put("extraKeysRows", s.extraKeysRows); put("groupArrowKeys", s.groupArrowKeys); put("doubleTapLocksModifier", s.doubleTapLocksModifier)
             put("twoFingerDragArrows", s.twoFingerDragArrows); put("capsLockAs", s.capsLockAs.name)
             put("composeRemembersState", s.composeRemembersState)
             put("tmuxControls", s.tmuxControls); put("ctrlLongPressOpensChords", s.ctrlLongPressOpensChords)
@@ -595,6 +595,8 @@ object StoreJson {
                 } ?: emptyList(),
                 keyboardProtocol = o.optBoolean("keyboardProtocol", true),
                 rawControlKeys = o.optBoolean("rawControlKeys", true),
+                extraKeysRows = o.optInt("extraKeysRows", 2),
+                groupArrowKeys = o.optBoolean("groupArrowKeys", true),
                 doubleTapLocksModifier = o.optBoolean("doubleTapLocksModifier", true),
                 twoFingerDragArrows = o.optBoolean("twoFingerDragArrows", true),
                 capsLockAs = runCatching { CapsLockAction.valueOf(o.optString("capsLockAs")) }.getOrDefault(CapsLockAction.NONE),

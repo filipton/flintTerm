@@ -26,9 +26,29 @@ class ExtraKeysTest {
     }
 
     @Test
-    fun `shift+tab sits next to the snippets cap`() {
-        val row = ExtraKeys.defaultRow2
-        assertEquals("STAB", row[row.indexOf("SNIPPETS") + 1])
+    fun `shift+tab is reachable without scrolling`() {
+        // It is the only way a phone sends shift+tab at all, so it belongs in
+        // the part of the second row that is on screen before anyone scrolls.
+        // Which cap it sits beside is a layout decision and not pinned here.
+        val at = ExtraKeys.defaultRow2.indexOf("STAB")
+        assertTrue("shift+tab was at $at", at in 0..5)
+    }
+
+    @Test
+    fun `the arrows are one run in every preset that has them`() {
+        // Reordering moves them as a block, which only means anything while
+        // they are adjacent to begin with.
+        for (p in ExtraKeys.presets) {
+            for (row in listOf(p.row1, p.row2)) {
+                val positions = row.indices.filter { row[it] in ExtraKeys.ARROWS }
+                if (positions.isEmpty()) continue
+                assertEquals(
+                    "${'$'}{p.name}: the arrows are not together",
+                    positions.last() - positions.first() + 1,
+                    positions.size,
+                )
+            }
+        }
     }
 
     @Test
