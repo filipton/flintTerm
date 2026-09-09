@@ -77,16 +77,18 @@ private val SYMBOLS = listOf(
     row("+", "~", "`", "=", "/", "_", "<", ">", "[", "]"),
     row("!", "@", "#", "$", "%", "^", "&", "*", "(", ")"),
     KeyboardRow(
-        listOf(Key(PAGE, 1.5f)) + listOf("-", "'", "\"", ":", ";", "?", "|").map { Key(it) } + Key("BKSP", 1.5f),
+        listOf(Key(PAGE, 1.5f)) + listOf("-", "'", "\"", ":", ";", ",", "?").map { Key(it) } + Key("BKSP", 1.5f),
     ),
 )
 
-// Page two: F keys, arrows and the rest, so the bar's overflow is not the only
-// way to reach them while this keyboard is up. It also carries the three
-// symbols page one had no room for.
+// Page two, in the same shape as a phone keyboard's second symbol page: the six
+// characters it opens with — ` ~ \ | { } — are where a thumb already expects
+// them, and the rest of that page is currencies, bullets and card suits, which
+// a terminal has no use for. Those places carry the F keys, the arrows and the
+// keys a shell needs instead.
 private val FUNCTIONS = listOf(
     row("F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", height = STRIP_HEIGHT),
-    row("F11", "F12", "\\", "{", "}", "ESC", "TAB", "INS", "DEL", "PASTE"),
+    row("`", "~", "\\", "|", "{", "}", "ESC", "TAB", "INS", "DEL"),
     // Left, down, up, right: the order of hjkl, of the arrow cluster's bottom
     // row, and of every other terminal's key bar. Kept adjacent so the eye finds
     // the group rather than four keys that happen to be arrows.
@@ -96,7 +98,7 @@ private val FUNCTIONS = listOf(
     // between the two then moves every key under the thumb.
     row("LEFT", "DOWN", "UP", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV", "SEARCH"),
     KeyboardRow(
-        listOf(Key(PAGE, 1.5f)) + listOf("ALT", "SHIFT", "STAB", "SNIPPETS", "COMPOSE", "FILE", "KEYBOARD").map { Key(it) } + Key("BKSP", 1.5f),
+        listOf(Key(PAGE, 1.5f)) + listOf("F11", "F12", "ALT", "SHIFT", "STAB", "PASTE", "KEYBOARD").map { Key(it) } + Key("BKSP", 1.5f),
     ),
 )
 
