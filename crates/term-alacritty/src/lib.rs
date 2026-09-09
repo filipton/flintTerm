@@ -724,6 +724,7 @@ impl Emulator for AlacrittyEmulator {
             alternate_scroll: m.contains(TermMode::ALTERNATE_SCROLL),
             kitty_flags: kitty_flags(&m),
             modify_other_keys: self.intercept.modify_other_keys(),
+            fixterms_ctrl_keys: self.intercept.options().fixterms_ctrl_keys,
         }
     }
 

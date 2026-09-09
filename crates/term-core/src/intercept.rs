@@ -36,6 +36,10 @@ pub struct InterceptOptions {
     /// Answering "no" is not the same thing: some programs read a reply of any
     /// shape as a yes.
     pub keyboard_protocol: bool,
+    /// Ctrl+[, Ctrl+I and Ctrl+M leave as keys of their own rather than as the
+    /// Escape, Tab and Enter bytes, whether or not a program asked for a
+    /// protocol that separates them.
+    pub fixterms_ctrl_keys: bool,
 }
 
 impl InterceptOptions {
@@ -505,6 +509,7 @@ mod tests {
             kitty_images: true,
             sixel_images: true,
             keyboard_protocol: true,
+            fixterms_ctrl_keys: true,
         }
     }
 

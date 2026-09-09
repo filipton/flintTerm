@@ -522,6 +522,10 @@ pub struct Modes {
 pub struct Options {
     /// Speak the kitty keyboard protocol and xterm's modifyOtherKeys.
     pub keyboard_protocol: bool,
+    /// Send Ctrl+[, Ctrl+I and Ctrl+M as keys of their own rather than as the
+    /// Escape, Tab and Enter bytes, even when nothing has asked for a protocol
+    /// that tells them apart.
+    pub fixterms_ctrl_keys: bool,
     /// Let a program raise a notification with an escape sequence.
     pub notifications: bool,
     /// Read the OSC 133 shell marks.
@@ -545,6 +549,7 @@ impl Default for Options {
         // protocols a program has to opt into anyway, and change no colors.
         Self {
             keyboard_protocol: true,
+            fixterms_ctrl_keys: true,
             notifications: true,
             prompt_marks: true,
             working_directory: true,
@@ -565,6 +570,9 @@ impl Options {
             kitty_images: self.kitty_images,
             sixel_images: self.sixel_images,
             keyboard_protocol: self.keyboard_protocol,
+            // A terminal told not to speak the protocol at all should not be
+            // sending these keys' sequences anyway.
+            fixterms_ctrl_keys: self.keyboard_protocol && self.fixterms_ctrl_keys,
         }
     }
 }

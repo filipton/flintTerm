@@ -52,6 +52,7 @@ object StoreJson {
                     put("startupSnippetIds", JSONArray(h.startupSnippetIds)); put("detectedOs", h.detectedOs)
                     put("historyImportedAt", h.historyImportedAt)
                     h.keyboardProtocol?.let { put("keyboardProtocol", it) }
+                    h.fixtermsCtrlKeys?.let { put("fixtermsCtrlKeys", it) }
                     h.terminalImages?.let { put("terminalImages", it) }
                     h.tmuxControls?.let { put("tmuxControls", it) }
                     put("tmuxPrefix", h.tmuxPrefix)
@@ -201,7 +202,7 @@ object StoreJson {
                     put(JSONObject().apply { put("at", c.at); put("caller", c.caller); put("what", c.what); put("result", c.result) })
                 }
             })
-            put("keyboardProtocol", s.keyboardProtocol); put("rawControlKeys", s.rawControlKeys); put("extraKeysRows", s.extraKeysRows); put("builtInKeyboard", s.builtInKeyboard); put("clipboardSuggestion", s.clipboardSuggestion); put("groupArrowKeys", s.groupArrowKeys); put("doubleTapLocksModifier", s.doubleTapLocksModifier)
+            put("keyboardProtocol", s.keyboardProtocol); put("fixtermsCtrlKeys", s.fixtermsCtrlKeys); put("rawControlKeys", s.rawControlKeys); put("extraKeysRows", s.extraKeysRows); put("builtInKeyboard", s.builtInKeyboard); put("clipboardSuggestion", s.clipboardSuggestion); put("groupArrowKeys", s.groupArrowKeys); put("doubleTapLocksModifier", s.doubleTapLocksModifier)
             put("twoFingerDragArrows", s.twoFingerDragArrows); put("capsLockAs", s.capsLockAs.name)
             put("composeRemembersState", s.composeRemembersState)
             put("tmuxControls", s.tmuxControls); put("ctrlLongPressOpensChords", s.ctrlLongPressOpensChords)
@@ -295,6 +296,7 @@ object StoreJson {
                     detectedOs = o.optString("detectedOs"),
                     historyImportedAt = o.optLong("historyImportedAt"),
                     keyboardProtocol = if (o.has("keyboardProtocol")) o.optBoolean("keyboardProtocol") else null,
+                    fixtermsCtrlKeys = if (o.has("fixtermsCtrlKeys")) o.optBoolean("fixtermsCtrlKeys") else null,
                     terminalImages = if (o.has("terminalImages")) o.optBoolean("terminalImages") else null,
                     tmuxControls = if (o.has("tmuxControls")) o.optBoolean("tmuxControls") else null,
                     tmuxPrefix = o.optString("tmuxPrefix").ifBlank { "C-b" },
@@ -594,6 +596,7 @@ object StoreJson {
                     }
                 } ?: emptyList(),
                 keyboardProtocol = o.optBoolean("keyboardProtocol", true),
+                fixtermsCtrlKeys = o.optBoolean("fixtermsCtrlKeys", true),
                 rawControlKeys = o.optBoolean("rawControlKeys", true),
                 extraKeysRows = o.optInt("extraKeysRows", 2),
                 builtInKeyboard = o.optBoolean("builtInKeyboard", false),

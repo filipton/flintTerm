@@ -162,6 +162,13 @@ fun asksBeforeAgentSigning(route: List<Host>, fallback: Boolean): Boolean =
 fun Host.usesKeyboardProtocol(settings: Settings): Boolean = keyboardProtocol ?: settings.keyboardProtocol
 
 /**
+ * Whether Ctrl+[, Ctrl+I and Ctrl+M go to this host as keys of their own,
+ * given the app setting to fall back on when it has not said either way.
+ */
+fun Host.usesFixtermsCtrlKeys(settings: Settings): Boolean =
+    fixtermsCtrlKeys ?: settings.fixtermsCtrlKeys
+
+/**
  * Which image protocols this host answers to. A host that says no is off
  * whatever the app setting is; a host that says yes still follows the app's
  * choice of protocol, since that is a question about the terminal and not
@@ -422,6 +429,15 @@ data class Host(
      * the protocol is better off never hearing of it.
      */
     val keyboardProtocol: Boolean? = null,
+    /**
+     * Send Ctrl+[, Ctrl+I and Ctrl+M to this host as keys of their own; null
+     * follows [Settings.fixtermsCtrlKeys].
+     *
+     * Per host because whether the impostor bytes are wanted is a property of
+     * what runs there: a box that lives in tmux wants the keys, and one whose
+     * shell is read by a script that only knows C0 does not.
+     */
+    val fixtermsCtrlKeys: Boolean? = null,
     /** Answer image protocols on this host; null follows [Settings.terminalImages]. */
     val terminalImages: Boolean? = null,
     /** Offer the tmux chords and window list; null means "when this host attaches to tmux". */
@@ -802,6 +818,20 @@ data class Settings(
      * Ctrl+Shift+letter is finally distinguishable.
      */
     val keyboardProtocol: Boolean = true,
+    /**
+     * Send Ctrl+[, Ctrl+I and Ctrl+M as keys of their own rather than as the
+     * Escape, Tab and Enter bytes, even when nothing has asked for a protocol
+     * that tells them apart.
+     *
+     * On, because a program can only ask for the protocol if it knows the
+     * terminal can speak it, and tmux decides that from a list of terminal
+     * names neither this app nor ghostty is on — so a `bind -n C-[` would
+     * never fire. These three are the ones fixterms says to send as keys, and
+     * ghostty follows it whether or not anybody asked. The Escape, Tab and
+     * Enter keys still send their bytes; it is only the Ctrl+letter form that
+     * stops being an impostor. Off is strictly legacy.
+     */
+    val fixtermsCtrlKeys: Boolean = true,
     /**
      * Whether Ctrl+letter writes the control byte itself rather than going out
      * as a key event, from the key bar and from the menu alike.

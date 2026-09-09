@@ -40,6 +40,10 @@ pub struct TermModes {
     pub kitty_flags: u8,
     /// xterm modifyOtherKeys level the program asked for (0, 1 or 2).
     pub modify_other_keys: u8,
+    /// Send Ctrl+[, Ctrl+I and Ctrl+M as keys of their own even when nothing
+    /// has asked for a protocol. Not a mode a program can set: a setting,
+    /// carried here because this is what the key encoder is given.
+    pub fixterms_ctrl_keys: bool,
 }
 
 /// How a selection is started.

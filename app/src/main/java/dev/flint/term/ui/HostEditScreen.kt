@@ -175,6 +175,7 @@ fun HostEditScreen(nav: NavController, id: String) {
     // The three per-host terminal overrides: null is "no opinion", and the app
     // setting answers for them.
     var keyboardProtocol by remember { mutableStateOf(existing?.keyboardProtocol) }
+    var fixtermsCtrlKeys by remember { mutableStateOf(existing?.fixtermsCtrlKeys) }
     var terminalImages by remember { mutableStateOf(existing?.terminalImages) }
     var tmuxControls by remember { mutableStateOf(existing?.tmuxControls) }
     // 0 is "follow the app setting", which is the slider's bottom step rather
@@ -291,6 +292,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                 tmuxResumeLast = tmuxResumeLast,
                 tmuxPrefix = tmuxPrefix.trim().ifBlank { "C-b" },
                 keyboardProtocol = keyboardProtocol,
+                fixtermsCtrlKeys = fixtermsCtrlKeys,
                 terminalImages = terminalImages,
                 tmuxControls = tmuxControls,
                 fontSizeSp = fontSizeSp,
@@ -844,7 +846,8 @@ fun HostEditScreen(nav: NavController, id: String) {
                     onClick = { page = EditorPage.OnConnect },
                 )
                 RowDivider()
-                val overrides = listOfNotNull(keyboardProtocol, terminalImages, tmuxControls, fontSizeSp.takeIf { it > 0f }).size
+                val overrides =
+                    listOfNotNull(keyboardProtocol, fixtermsCtrlKeys, terminalImages, tmuxControls, fontSizeSp.takeIf { it > 0f }).size
                 GroupRow(
                     title = EditorPage.Terminal.title,
                     subtitle = listOfNotNull(
@@ -905,6 +908,18 @@ fun HostEditScreen(nav: NavController, id: String) {
                         "Plain xterm keys, for a device whose terminal predates the protocol"
                     },
                     onChange = { keyboardProtocol = it },
+                )
+                RowDivider()
+                OverrideRow(
+                    title = "Ctrl+[, Ctrl+I and Ctrl+M",
+                    icon = Icons.Rounded.Keyboard,
+                    value = fixtermsCtrlKeys,
+                    subtitle = if (fixtermsCtrlKeys ?: settings.fixtermsCtrlKeys) {
+                        "Sent as keys of their own here, so a tmux binding on Ctrl+[ fires"
+                    } else {
+                        "Sent as the Escape, Tab and Enter bytes, as a plain terminal always has"
+                    },
+                    onChange = { fixtermsCtrlKeys = it },
                 )
                 RowDivider()
                 OverrideRow(

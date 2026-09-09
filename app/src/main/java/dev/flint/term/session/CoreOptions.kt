@@ -4,6 +4,7 @@ import dev.flint.term.core.Options
 import dev.flint.term.data.Host
 import dev.flint.term.data.Settings
 import dev.flint.term.data.imageProtocols
+import dev.flint.term.data.usesFixtermsCtrlKeys
 import dev.flint.term.data.usesKeyboardProtocol
 
 /**
@@ -18,6 +19,7 @@ fun Settings.coreOptions(host: Host?): Options {
     val images = host?.imageProtocols(this) ?: terminalImages
     return Options(
         keyboardProtocol = host?.usesKeyboardProtocol(this) ?: keyboardProtocol,
+        fixtermsCtrlKeys = host?.usesFixtermsCtrlKeys(this) ?: fixtermsCtrlKeys,
         notifications = notifyFromEscapes,
         // The marks are what turns "a command finished" from a guess into a
         // fact, so they are read whenever either notice could use them.

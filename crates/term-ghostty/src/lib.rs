@@ -1426,6 +1426,7 @@ impl Emulator for GhosttyEmulator {
             // answers that one.
             kitty_flags: self.get_or::<u8>(sys::GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS),
             modify_other_keys: self.intercept.modify_other_keys(),
+            fixterms_ctrl_keys: self.intercept.options().fixterms_ctrl_keys,
         }
     }
 

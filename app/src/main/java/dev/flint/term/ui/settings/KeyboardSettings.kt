@@ -81,6 +81,16 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
+                title = "Ctrl+[, Ctrl+I and Ctrl+M are keys",
+                subtitle = "Sent as keys of their own rather than as the Escape, Tab and Enter bytes, even when nothing asked — what ghostty does, and what makes a tmux binding on Ctrl+[ fire. The Escape, Tab and Enter keys are unaffected.",
+                icon = Icons.Rounded.Terminal,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                checked = settings.fixtermsCtrlKeys,
+                onCheckedChange = { v -> app.store.updateSettings { it.copy(fixtermsCtrlKeys = v) } },
+                enabled = settings.keyboardProtocol,
+            )
+            RowDivider()
+            GroupRow(
                 title = "Type with the app's keyboard",
                 subtitle = "A plain layout drawn in the app, with Ctrl and Alt on the bottom row. It has no dictionary, no autocorrect and no swiping, so leave it off unless the missing Ctrl is what bothers you.",
                 icon = Icons.Rounded.Keyboard,

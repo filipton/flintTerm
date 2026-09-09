@@ -132,6 +132,26 @@ pub fn encode_key(ev: KeyEvent, modes: &TermModes) -> Vec<u8> {
     if ev.kind == KeyKind::Release {
         return Vec::new();
     }
+    // The three whose control byte is another key, before the legacy encoder
+    // flattens them into it.
+    //
+    // A program can ask to have them separated, and the branches above answer
+    // when one does — but tmux binds Ctrl+[ and asks only when it recognises
+    // the terminal by name, a short list neither this app nor ghostty is on.
+    // fixterms says to send these three as keys rather than as C0 bytes, and
+    // ghostty follows it whether or not anybody asked, which is why such a
+    // binding works there. The Escape, Tab and Enter keys are untouched, which
+    // is the whole point: they keep the bytes, and Ctrl+[ stops being one of
+    // them.
+    if modes.fixterms_ctrl_keys && ev.mods.ctrl {
+        if let Key::Char(c) = ev.key {
+            if matches!(c.to_ascii_lowercase(), '[' | 'i' | 'm') {
+                let mut mods = ev.mods;
+                let (number, shifted) = char_codes(c, &mut mods);
+                return kitty_seq(number, shifted, mods, ev.kind, 0, None, 'u');
+            }
+        }
+    }
     encode_legacy(ev, modes)
 }
 
@@ -562,6 +582,31 @@ mod tests {
         let m = kitty(1);
         assert_eq!(s(encode_key(ev(Key::Escape, false, false, false), &m)), "\x1b[27u");
         assert_eq!(s(encode_key(ev(Key::Char('['), true, false, false), &m)), "\x1b[91;5u");
+    }
+
+    #[test]
+    fn the_fixterms_three_can_be_keys_without_anyone_asking() {
+        // What ghostty does, and what makes `bind -n C-[` work under a tmux
+        // that never asks the terminal to tell them apart.
+        let m = TermModes { fixterms_ctrl_keys: true, ..Default::default() };
+        assert_eq!(s(encode_key(ev(Key::Char('['), true, false, false), &m)), "\x1b[91;5u");
+        assert_eq!(s(encode_key(ev(Key::Char('i'), true, false, false), &m)), "\x1b[105;5u");
+        assert_eq!(s(encode_key(ev(Key::Char('m'), true, false, false), &m)), "\x1b[109;5u");
+        assert_eq!(s(encode_key(ev(Key::Char('['), true, true, false), &m)), "\x1b[91;7u");
+        // The keys those bytes belong to are untouched: that is the point.
+        assert_eq!(encode_key(ev(Key::Escape, false, false, false), &m), vec![0x1b]);
+        assert_eq!(encode_key(ev(Key::Tab, false, false, false), &m), b"\t");
+        assert_eq!(encode_key(ev(Key::Enter, false, false, false), &m), b"\r");
+        // So are the letters nobody held Ctrl for, and the two ghostty leaves
+        // as C0 because no key of their own sends them.
+        assert_eq!(s(encode_key(ev(Key::Char('['), false, false, false), &m)), "[");
+        assert_eq!(encode_key(ev(Key::Char('h'), true, false, false), &m), vec![8]);
+        assert_eq!(encode_key(ev(Key::Char('j'), true, false, false), &m), vec![10]);
+        // Off, they are the bytes legacy encoding has always sent.
+        let legacy = TermModes::default();
+        assert_eq!(encode_key(ev(Key::Char('['), true, false, false), &legacy), vec![0x1b]);
+        assert_eq!(encode_key(ev(Key::Char('i'), true, false, false), &legacy), vec![9]);
+        assert_eq!(encode_key(ev(Key::Char('m'), true, false, false), &legacy), vec![13]);
     }
 
     #[test]
