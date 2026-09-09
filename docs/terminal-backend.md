@@ -1,7 +1,6 @@
 # The terminal backend
 
-The VT engine is chosen at compile time. This is what the two are, how they compare, and how they are kept honest against each other.
-
+What the two engines are, how they compare, and how they are kept honest against each other.
 
 The VT engine is chosen at compile time. `alacritty_terminal` is the default; passing `--term
 ghostty` to `build-apk.sh` (or `-PtermBackend=ghostty` to Gradle, or `--features ghostty` to cargo)
@@ -39,7 +38,7 @@ engines' own: `ESC [ 2 J` pushes the cleared screen into the scrollback in alacr
 in place in libghostty, so a `clear` takes the marks on screen with it on the ghostty build where
 the alacritty build keeps them in the history.
 
-What is left costs, on arm64, +808 KB in the installed `libandroidterm.so` (7.06 → 7.89 MB) and
+What is left costs, on arm64, +808 KB in the installed `libflintterm.so` (7.06 → 7.89 MB) and
 +279 KB in the APK (7.43 → 7.72 MB), the emulator being the only difference between the two builds.
 Carrying the whole of libghostty-vt and both backends would have been +1.50 MB and +650 KB.
 Set `GHOSTTY_VT_LIB_DIR` to link a prebuilt `libghostty-vt.a` instead, or `GHOSTTY_SRC` to build
@@ -63,6 +62,18 @@ five runs. On an x86_64 dev box, 120x40:
 | 200 frames of a TUI repainting the whole screen | **18.3 ms** | 19.9 ms |
 | 500 scroll + snapshot (a fling) | 16.3 ms | **4.2 ms** |
 | 1000 snapshots of a screen that did not change | 28.2 ms | **1.6 ms** |
+
+That is a bench. On a device it shows up as the frame times of a program that redraws constantly:
+the same emulator, the same server, `btop --update 100` full screen for 30 seconds, read out of
+`dumpsys gfxinfo` with a reset either side.
+
+| frame time | 50th | 90th | 99th |
+| --- | --- | --- | --- |
+| alacritty | 48 ms | 117 ms | 150 ms |
+| ghostty | 32 ms | 48 ms | 65 ms |
+
+The tail is what a person calls lag, and it is the tail that moves. Nothing on an emulator meets
+16 ms, so the percentiles are the comparison; the jank count says 97% on both and means nothing here.
 
 Three things get it there.
 

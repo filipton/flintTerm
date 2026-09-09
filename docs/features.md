@@ -172,8 +172,21 @@ Everything the app does, at length. The short list is in the [README](../README.
   only a factory reset will recover it. The PIN is never logged, never saved, and never held in a
   String, it lives in a char array that is wiped as soon as the token has been satisfied. It has not
   been tried against real hardware.
+- **OpenSSH certificates**: paste the `…-cert-v01@openssh.com` line a CA issued and the key carries it
+  from then on, for servers that trust a CA rather than a list of keys. It is read before anything
+  relies on it — who it was issued to, the accounts it is good for, its serial, when it starts and
+  stops being valid, and the CA's own fingerprint to check against the one you were told to expect.
+  An expired certificate, one that certifies a different key, or a host certificate attached to an
+  identity is refused here with the reason, rather than at the server with none. The two things that
+  arrive by mistake, the plain public key and the private key beside it, are named as such.
 - **SSH agent forwarding**: the phone keeps the keys and signs for the server, so a jump host can use
   your identity without a copy of it ever landing there.
+- **A forwarded key asks before it signs**, which is `ssh-add -c` rather than plain `ssh -A`. The
+  prompt names the host that asked, the key it wants and that key's fingerprint; nobody at the
+  keyboard is a refusal after 45 seconds, so an unattended `git push` fails instead of hanging.
+  Forwarding hands the far side your identity for as long as you are connected, and anyone with root
+  there can use it — this is the switch that makes that visible. On by default, in
+  Settings → Connections.
 - Password managers fill the app's login fields: every username, password and passphrase field says
   what it is, so Bitwarden, 1Password or Google's own manager offers the right entry. Nothing filled
   is read or kept by the app beyond the field it landed in.
@@ -378,8 +391,18 @@ Everything the app does, at length. The short list is in the [README](../README.
 
 ### Appearance
 
-- Dark-first UI (system / dark / light, optional Material You tint), six terminal color schemes
-  (**per host** or app-wide), adjustable scrollback and font size, vibrate on bell, keep screen on.
+- Dark-first UI (system / dark / light, optional Material You tint), a terminal color scheme **per
+  host** or app-wide, adjustable scrollback and font size, vibrate on bell, keep screen on.
+- **Six hundred color schemes**, bundled rather than fetched, each drawn as a small terminal running
+  in it: Featured first, then every dark one and every light one alphabetically, behind a search box
+  that collapses the lot into one ranked list as you type. A host or a group can override the app's
+  choice, and the host editor shows the same picker in a sheet.
+- **A scheme from another terminal**: import a Ghostty theme, an Alacritty `.toml` or `.yml`, a
+  fragment of Windows Terminal's `settings.json`, an iTerm2 `.itermcolors` plist or an Xresources
+  file, from a file or pasted as text. Which format it is comes from the content rather than the
+  name, because these files have every extension and none, and one that is recognisably a scheme but
+  short of colors is told what it lacks rather than refused as bad base64. Imported schemes live
+  under Custom, where they can be renamed, shared back out as a Ghostty theme, or deleted.
 - **Fonts**: JetBrains Mono, Fira Code or Hack, or import your own TTF/OTF; **ligatures** toggle for
   the families that have them.
 - **Nerd Font glyphs**: the icons a starship prompt, `eza` or a powerline theme print come out as
@@ -444,6 +467,12 @@ Everything the app does, at length. The short list is in the [README](../README.
   redraws itself when a host is added, renamed or connected.
 - **Automation**: Tasker, Automate, shortcut apps and `adb` can drive the client with ordered
   broadcasts, so a caller reads the answer off the result (see [automation](automation.md)).
+- **Quick settings tile**: one pull-down to the host you were on last, which the tile names, without
+  opening the app first. A connection needs the keystore, so on a locked phone it asks for the lock
+  screen before it dials rather than failing quietly behind it.
+- **Launcher shortcuts**: long-pressing the app icon offers the four hosts used most recently, each
+  as a rounded tile in that host's accent color, straight into a shell. Any host can also be pinned
+  to the home screen on its own from its menu.
 - **Snippets** with `{{placeholders}}`, global or per host, one tap from the ✦ key in the terminal.
 
 

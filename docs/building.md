@@ -89,13 +89,13 @@ bindings land in `app/build/generated/uniffi` and the `.so` files in `app/build/
 ```sh
 cargo test                       # emulator, key encoding, pty, key generation
 # against a real sshd (see crates/ssh-core/tests/integration.rs):
-SSH_TEST_PORT=2222 SSH_TEST_KEY=~/.ssh/id_ed25519 cargo test -p ssh-core -p androidterm
+SSH_TEST_PORT=2222 SSH_TEST_KEY=~/.ssh/id_ed25519 cargo test -p ssh-core -p flintterm
 ```
 
 The integration tests exercise exec, a pty shell with resize, local + remote forwards, and an SFTP
 upload/download round-trip.
 
-`cargo test -p androidterm` covers the transports end to end — SSH, the local shell, Mosh over UDP
+`cargo test -p flintterm` covers the transports end to end — SSH, the local shell, Mosh over UDP
 and through a jump host, WireGuard, SOCKS5, predictive echo, telnet, agent forwarding — and takes
 `--features ghostty` like anything else. It passes identically on both emulator backends against a
 real sshd and a real `mosh-server`, which is what says the newer one is safe to run a session on and

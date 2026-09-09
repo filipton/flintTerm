@@ -48,6 +48,8 @@
   window over other apps.
 - **Snippets**, a command palette, per-host history completion, session recording, app lock, and an
   encrypted backup of everything.
+- Home-screen **widgets** for the host list and for one host's load, a quick-settings tile, launcher
+  shortcuts, and an interface other apps can drive.
 
 The long version is in [docs/features.md](docs/features.md).
 
