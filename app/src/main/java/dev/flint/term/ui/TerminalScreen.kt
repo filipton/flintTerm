@@ -226,6 +226,21 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     val hostHistory = session.host?.id?.let { historyAll[it] }.orEmpty()
     val countsAll by app.store.historyCounts.collectAsStateWithLifecycle()
     val hostCounts = session.host?.id?.let { countsAll[it] }.orEmpty()
+    // Whether a command is running, for shells that mark their prompts. Nothing
+    // else says it outright, and a shell that says nothing leaves the question
+    // to the alt screen below.
+    var running by remember(sessionId) { mutableStateOf(false) }
+    var marked by remember(sessionId) { mutableStateOf(false) }
+    LaunchedEffect(session) {
+        session.marks.collect { (kind, _) ->
+            marked = true
+            running = kind == dev.flint.term.core.PromptKind.OUTPUT_START
+        }
+    }
+    // A host that attaches to tmux is on the alt screen for as long as it is
+    // connected, and that says nothing about what is running inside the pane.
+    val tmuxHost = session.host?.usesTmuxControls(settings) == true
+
     // No event says "the user typed a character" — the emulator only knows the
     // screen changed — so the line is read on a slow tick, and only while there
     // is history to match it against.
@@ -233,6 +248,20 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         if (hostHistory.isEmpty() || !settings.completeFromHistory) return@LaunchedEffect
         while (true) {
             kotlinx.coroutines.delay(400)
+            // The line the cursor is on is a command at a shell prompt and
+            // something else everywhere else, and matching a file being edited
+            // against the history puts a ghost in the middle of vim. A shell
+            // that marks its prompts settles it; otherwise the alt screen is
+            // the tell, since a full-screen program is not a prompt.
+            val atPrompt = if (marked) {
+                !running
+            } else {
+                tmuxHost || runCatching { !session.core.modes().altScreen }.getOrDefault(true)
+            }
+            if (!atPrompt) {
+                if (typed.isNotEmpty()) typed = ""
+                continue
+            }
             val line = runCatching { session.core.currentInput() }.getOrNull() ?: continue
             val t = dev.flint.term.data.CommandHistory.typed(line, hostHistory)
             if (t != typed) typed = t
