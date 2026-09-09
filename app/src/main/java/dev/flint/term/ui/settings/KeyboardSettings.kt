@@ -80,6 +80,15 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
+                title = "Menu Ctrl+C is a raw interrupt",
+                subtitle = "The \u22ee menu's Ctrl+C and Ctrl+D send the control byte itself, so they still reach a program that has taken the keyboard over",
+                icon = Icons.Rounded.Bolt,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                checked = settings.rawMenuControls,
+                onCheckedChange = { v -> app.store.updateSettings { it.copy(rawMenuControls = v) } },
+            )
+            RowDivider()
+            GroupRow(
                 title = "Keep the compose line open",
                 subtitle = "The ✎ field and its draft survive leaving the session",
                 icon = Icons.Rounded.EditNote,

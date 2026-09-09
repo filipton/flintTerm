@@ -397,6 +397,23 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     fun open(id: String) = nav.navigate(Routes.terminal(id)) { popUpTo(Routes.HOSTS) }
 
     /** The ⋮ entry: says where the files went, since nothing else will. */
+    /**
+     * A control code from the menu, as the byte rather than as a keypress.
+     *
+     * Ctrl+C typed on the keyboard is a keypress and goes out however the
+     * program asked for keys to be sent. Ctrl+C picked from the menu is a
+     * different thing: it is what somebody reaches for when the program has
+     * stopped behaving, and encoding it faithfully as `CSI 99;5u` hands an
+     * interrupt to a program that is in no state to decode one.
+     */
+    fun sendControl(letter: Char) {
+        if (settings.rawMenuControls) {
+            view.sendText(((letter.lowercaseChar() - 'a') + 1).toChar().toString())
+        } else {
+            view.sendKey(KeyCode.Char(letter.code.toUInt()), ctrl = true)
+        }
+    }
+
     fun toggleRecording() {
         if (session.recording.value != null) {
             val files = session.stopRecording()
@@ -1160,8 +1177,11 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                     if (!copyLastOutput()) Toast.makeText(context, "The last command printed nothing", Toast.LENGTH_SHORT).show()
                 }.takeIf { marksPrompts },
                 SheetAction("Snippets", Icons.Rounded.AutoAwesome) { menu = false; snippets = true },
-                SheetAction("Send Ctrl+C", null) { menu = false; view.sendKey(KeyCode.Char('c'.code.toUInt()), ctrl = true) },
-                SheetAction("Send Ctrl+D", null) { menu = false; view.sendKey(KeyCode.Char('d'.code.toUInt()), ctrl = true) },
+                // A control byte rather than a keypress, unless the setting says
+                // otherwise: see Settings.rawMenuControls for why the faithful
+                // encoding is the wrong answer here.
+                SheetAction("Send Ctrl+C", null) { menu = false; sendControl('c') },
+                SheetAction("Send Ctrl+D", null) { menu = false; sendControl('d') },
                 SheetAction("Hide keyboard", Icons.Rounded.KeyboardHide) { menu = false; view.hideKeyboard() },
             ),
         )
