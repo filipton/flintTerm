@@ -14,6 +14,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -67,6 +76,8 @@ fun ExtraKeysBar(
     onCompose: () -> Unit = {},
     /** Holding Ctrl opens the chords sheet; null leaves the long press as a lock. */
     onChords: (() -> Unit)? = null,
+    /** The ⋯ cap at the end of the first row; null leaves it off. */
+    onMore: (() -> Unit)? = null,
 ) {
     val mods by view.modifiers.collectAsStateWithLifecycle()
     // The picked files take the path files dropped on the terminal already
@@ -78,36 +89,24 @@ fun ExtraKeysBar(
     val cap = onChrome.copy(alpha = 0.08f)
     val capText = onChrome.copy(alpha = 0.85f)
 
+    val actions = BarActions(view, onSnippets, onSearch, onCompose, onChords) { pickToInsert.launch(arrayOf("*/*")) }
+
     @Composable
     fun androidx.compose.foundation.layout.RowScope.render(token: String, weight: Float?) {
-        val def = ExtraKeys.resolve(token)
-        val m = if (weight != null) Modifier.weight(weight) else Modifier
-        when (val a = def.action) {
-            is ExtraKeys.Action.Modifier -> {
-                val state = when (a.which) { 'c' -> mods.ctrl; 'a' -> mods.alt; else -> mods.shift }
-                val chords = onChords?.takeIf { a.which == 'c' }
-                ModifierCap(def.label, state, cap, capText, m, onTap = { view.toggleModifier(a.which) }, onLong = { chords?.invoke() ?: view.toggleModifier(a.which, lock = true) })
-            }
-            is ExtraKeys.Action.Key -> if (def.repeat) {
-                RepeatCap(when (token) { "UP" -> Icons.Rounded.KeyboardArrowUp; "DOWN" -> Icons.Rounded.KeyboardArrowDown; "LEFT" -> Icons.Rounded.KeyboardArrowLeft; else -> Icons.Rounded.KeyboardArrowRight }, def.label, cap, capText, m) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
-            } else {
-                KeyCap(def.label, cap, capText, m, mono = def.mono) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
-            }
-            is ExtraKeys.Action.Text -> KeyCap(def.label, cap, capText, m, mono = def.mono) { view.sendText(a.text) }
-            ExtraKeys.Action.Snippets -> KeyCap(def.label, cap, capText, m, mono = true, accent = true) { onSnippets() }
-            ExtraKeys.Action.Search -> KeyCap(def.label, cap, capText, m, mono = true) { onSearch() }
-            ExtraKeys.Action.ToggleKeyboard -> KeyCap(def.label, cap, capText, m, mono = true) { view.toggleKeyboard() }
-            ExtraKeys.Action.Paste -> KeyCap(def.label, cap, capText, m) { view.paste() }
-            ExtraKeys.Action.InsertFile -> KeyCap(def.label, cap, capText, m, mono = true) { pickToInsert.launch(arrayOf("*/*")) }
-            ExtraKeys.Action.Compose -> KeyCap(def.label, cap, capText, m, mono = true) { onCompose() }
-            ExtraKeys.Action.Nav -> NavCap(def.label, cap, capText, m, view)
-        }
+        KeyFor(token, actions, mods, cap, capText, if (weight != null) Modifier.weight(weight) else Modifier)
     }
+
 
     Column(modifier.background(chrome).padding(horizontal = 6.dp, vertical = 5.dp)) {
         if (row1.isNotEmpty()) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 row1.forEach { t -> render(t, if (t == "SHIFT") 1.1f else if (t in ExtraKeys.ARROWS) 0.85f else 1f) }
+                // Fixed at the end and never scrolled away: it is the way to
+                // everything the row had no space for, so it cannot itself be
+                // the thing that scrolled off.
+                if (onMore != null) {
+                    KeyCap("⋯", cap, capText, Modifier.width(38.dp), mono = true) { onMore() }
+                }
             }
         }
         if (row2.isNotEmpty()) {
@@ -219,7 +218,7 @@ private fun NavCap(label: String, cap: Color, text: Color, modifier: Modifier = 
 }
 
 @Composable
-private fun RepeatCap(icon: ImageVector, label: String, cap: Color, text: Color, modifier: Modifier = Modifier, onKey: () -> Unit) {
+private fun RepeatCap(icon: ImageVector?, label: String, cap: Color, text: Color, modifier: Modifier = Modifier, onKey: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     Box(
@@ -248,6 +247,149 @@ private fun RepeatCap(icon: ImageVector, label: String, cap: Color, text: Color,
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, label, tint = text)
+        if (icon != null) {
+            Icon(icon, label, tint = text)
+        } else {
+            Text(label, fontSize = 16.sp, fontFamily = MonoFamily, fontWeight = FontWeight.SemiBold, color = text, maxLines = 1)
+        }
+    }
+}
+
+/** What a cap can reach besides the terminal itself. */
+class BarActions(
+    val view: TerminalView,
+    val onSnippets: () -> Unit,
+    val onSearch: () -> Unit,
+    val onCompose: () -> Unit,
+    val onChords: (() -> Unit)?,
+    val onInsertFile: () -> Unit,
+)
+
+/**
+ * One cap, wherever it is drawn.
+ *
+ * The bar and the overflow pad show the same keys and must do the same thing
+ * with them, so what a token means lives here rather than in either of them.
+ */
+@Composable
+fun KeyFor(
+    token: String,
+    actions: BarActions,
+    mods: dev.flint.term.terminal.Modifiers,
+    cap: Color,
+    capText: Color,
+    modifier: Modifier = Modifier,
+) {
+    val view = actions.view
+    val def = ExtraKeys.resolve(token)
+    when (val a = def.action) {
+        is ExtraKeys.Action.Modifier -> {
+            val state = when (a.which) { 'c' -> mods.ctrl; 'a' -> mods.alt; else -> mods.shift }
+            val chords = actions.onChords?.takeIf { a.which == 'c' }
+            ModifierCap(
+                def.label, state, cap, capText, modifier,
+                onTap = { view.toggleModifier(a.which) },
+                onLong = { chords?.invoke() ?: view.toggleModifier(a.which, lock = true) },
+            )
+        }
+        is ExtraKeys.Action.Key -> if (def.repeat) {
+            // Only the arrows have an icon. Backspace repeats too, and drawing
+            // it with the fall-through icon made it a second right arrow.
+            RepeatCap(
+                when (token) {
+                    "UP" -> Icons.Rounded.KeyboardArrowUp
+                    "DOWN" -> Icons.Rounded.KeyboardArrowDown
+                    "LEFT" -> Icons.Rounded.KeyboardArrowLeft
+                    "RIGHT" -> Icons.Rounded.KeyboardArrowRight
+                    else -> null
+                },
+                def.label, cap, capText, modifier,
+            ) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
+        } else {
+            KeyCap(def.label, cap, capText, modifier, mono = def.mono) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
+        }
+        is ExtraKeys.Action.Text -> KeyCap(def.label, cap, capText, modifier, mono = def.mono) { view.sendText(a.text) }
+        ExtraKeys.Action.Snippets -> KeyCap(def.label, cap, capText, modifier, mono = true, accent = true) { actions.onSnippets() }
+        ExtraKeys.Action.Search -> KeyCap(def.label, cap, capText, modifier, mono = true) { actions.onSearch() }
+        ExtraKeys.Action.ToggleKeyboard -> KeyCap(def.label, cap, capText, modifier, mono = true) { view.toggleKeyboard() }
+        ExtraKeys.Action.Paste -> KeyCap(def.label, cap, capText, modifier) { view.paste() }
+        ExtraKeys.Action.InsertFile -> KeyCap(def.label, cap, capText, modifier, mono = true) { actions.onInsertFile() }
+        ExtraKeys.Action.Compose -> KeyCap(def.label, cap, capText, modifier, mono = true) { actions.onCompose() }
+        ExtraKeys.Action.Nav -> NavCap(def.label, cap, capText, modifier, view)
+    }
+}
+
+/**
+ * Everything the bar has no room for, as one pad.
+ *
+ * The second row exists because a phone is narrow, and it costs a line of
+ * terminal for keys most people press once an hour. This is the other answer:
+ * one row on screen, and a ⋯ that opens the rest over the keyboard for as long
+ * as it is wanted. The system keyboard goes away while it is up, because the
+ * two would otherwise fight for the same half of the screen.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun ExtraKeysPad(
+    view: TerminalView,
+    onDismiss: () -> Unit,
+    onSnippets: () -> Unit = {},
+    onSearch: () -> Unit = {},
+    onCompose: () -> Unit = {},
+    onChords: (() -> Unit)? = null,
+) {
+    val mods by view.modifiers.collectAsStateWithLifecycle()
+    val pickToInsert = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isNotEmpty()) view.onFilesDropped?.invoke(uris)
+    }
+    val actions = BarActions(view, onSnippets, onSearch, onCompose, onChords) { pickToInsert.launch(arrayOf("*/*")) }
+    val cap = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+    val capText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
+    val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    // The pad is the keyboard while it is open.
+    LaunchedEffect(Unit) { view.hideKeyboard() }
+
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+        // About the height a keyboard would take, and no more: the point is to
+        // see what you are typing into while you type it.
+        Column(
+            Modifier
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 24.dp)
+                .heightIn(max = 330.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            PadSection("Function", (1..12).map { "F$it" }, actions, mods, cap, capText)
+            PadSection("Moving about", listOf("UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV"), actions, mods, cap, capText)
+            PadSection("Editing", listOf("ESC", "TAB", "STAB", "ENTER", "BKSP", "DEL", "INS", "CTRL", "ALT", "SHIFT"), actions, mods, cap, capText)
+            PadSection("Doing", listOf("SNIPPETS", "PASTE", "SEARCH", "FILE", "COMPOSE", "KEYBOARD"), actions, mods, cap, capText)
+            PadSection(
+                "Symbols",
+                listOf("-", "_", "/", "\\", "|", "~", ":", ";", "'", "\"", "`", "(", ")", "[", "]", "{", "}", "<", ">", "^", "#", "@", "$", "!", "&", "*", "+", "=", "%", "?", ","),
+                actions, mods, cap, capText,
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PadSection(
+    title: String,
+    tokens: List<String>,
+    actions: BarActions,
+    mods: dev.flint.term.terminal.Modifiers,
+    cap: Color,
+    capText: Color,
+) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 10.dp, bottom = 6.dp),
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        tokens.forEach { KeyFor(it, actions, mods, cap, capText, Modifier.widthIn(min = 46.dp)) }
     }
 }

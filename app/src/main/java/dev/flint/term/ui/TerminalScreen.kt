@@ -359,6 +359,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     view.onCompose = { compose.open = true }
 
     var snippets by remember { mutableStateOf(false) }
+    var pad by remember { mutableStateOf(false) }
     var chords by remember { mutableStateOf(false) }
     var tmuxWindows by remember { mutableStateOf(false) }
     var scrollbackSheet by remember { mutableStateOf(false) }
@@ -849,10 +850,22 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 onSearch = { searching = !searching; if (!searching) view.searchHighlight = null },
                 onCompose = { compose.open = true },
                 onChords = if (settings.ctrlLongPressOpensChords) ({ chords = true }) else null,
+                onMore = { pad = true },
             )
         } else {
             Spacer(Modifier.fillMaxWidth().navigationBarsPadding().imePadding())
         }
+    }
+
+    if (pad) {
+        ExtraKeysPad(
+            view,
+            onDismiss = { pad = false },
+            onSnippets = { pad = false; snippets = true },
+            onSearch = { pad = false; searching = !searching; if (!searching) view.searchHighlight = null },
+            onCompose = { pad = false; compose.open = true },
+            onChords = if (settings.ctrlLongPressOpensChords) ({ pad = false; chords = true }) else null,
+        )
     }
 
     TmuxControls(

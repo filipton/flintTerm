@@ -15,6 +15,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.alpha
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -22,10 +31,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
-import androidx.compose.material.icons.rounded.ChevronLeft
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Keyboard
+import androidx.compose.material.icons.rounded.OpenWith
 import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.AlertDialog
@@ -41,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,6 +63,154 @@ import androidx.navigation.NavController
 import dev.flint.term.App
 import dev.flint.term.terminal.ExtraKeys
 import dev.flint.term.data.VolumeModifierMode
+
+/**
+ * One editable row of caps: hold one to drag it somewhere else, tap it to pick it.
+ *
+ * The drag works on whole groups rather than single caps, so the four arrows
+ * travel together, and it steps a group at a time rather than hit-testing a
+ * position: once the finger has travelled the width of the neighbour, the two
+ * change places. That reuses the same move the tests cover instead of a second
+ * idea of what order means.
+ *
+ * The list being dragged is held here and only handed back when the finger
+ * lifts. Committing every step would change the caller's state mid-gesture, and
+ * the gesture detector is restarted whenever its keys change, which cancels the
+ * drag that caused it.
+ */
+@Composable
+private fun KeyRow(
+    tokens: List<String>,
+    grouped: Boolean,
+    selected: Int?,
+    dimmed: Boolean,
+    onSelect: (Int?) -> Unit,
+    onReorder: (List<String>, Int) -> Unit,
+    onAdd: () -> Unit,
+) {
+    val state = rememberLazyListState()
+    val haptics = LocalHapticFeedback.current
+    var live by remember(tokens) { mutableStateOf(tokens) }
+    var dragAt by remember { mutableStateOf<Int?>(null) }
+    var dragBy by remember { mutableFloatStateOf(0f) }
+    val spacing = with(androidx.compose.ui.platform.LocalDensity.current) { 6.dp.toPx() }
+
+    /** How wide a run of caps is on screen, or null while any of it is off it. */
+    fun widthOf(range: IntRange): Float? {
+        val visible = state.layoutInfo.visibleItemsInfo
+        var total = 0f
+        for (i in range) {
+            val item = visible.firstOrNull { it.index == i } ?: return null
+            total += item.size + spacing
+        }
+        return total.takeIf { it > 0f }
+    }
+
+    LazyRow(
+        state = state,
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier.alpha(if (dimmed) 0.4f else 1f),
+    ) {
+        itemsIndexed(live) { i, t ->
+            val def = ExtraKeys.resolve(t)
+            val isSel = selected == i
+            val slot = rememberUpdatedState(i)
+            val group = dragAt?.let { ExtraKeys.groupAt(live, it, grouped) }
+            val isDragged = group != null && i in group
+            Box(
+                Modifier
+                    .zIndex(if (isDragged) 1f else 0f)
+                    .graphicsLayer {
+                        if (isDragged) {
+                            translationX = dragBy
+                            scaleX = 1.06f
+                            scaleY = 1.06f
+                        }
+                    }
+                    .height(38.dp)
+                    .widthIn(min = 44.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(
+                        when {
+                            isDragged -> MaterialTheme.colorScheme.primaryContainer
+                            isSel -> MaterialTheme.colorScheme.primary
+                            else -> MaterialTheme.colorScheme.surfaceContainerHigh
+                        },
+                    )
+                    .then(
+                        if (dimmed) {
+                            Modifier
+                        } else {
+                            Modifier
+                                .clickable { onSelect(if (isSel) null else i) }
+                                // Keyed on nothing, so a reorder mid-gesture cannot
+                                // restart the detector and cancel the drag that
+                                // caused it. The index is read through a holder
+                                // instead, or the closure would keep the one this
+                                // slot had when the gesture was first installed.
+                                .pointerInput(Unit) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            dragAt = slot.value
+                                            dragBy = 0f
+                                            onSelect(i)
+                                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        },
+                                        onDragEnd = {
+                                            dragAt?.let { onReorder(live, it) }
+                                            dragAt = null
+                                            dragBy = 0f
+                                        },
+                                        onDragCancel = { dragAt = null; dragBy = 0f },
+                                        onDrag = { change, amount ->
+                                            change.consume()
+                                            dragBy += amount.x
+                                            var from = dragAt ?: return@detectDragGesturesAfterLongPress
+                                            while (true) {
+                                                val g = ExtraKeys.groupAt(live, from, grouped)
+                                                val forward = dragBy > 0f
+                                                val edge = if (forward) g.last + 1 else g.first - 1
+                                                if (edge !in live.indices) break
+                                                val width = widthOf(ExtraKeys.groupAt(live, edge, grouped)) ?: break
+                                                if (kotlin.math.abs(dragBy) < width) break
+                                                val moved = ExtraKeys.moveGroup(live, from, forward, grouped) ?: break
+                                                live = moved.first
+                                                from = moved.second
+                                                dragAt = from
+                                                dragBy += if (forward) -width else width
+                                            }
+                                        },
+                                    )
+                                }
+                        },
+                    )
+                    .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    def.label,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = when {
+                        isDragged -> MaterialTheme.colorScheme.onPrimaryContainer
+                        isSel -> MaterialTheme.colorScheme.onPrimary
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
+                )
+            }
+        }
+        item {
+            Box(
+                Modifier.height(38.dp).widthIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .then(if (dimmed) Modifier else Modifier.clickable { onAdd() })
+                    .padding(horizontal = 10.dp),
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Rounded.Add, "Add key", tint = MaterialTheme.colorScheme.primary) }
+        }
+    }
+}
 
 /** Editor for the two extra-key rows: tap a key to select, then move or remove it; add from the catalog or as literal text. */
 @Composable
@@ -88,66 +245,74 @@ fun ExtraKeysScreen(nav: NavController) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("extrakeys")).padding(bottom = 40.dp)) {
             Text(
-                "This is the bar above the keyboard. The first row is fixed and shares the width; the second row scrolls. Tap a key to select it, then move or remove it.",
+                "This is the bar above the keyboard. The first row shares the width, the second one scrolls. Hold a key to drag it somewhere else, or tap it to move it to the other row or take it out.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
             rows().forEachIndexed { r, tokens ->
+                val hidden = r == 1 && settings.extraKeysRows < 2
                 Group(if (r == 0) "Row 1 — fixed" else "Row 2 — scrolls") {
-                    LazyRow(contentPadding = androidx.compose.foundation.layout.PaddingValues(12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        itemsIndexed(tokens) { i, t ->
-                            val def = ExtraKeys.resolve(t)
-                            val isSel = selected == r to i
-                            Box(
-                                Modifier
-                                    .height(38.dp)
-                                    .widthIn(min = 44.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh)
-                                    .clickable { selected = if (isSel) null else r to i }
-                                    .padding(horizontal = 10.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(def.label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
-                            }
-                        }
-                        item {
-                            Box(
-                                Modifier.height(38.dp).widthIn(min = 44.dp).clip(RoundedCornerShape(10.dp))
-                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                                    .clickable { adding = r }.padding(horizontal = 10.dp),
-                                contentAlignment = Alignment.Center,
-                            ) { Icon(Icons.Rounded.Add, "Add key", tint = MaterialTheme.colorScheme.primary) }
-                        }
+                    KeyRow(
+                        tokens = tokens,
+                        grouped = settings.groupArrowKeys,
+                        selected = selected?.takeIf { it.first == r }?.second,
+                        dimmed = hidden,
+                        onSelect = { i -> selected = if (i == null) null else r to i },
+                        onReorder = { list, at -> update(r, list); selected = r to at },
+                        onAdd = { adding = r },
+                    )
+                    if (r == 1) {
+                        RowDivider()
+                        // The switch belongs against the row it turns off, not in
+                        // a list of unrelated preferences at the foot of the page.
+                        GroupRow(
+                            title = if (hidden) "Hidden" else "Shown",
+                            subtitle = if (hidden) "Turned off, and kept as it is" else "On screen under the first row",
+                            icon = Icons.Rounded.Keyboard,
+                            iconTint = MaterialTheme.colorScheme.secondary,
+                            checked = !hidden,
+                            onCheckedChange = { on -> app.store.updateSettings { it.copy(extraKeysRows = if (on) 2 else 1) } },
+                        )
                     }
                     val sel = selected
                     if (sel != null && sel.first == r) {
                         RowDivider()
                         Row(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(ExtraKeys.resolve(tokens[sel.second]).label, Modifier.padding(start = 12.dp).weight(1f), style = MaterialTheme.typography.titleSmall)
-                            val grouped = settings.groupArrowKeys
-                            IconButton(enabled = ExtraKeys.groupAt(tokens, sel.second, grouped).first > 0, onClick = {
-                                ExtraKeys.moveGroup(tokens, sel.second, right = false, grouped = grouped)?.let { (l, at) ->
-                                    update(r, l); selected = r to at
-                                }
-                            }) { Icon(Icons.Rounded.ChevronLeft, "Move left") }
-                            IconButton(enabled = ExtraKeys.groupAt(tokens, sel.second, grouped).last < tokens.lastIndex, onClick = {
-                                ExtraKeys.moveGroup(tokens, sel.second, right = true, grouped = grouped)?.let { (l, at) ->
-                                    update(r, l); selected = r to at
-                                }
-                            }) { Icon(Icons.Rounded.ChevronRight, "Move right") }
                             IconButton(onClick = {
                                 val other = 1 - r
                                 update(r, tokens.filterIndexed { i, _ -> i != sel.second })
                                 if (other == 1) save(row1.filterIndexed { i, _ -> i != sel.second }, row2 + tokens[sel.second]) else save(row1 + tokens[sel.second], row2.filterIndexed { i, _ -> i != sel.second })
                                 selected = null
-                            }) { Icon(Icons.Rounded.Keyboard, "Move to other row") }
+                            }) { Icon(Icons.Rounded.Keyboard, "Move to the other row") }
                             IconButton(onClick = { update(r, tokens.filterIndexed { i, _ -> i != sel.second }); selected = null }) {
                                 Icon(Icons.Rounded.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
                 }
+            }
+
+            // Next to the thing it changes: it is a rule about rearranging, and
+            // rearranging is what the two groups above are for.
+            Group("Arranging") {
+                GroupRow(
+                    title = "Move the arrows together",
+                    subtitle = "They are one control drawn as four caps, so dragging one drags all four",
+                    icon = Icons.Rounded.OpenWith,
+                    iconTint = MaterialTheme.colorScheme.secondary,
+                    checked = settings.groupArrowKeys,
+                    onCheckedChange = { v -> app.store.updateSettings { it.copy(groupArrowKeys = v) } },
+                )
+                RowDivider()
+                GroupRow(
+                    title = "Show the bar at all",
+                    subtitle = if (settings.extraKeysRows == 0) "Off — the terminal has the whole screen" else "The bar sits above the keyboard",
+                    icon = Icons.Rounded.Keyboard,
+                    iconTint = MaterialTheme.colorScheme.secondary,
+                    checked = settings.extraKeysRows > 0,
+                    onCheckedChange = { on -> app.store.updateSettings { it.copy(extraKeysRows = if (on) 2 else 0) } },
+                )
             }
 
             Group("Presets") {
@@ -162,24 +327,6 @@ fun ExtraKeysScreen(nav: NavController) {
             }
 
             Group("Behaviour") {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Rows on screen", style = MaterialTheme.typography.bodyLarge)
-                    Segmented(listOf("Two", "One", "None"), 2 - settings.extraKeysRows.coerceIn(0, 2)) { i ->
-                        app.store.updateSettings { it.copy(extraKeysRows = 2 - i) }
-                    }
-                    Text(
-                        "Turning the second row off keeps what is arranged in it.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                RowDivider()
-                GroupRow(
-                    title = "Move the arrows together",
-                    subtitle = "They are one control drawn as four caps, so reordering treats them as one",
-                    icon = Icons.Rounded.Keyboard, iconTint = MaterialTheme.colorScheme.secondary,
-                    checked = settings.groupArrowKeys, onCheckedChange = { v -> app.store.updateSettings { it.copy(groupArrowKeys = v) } },
-                )
-                RowDivider()
                 GroupRow(
                     title = "Hide with a hardware keyboard", subtitle = "Free the space when a physical keyboard is connected",
                     icon = Icons.Rounded.Keyboard, iconTint = MaterialTheme.colorScheme.secondary,
