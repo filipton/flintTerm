@@ -154,6 +154,9 @@ pub struct JumpHop {
 pub struct SshConfig {
     pub host: String,
     pub port: u16,
+    /// What to call the host's own address in the steps, when it has a name of
+    /// its own. Empty for the address the host was configured with.
+    pub label: String,
     pub username: String,
     pub auth: Vec<AuthMethod>,
     pub keepalive_secs: u32,
@@ -1795,7 +1798,7 @@ impl Inner {
         // A direct connection, over whichever address answers first.
         if config.jumps.is_empty() {
             let mut candidates = vec![Endpoint {
-                label: String::new(),
+                label: config.label.clone(),
                 host: config.host.clone(),
                 port: config.port,
                 tunnel_id: config.tunnel_id.clone(),

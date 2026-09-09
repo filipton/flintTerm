@@ -269,24 +269,22 @@ class SessionManager(
             host.tailscaleId?.let { tailscale?.ensureUp(it) }
             return Prepared(telnet, wakeFromPhone, decision?.reason, tunnelNote, tailscaleId = host.tailscaleId, knock = knock)
         }
-        val sshConfig = SshConfig(
-                host = host.hostname.trim(),
-                port = host.port.toUShort(),
-                username = host.username.trim(),
-                auth = authFor(host),
-                keepaliveSecs = keepaliveFor(settings).toUInt(),
-                connectTimeoutSecs = 20u,
-                proxy = if (chain.isEmpty()) proxyFor(store.proxy(host.proxyId)?.settings() ?: host.proxy) else null,
-                jumps = jumps,
-                tunnelId = if (chain.isEmpty()) tunnelId else null,
-                tunnelFallback = tunnelFallback,
-                // A direct connection to a machine we just woke up needs the same patience as a jump.
-                waitForHostSecs = if (chain.isEmpty() && wake) host.waitForHostSeconds.coerceIn(0, 3600).toUInt() else 0u,
-                tailscaleId = host.tailscaleId.takeIf { chain.isEmpty() },
-                vpnName = vpnName(host.tunnelId, host.tailscaleId),
-                // Extra addresses only make sense on a direct connection: with a
-                // jump chain the route is the chain, not the address.
-                alternates = if (chain.isEmpty()) {
+        // Extra addresses only make sense on a direct connection: with a jump
+        // chain the route is the chain, not the address. The order they are
+        // dialled in is worked out here, where the phone's own networks can be
+        // read; see [Endpoints.order] for why an address can lose its place.
+        val candidates = if (chain.isEmpty()) {
+            Endpoints.order(
+                listOf(
+                    Endpoint(
+                        label = "",
+                        host = host.hostname.trim(),
+                        port = host.port.toUShort(),
+                        tunnelId = tunnelId,
+                        tailscaleId = host.tailscaleId,
+                        vpnName = vpnName(host.tunnelId, host.tailscaleId),
+                    ),
+                ) +
                     host.addresses.filter { it.hostname.isNotBlank() }.map { a ->
                         Endpoint(
                             label = a.label.trim(),
@@ -296,10 +294,32 @@ class SessionManager(
                             tailscaleId = a.tailscaleId,
                             vpnName = vpnName(a.tunnelId, a.tailscaleId),
                         )
-                    }
-                } else {
-                    emptyList()
-                },
+                    },
+            )
+        } else {
+            emptyList()
+        }
+        val first = candidates.firstOrNull()
+        if (first != null && first.host != host.hostname.trim() && tunnelNote == null) {
+            tunnelNote = "${host.hostname.trim()} is not on your current network, trying the other addresses first"
+        }
+        val sshConfig = SshConfig(
+                host = first?.host ?: host.hostname.trim(),
+                port = first?.port ?: host.port.toUShort(),
+                label = first?.label.orEmpty(),
+                username = host.username.trim(),
+                auth = authFor(host),
+                keepaliveSecs = keepaliveFor(settings).toUInt(),
+                connectTimeoutSecs = 20u,
+                proxy = if (chain.isEmpty()) proxyFor(store.proxy(host.proxyId)?.settings() ?: host.proxy) else null,
+                jumps = jumps,
+                tunnelId = if (chain.isEmpty()) first?.tunnelId else null,
+                tunnelFallback = tunnelFallback,
+                // A direct connection to a machine we just woke up needs the same patience as a jump.
+                waitForHostSecs = if (chain.isEmpty() && wake) host.waitForHostSeconds.coerceIn(0, 3600).toUInt() else 0u,
+                tailscaleId = if (chain.isEmpty()) first?.tailscaleId else null,
+                vpnName = first?.vpnName.orEmpty(),
+                alternates = candidates.drop(1),
                 forwardAgent = host.forwardAgent,
                 // Every stored key is offered; signing happens on the phone, keys never leave it.
                 // Only keys this app can actually sign with are offered to the
