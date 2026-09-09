@@ -82,6 +82,8 @@ encodes, parses or stores has a test next to it already.
   is the app's identity; a release signed with a different one cannot install over the old app.
 - Hand-edit the generated part of `CHANGELOG.md`. Run `tools/changelog.py --update` and edit the
   draft it writes.
-- Bump `versionName` outside cutting a release. `release.sh` and the tag have to agree.
+- Bump `versionName` outside cutting a release. `release.sh` and the tag have to agree. The commit
+  that does it is a `chore:`, so the version number does not turn up as a line in its own release
+  notes.
 - Add a dependency without a reason that survives the question "what does this do that we cannot".
   The app ships the licence of everything it links, listed in `NOTICE` and in the app itself.

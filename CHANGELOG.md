@@ -13,15 +13,25 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 - The app's keyboard pages the way a phone's does, every page the same height
 - A strip offers to paste what was just copied in another app
 - Ctrl+[, Ctrl+I and Ctrl+M go out as keys of their own even when no program asked
+- The paste offer covers a picture copied elsewhere, not only text
+- An extra address says for itself whether its VPN is used always or only when needed
+- The extra addresses fold to a line each, reorder where they are listed, and start with the port above
 
 ### Fixed
 
 - The key bar sits against the app's keyboard instead of a navigation bar's worth of nothing
 - Back puts the app's keyboard away instead of leaving the session, and the system one stops coming back on top of it
+- Dismissing the paste offer keeps it dismissed after leaving the session
+- The history completion stays out of full-screen programs
+- Both pages away from the letters have the same layout, so paging does not move the keys
+- The system keyboard stays down while the app draws one of its own
+- An address on a network the phone is not on is tried after the ones that can answer
 
 ### Documentation
 
 - The feature list covers the keyboard pages, the paste offer and the three keys
+- The address list says which address goes last and why
+- The address list covers the per-address VPN mode, folding and reordering
 
 ## [0.1.0] - 2026-09-09
 
