@@ -76,7 +76,7 @@ object KeyRotation {
         return "umask 077; P=$path; " +
             "if [ ! -f \$P ]; then echo 'no authorized_keys'; exit 0; fi; " +
             "if ! grep -qxF '$key' \$P; then echo 'not there'; exit 0; fi; " +
-            "T=\$P.androidterm.\$\$; grep -vxF '$key' \$P > \$T; s=\$?; " +
+            "T=\$P.flintterm.\$\$; grep -vxF '$key' \$P > \$T; s=\$?; " +
             // grep says 1 when it printed nothing, which is what happens when
             // the old key was the only line — an empty file is the right answer
             // there, not a failure.
@@ -116,8 +116,8 @@ object KeyRotation {
                 authType = AuthType.KEY, identityId = new.id, accountId = null,
                 password = "", username = sessions.loginName(host),
             )
-            val proof = sessions.runCommand(onlyNew, "echo androidterm-rotation-ok")
-            if (proof.isFailure || proof.getOrNull()?.contains("androidterm-rotation-ok") != true) {
+            val proof = sessions.runCommand(onlyNew, "echo flintterm-rotation-ok")
+            if (proof.isFailure || proof.getOrNull()?.contains("flintterm-rotation-ok") != true) {
                 report(Progress(host.id, Stage.FAILED, proof.exceptionOrNull()?.message ?: "the new key did not get in"))
                 continue
             }

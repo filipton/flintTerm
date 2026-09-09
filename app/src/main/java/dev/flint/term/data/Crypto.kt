@@ -14,6 +14,9 @@ import javax.crypto.spec.GCMParameterSpec
  * passwords, private keys and passphrases at rest.
  */
 object Crypto {
+    // The app was called AndroidTerm when this key was made. The name is
+    // the address of a key inside the phone's keystore, so renaming it
+    // would lose every password and passphrase already sealed with it.
     private const val ALIAS = "androidterm.secrets.v1"
     private const val PREFIX = "enc1:"
 

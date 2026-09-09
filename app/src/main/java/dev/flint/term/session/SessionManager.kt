@@ -113,7 +113,7 @@ class SessionManager(
                     )
                 } else if (id.hardware) {
                     auth += AuthMethod.Keystore(
-                        dev.flint.term.data.HardwareKeys.signer(id.id, id.name.ifBlank { "androidterm" }),
+                        dev.flint.term.data.HardwareKeys.signer(id.id, id.name.ifBlank { "flintterm" }),
                         id.certificate,
                     )
                 } else {

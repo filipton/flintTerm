@@ -267,7 +267,7 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
             if (showSettings || !p.joined) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Field(name, { name = it }, "Name", placeholder = "Work tailnet", hint = "Shown when picking a VPN for a host.")
-                    Field(hostname, { hostname = it }, "Machine name (optional)", placeholder = "androidterm-phone", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false))
+                    Field(hostname, { hostname = it }, "Machine name (optional)", placeholder = "flintterm-phone", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false))
                     Field(controlUrl, { controlUrl = it }, "Control server (optional, for Headscale)", placeholder = "https://headscale.example.com", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
                     Button(
                         onClick = {

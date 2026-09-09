@@ -34,6 +34,8 @@ import java.security.spec.ECGenParameterSpec
 object HardwareKeys {
     private const val TAG = "HardwareKeys"
     private const val STORE = "AndroidKeyStore"
+    // Also from the old name, and also unrenameable: it addresses keys that
+    // already exist in the keystore and cannot be exported and re-imported.
     private const val PREFIX = "androidterm-ssh-"
     const val SSH_TYPE = "ecdsa-sha2-nistp256"
 

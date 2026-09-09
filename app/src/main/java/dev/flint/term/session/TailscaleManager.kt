@@ -301,7 +301,7 @@ class TailscaleManager(private val context: Context, private val store: Store) {
     }
 
     private fun defaultHostname(): String =
-        "androidterm-" + Build.MODEL.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+        "flintterm-" + Build.MODEL.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
 
     private fun stateDir(id: String): File = File(File(context.filesDir, "tailscale"), id)
 

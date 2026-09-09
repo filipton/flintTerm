@@ -130,7 +130,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
                     val plain = Vault.plain(snapshot, withSecrets, Build.MODEL)
                     sealed = withContext(Dispatchers.IO) { sealVault(passphrase, plain) }
                     passphrase = ""; again = ""
-                    save.launch("androidterm-${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}.${Vault.EXTENSION}")
+                    save.launch("flintterm-${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}.${Vault.EXTENSION}")
                 }
             }) { Text(if (busy) "Encrypting…" else "Choose where") }
         },

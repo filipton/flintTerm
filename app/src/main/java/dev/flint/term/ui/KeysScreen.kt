@@ -437,7 +437,7 @@ fun KeysScreen(nav: NavController) {
                                     val info = HardwareKeys.generate(identity.id, requireAuth)
                                     app.store.upsertIdentity(
                                         identity.copy(
-                                            publicKey = HardwareKeys.openSshPublicKey(identity.id, identity.name.ifBlank { "androidterm" }),
+                                            publicKey = HardwareKeys.openSshPublicKey(identity.id, identity.name.ifBlank { "flintterm" }),
                                             fingerprint = HardwareKeys.fingerprint(identity.id),
                                             backing = when (info.backing) {
                                                 HardwareKeys.Backing.StrongBox -> "StrongBox"

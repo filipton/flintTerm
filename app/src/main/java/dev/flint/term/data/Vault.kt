@@ -30,7 +30,7 @@ object Vault {
     fun plain(snap: Snapshot, withSecrets: Boolean, device: String, now: Long = System.currentTimeMillis()): ByteArray {
         val root = StoreJson.write(strip(snap, withSecrets)) { it }
         root.put("vault", JSONObject().apply {
-            put("app", "androidterm"); put("format", FORMAT); put("exportedAt", now); put("device", device); put("secrets", withSecrets)
+            put("app", "flintterm"); put("format", FORMAT); put("exportedAt", now); put("device", device); put("secrets", withSecrets)
         })
         return root.toString().toByteArray(Charsets.UTF_8)
     }

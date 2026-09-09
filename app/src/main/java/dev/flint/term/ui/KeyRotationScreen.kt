@@ -244,7 +244,7 @@ private suspend fun replacement(old: Identity, name: String): Identity = withCon
         val identity = Identity(name = name, hardware = true)
         val info = HardwareKeys.generate(identity.id, old.requireAuth)
         identity.copy(
-            publicKey = HardwareKeys.openSshPublicKey(identity.id, name.ifBlank { "androidterm" }),
+            publicKey = HardwareKeys.openSshPublicKey(identity.id, name.ifBlank { "flintterm" }),
             fingerprint = HardwareKeys.fingerprint(identity.id),
             backing = when (info.backing) {
                 HardwareKeys.Backing.StrongBox -> "StrongBox"
