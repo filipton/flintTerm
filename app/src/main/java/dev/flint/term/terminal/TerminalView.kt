@@ -1222,9 +1222,21 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // "content://media/…" into a shell that cannot open it, so the file is
         // sent to the host instead and its path typed in its place.
         val files = (0 until clip.itemCount).mapNotNull { clip.getItemAt(it).uri }
-        if (files.isNotEmpty() && onFilesDropped?.invoke(files) == true) {
-            finishActionMode()
-            return
+        if (files.isNotEmpty()) {
+            if (onFilesDropped?.invoke(files) == true) {
+                finishActionMode()
+                return
+            }
+            // Nowhere to send it — a local shell has no host to upload to. What
+            // is left is the Uri's own text, and typing "content://media/…" at a
+            // prompt looks far more like a bug than saying so does.
+            if (clip.getItemAt(0).text == null) {
+                android.widget.Toast
+                    .makeText(context, "That was copied as a file, and this session has no host to send it to", android.widget.Toast.LENGTH_LONG)
+                    .show()
+                finishActionMode()
+                return
+            }
         }
         val text = clip.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(context)?.toString() ?: return
         pasteText(text)
