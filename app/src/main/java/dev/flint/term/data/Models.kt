@@ -836,6 +836,16 @@ data class Settings(
      * exists for the one thing the others cannot do: put Ctrl on the bottom row.
      */
     val builtInKeyboard: Boolean = false,
+    /**
+     * Offer a one-tap paste when something has just been copied elsewhere.
+     *
+     * On, because copying a command in a browser and coming back to type it
+     * out by hand is the tedium a phone terminal is worst at, and the bar's
+     * paste cap is only obvious to somebody already looking for it. Only the
+     * clipboard's description is read, never its contents, so the offer costs
+     * no "pasted from your clipboard" toast.
+     */
+    val clipboardSuggestion: Boolean = true,
     /** Tapping a modifier cap twice quickly locks it, instead of clearing it. */
     val doubleTapLocksModifier: Boolean = true,
     /** Dragging two fingers on the terminal sends arrow keys. */

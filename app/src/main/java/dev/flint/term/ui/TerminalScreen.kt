@@ -843,6 +843,12 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             )
         }
 
+        // Above the key bar, so it never takes a row from the terminal it is
+        // not using: the bar or the spacer below it carries the insets.
+        if (settings.clipboardSuggestion) {
+            ClipboardSuggestion(view, chrome, onChrome, Modifier.fillMaxWidth())
+        }
+
         val conf = LocalConfiguration.current
         val hardwareKeyboard = conf.keyboard == Configuration.KEYBOARD_QWERTY && conf.hardKeyboardHidden == Configuration.HARDKEYBOARDHIDDEN_NO
         val barRows = settings.extraKeysRows

@@ -4,8 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Bolt
+import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.KeyboardCapslock
 import androidx.compose.material.icons.rounded.KeyboardCommandKey
@@ -86,6 +87,15 @@ fun KeyboardSettings(nav: NavController) {
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.builtInKeyboard,
                 onCheckedChange = { v -> app.store.updateSettings { it.copy(builtInKeyboard = v) } },
+            )
+            RowDivider()
+            GroupRow(
+                title = "Offer to paste what you copied",
+                subtitle = "A strip above the keys, for a minute or so after something is copied in another app. Only the clipboard's description is read, never its contents.",
+                icon = Icons.Rounded.ContentPaste,
+                iconTint = MaterialTheme.colorScheme.secondary,
+                checked = settings.clipboardSuggestion,
+                onCheckedChange = { v -> app.store.updateSettings { it.copy(clipboardSuggestion = v) } },
             )
             RowDivider()
             GroupRow(
