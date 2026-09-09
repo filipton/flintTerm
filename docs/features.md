@@ -30,7 +30,11 @@ Everything the app does, at length. The short list is in the [README](../README.
   name through Tailscale, a remote address through WireGuard. They are tried in order and the first
   that answers wins, so the same host works from the sofa and from a train without editing anything.
   Being turned away (bad password, rejected host key) stops the search — only silence moves on. Mosh
-  and file access follow the address that answered, not the first one in the list.
+  and file access follow the address that answered, not the first one in the list. The order is the
+  one you wrote, with one exception: a private address belonging to a network the phone is not on has
+  nowhere to go and would only hold the connection up until it timed out, so it goes to the back of
+  the queue. It is still dialled if nothing else answers, since a route this phone cannot see is
+  still a route.
 - **WireGuard without a system VPN**: paste a `wg-quick` config and route individual hosts through a
   userspace tunnel (boringtun + smoltcp inside the app). No VPN permission, no root, works next to a
   system VPN; DNS names resolve through the tunnel when the config lists a DNS server. By default the
