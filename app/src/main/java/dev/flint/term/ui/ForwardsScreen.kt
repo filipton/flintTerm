@@ -76,7 +76,7 @@ fun ForwardsScreen(nav: NavController, sessionId: String) {
         },
     ) { padding ->
         val configured = host?.forwards ?: emptyList()
-        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(bottom = 100.dp)) {
+        androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("forwards")).padding(bottom = 100.dp)) {
             if (configured.isEmpty()) {
                 EmptyState(
                     Icons.Rounded.SwapHoriz, "No forwards yet",

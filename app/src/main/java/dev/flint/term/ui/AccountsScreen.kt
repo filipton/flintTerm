@@ -79,7 +79,7 @@ fun AccountsScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
+        LazyColumn(state = rememberScreenListState("accounts"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
             if (accounts.isEmpty()) {
                 item {
                     EmptyState(

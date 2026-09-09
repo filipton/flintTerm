@@ -148,7 +148,7 @@ fun KeysScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
+        LazyColumn(state = rememberScreenListState("keys"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
             // The other two halves of "what a host logs in with": who you are,
             // and which servers you have already agreed to trust.
             item {

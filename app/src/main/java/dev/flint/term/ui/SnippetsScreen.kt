@@ -67,7 +67,7 @@ fun SnippetsScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
+        LazyColumn(state = rememberScreenListState("snippets"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
             // Past a handful, scrolling for the one you want is the slow part.
             if (snippets.size > 8) {
                 item {

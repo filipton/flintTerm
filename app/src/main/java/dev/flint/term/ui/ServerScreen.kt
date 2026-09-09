@@ -152,7 +152,7 @@ fun ServerPane(nav: NavController, session: TerminalSession, modifier: Modifier 
     Column(
         modifier
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScreenScroll("server"))
             .padding(bottom = 24.dp),
     ) {
         when {

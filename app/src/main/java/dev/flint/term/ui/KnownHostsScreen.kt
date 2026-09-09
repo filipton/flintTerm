@@ -65,7 +65,7 @@ fun KnownHostsScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
+        LazyColumn(state = rememberScreenListState("knownhosts"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
             if (known.isEmpty()) {
                 item { EmptyState(Icons.Rounded.Security, "Nothing trusted yet", "Server keys are stored here after you accept them on first connection. If a key changes later you are warned.") }
             } else {

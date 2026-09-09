@@ -86,7 +86,7 @@ fun ExtraKeysScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(bottom = 40.dp)) {
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("extrakeys")).padding(bottom = 40.dp)) {
             Text(
                 "This is the bar above the keyboard. The first row is fixed and shares the width; the second row scrolls. Tap a key to select it, then move or remove it.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

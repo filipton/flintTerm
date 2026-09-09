@@ -127,7 +127,7 @@ fun TunnelsScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
+        LazyColumn(state = rememberScreenListState("tunnels"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
             item { TailscaleSection(onOpen = { tailscaleDetail = it }) }
             item { GroupLabel("WireGuard") }
             if (tunnels.isEmpty()) {

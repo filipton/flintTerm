@@ -75,7 +75,7 @@ fun GroupsScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
+        LazyColumn(state = rememberScreenListState("groups"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
             if (groups.isEmpty()) {
                 item {
                     EmptyState(
@@ -149,7 +149,7 @@ fun GroupEditScreen(nav: NavController, id: String) {
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("group-edit"))) {
             Group {
                 Column(Modifier.padding(14.dp)) {
                     Field(name, { name = it }, "Group name", placeholder = "Work")

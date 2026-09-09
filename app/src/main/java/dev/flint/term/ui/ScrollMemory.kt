@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.first
 
 /**
  * Where each screen was scrolled to, by name.
@@ -52,6 +53,12 @@ fun rememberScreenListState(key: String): LazyListState {
     val at = lists[key] ?: (0 to 0)
     val state = remember(key) { LazyListState(at.first, at.second) }
     LaunchedEffect(state) {
+        // A remembered index can outlive the list that made it: a host deleted,
+        // a search narrowing the rows, simply fewer of them this time. A lazy
+        // list does not clamp an index it cannot reach — it draws nothing at
+        // all — so the first real layout is checked before anything is kept.
+        val count = snapshotFlow { state.layoutInfo.totalItemsCount }.first { it > 0 }
+        if (state.firstVisibleItemIndex >= count) state.scrollToItem(0)
         snapshotFlow { Triple(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset, state.layoutInfo.totalItemsCount) }
             .collect { (index, offset, items) -> if (items > 0) lists[key] = index to offset }
     }

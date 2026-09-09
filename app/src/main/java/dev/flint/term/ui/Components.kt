@@ -422,7 +422,11 @@ fun Segmented(options: List<String>, selected: Int, modifier: Modifier = Modifie
                 selected = selected == i,
                 onClick = { onSelect(i) },
                 shape = SegmentedButtonDefaults.itemShape(index = i, count = options.size),
-                icon = { if (selected == i) Icon(Icons.Rounded.Check, null, Modifier.size(16.dp)) },
+                // No check mark. It is drawn inside the button, so the selected
+                // label is pushed off centre while the others stay centred, and
+                // it eats the width a three-word option needs. The filled
+                // container already says which one is chosen.
+                icon = {},
                 colors = SegmentedButtonDefaults.colors(
                     activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
                     activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,

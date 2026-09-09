@@ -86,7 +86,7 @@ fun RecordingsScreen(nav: NavController) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppHeader(title = "Recordings", subtitle = dir.absolutePath, onBack = { nav.popBackStack() }) },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
+        LazyColumn(state = rememberScreenListState("recordings"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
             if (files.isEmpty()) {
                 item {
                     EmptyState(

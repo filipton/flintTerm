@@ -84,7 +84,7 @@ fun ChordsScreen(nav: NavController) {
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
+        LazyColumn(state = rememberScreenListState("chords"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
             item {
                 Text(
                     "Hold the Ctrl key above the keyboard to open these. Keys are written the way tmux and Emacs " +

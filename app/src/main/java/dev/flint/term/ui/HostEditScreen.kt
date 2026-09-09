@@ -309,6 +309,10 @@ fun HostEditScreen(nav: NavController, id: String) {
     // pages inside this screen rather than routes, because the draft being
     // edited has not been saved yet and navigating away would lose it.
     var page by rememberSaveable { mutableStateOf(EditorPage.Main) }
+    // The arrow in the bar walks back a page before it leaves; the system back
+    // gesture has to do the same, or a swipe from a subpage throws away a host
+    // that was never saved.
+    androidx.activity.compose.BackHandler(enabled = page != EditorPage.Main) { page = EditorPage.Main }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -335,7 +339,10 @@ fun HostEditScreen(nav: NavController, id: String) {
             )
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
+        // One remembered position per page, not one for the screen. Walking into
+        // a subpage should start at its top, and walking back out should land
+        // where you were reading — a single scroll state cannot do both.
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("host/$id/${page.name}"))) {
             // ---- identity / look ------------------------------------------------
             if (page == EditorPage.Main) Group {
                 Row(Modifier.padding(start = 14.dp, end = 14.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -916,7 +923,10 @@ fun HostEditScreen(nav: NavController, id: String) {
                     title = "tmux controls",
                     icon = Icons.Rounded.Dashboard,
                     value = tmuxControls,
-                    neutral = "When attached to tmux",
+                    // Not "Follow": leaving this alone means "when this host is
+                    // attached to tmux", which is a condition rather than a
+                    // deferral to the app's setting.
+                    neutral = "Auto",
                     subtitle = if (settings.tmuxControls && (tmuxControls ?: persistent)) {
                         "The chords sheet, the window list and the swipe that changes window"
                     } else {
@@ -1383,7 +1393,7 @@ private fun OverrideRow(
     subtitle: String,
     onChange: (Boolean?) -> Unit,
     /** What "leave it to the app" reads as for this particular row. */
-    neutral: String = "Follow settings",
+    neutral: String = "Follow",
 ) {
     GroupRow(title = title, subtitle = subtitle, icon = icon, iconTint = MaterialTheme.colorScheme.secondary)
     Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {

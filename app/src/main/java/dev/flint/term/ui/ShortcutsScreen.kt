@@ -99,7 +99,7 @@ fun ShortcutsScreen(onBack: () -> Unit) {
             )
         },
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
+        LazyColumn(state = rememberScreenListState("shortcuts"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
             item {
                 Text(
                     "Chords a hardware keyboard gives to the app instead of to the host. Every one of them is a key " +
