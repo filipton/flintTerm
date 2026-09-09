@@ -182,6 +182,41 @@ class SessionManager(
         val knock: KnockPlan? = null,
     )
 
+    /** What an address does with the VPN it was given, and what to say about it. */
+    private class TunnelChoice(val tunnelId: String?, val fallback: Boolean, val note: String?)
+
+    /**
+     * Whether an address actually needs its tunnel right now.
+     *
+     * A private address means a different machine on every network: on one of
+     * the phone's own networks it is the machine itself and the tunnel is in the
+     * way, and anywhere else it is unreachable without one. A name or a public
+     * address could be either, so it is tried directly first and the tunnel
+     * catches it when that fails. "Always" skips the question.
+     *
+     * Asked per address rather than once for the host, because a host with a
+     * second address has it precisely so the two are reached differently.
+     */
+    private fun decideTunnel(
+        tunnelId: String?,
+        mode: dev.flint.term.data.TunnelMode,
+        ip: String,
+        name: String,
+    ): TunnelChoice {
+        if (tunnelId == null) return TunnelChoice(null, false, null)
+        val tunnelName = store.tunnel(tunnelId)?.name ?: "tunnel"
+        if (mode == dev.flint.term.data.TunnelMode.ALWAYS) return TunnelChoice(tunnelId, false, "Using $tunnelName")
+        if (!Wol.isPrivateIpv4(ip)) {
+            return TunnelChoice(tunnelId, true, "$tunnelName is used only if $name is not reachable directly")
+        }
+        val lan = Wol.localNetworkContaining(ip, ip)
+        return if (lan != null) {
+            TunnelChoice(null, false, "$name is on your current network ($lan), connecting directly")
+        } else {
+            TunnelChoice(tunnelId, false, "$name is not on your current network, using $tunnelName")
+        }
+    }
+
     /** Everything the core needs to reach [host]: jump chain, tunnel, proxy, wake-on-LAN. */
     private fun prepare(raw: Host, forceWake: Boolean, allowWake: Boolean = true, allowMosh: Boolean = true): Prepared {
         val settings = store.settings.value
@@ -200,29 +235,10 @@ class SessionManager(
         // dialled directly; other private addresses go through the tunnel; names and public
         // addresses try a short direct connection first (the core falls back to the tunnel).
         val entry = chain.firstOrNull() ?: host
-        var tunnelId = entry.tunnelId
-        var tunnelFallback = false
-        var tunnelNote: String? = null
-        if (tunnelId != null) {
-            val tunnelName = store.tunnel(tunnelId)?.name ?: "tunnel"
-            val ip = entry.hostname.trim()
-            when {
-                entry.tunnelMode == dev.flint.term.data.TunnelMode.ALWAYS -> tunnelNote = "Using $tunnelName"
-                Wol.isPrivateIpv4(ip) -> {
-                    val lan = Wol.localNetworkContaining(ip, ip)
-                    if (lan != null) {
-                        tunnelId = null
-                        tunnelNote = "${entry.displayName} is on your current network ($lan), connecting directly"
-                    } else {
-                        tunnelNote = "${entry.displayName} is not on your current network, using $tunnelName"
-                    }
-                }
-                else -> {
-                    tunnelFallback = true
-                    tunnelNote = "$tunnelName is used only if ${entry.displayName} is not reachable directly"
-                }
-            }
-        }
+        val decided = decideTunnel(entry.tunnelId, entry.tunnelMode, entry.hostname.trim(), entry.displayName)
+        var tunnelId = decided.tunnelId
+        val tunnelFallback = decided.fallback
+        var tunnelNote: String? = decided.note
         val jumps = chain.map { j ->
             JumpHop(
                 host = j.hostname.trim(),
@@ -283,16 +299,24 @@ class SessionManager(
                         tunnelId = tunnelId,
                         tailscaleId = host.tailscaleId,
                         vpnName = vpnName(host.tunnelId, host.tailscaleId),
+                        tunnelFallback = tunnelFallback,
                     ),
                 ) +
                     host.addresses.filter { it.hostname.isNotBlank() }.map { a ->
+                        val own = decideTunnel(
+                            a.tunnelId,
+                            a.tunnelMode,
+                            a.hostname.trim(),
+                            a.label.ifBlank { a.hostname }.trim(),
+                        )
                         Endpoint(
                             label = a.label.trim(),
                             host = a.hostname.trim(),
                             port = (a.port.takeIf { it > 0 } ?: host.port).toUShort(),
-                            tunnelId = a.tunnelId,
+                            tunnelId = own.tunnelId,
                             tailscaleId = a.tailscaleId,
-                            vpnName = vpnName(a.tunnelId, a.tailscaleId),
+                            vpnName = vpnName(own.tunnelId, a.tailscaleId),
+                            tunnelFallback = own.fallback,
                         )
                     },
             )

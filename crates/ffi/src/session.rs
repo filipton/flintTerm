@@ -129,6 +129,9 @@ pub struct Endpoint {
     /// What to call the tunnel or tailnet in the connection steps; an id means
     /// nothing to anyone reading them.
     pub vpn_name: String,
+    /// Try this address directly first and fall back to its tunnel only when
+    /// that fails, rather than going through the tunnel from the start.
+    pub tunnel_fallback: bool,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -1804,6 +1807,7 @@ impl Inner {
                 tunnel_id: config.tunnel_id.clone(),
                 tailscale_id: config.tailscale_id.clone(),
                 vpn_name: config.vpn_name.clone(),
+                tunnel_fallback: config.tunnel_fallback,
             }];
             candidates.extend(config.alternates.iter().cloned());
             let deadline = tokio::time::Instant::now() + Duration::from_secs(config.wait_for_host_secs as u64);
@@ -1830,7 +1834,19 @@ impl Inner {
                     let opts = opts_for(&candidate.host, candidate.port, &config.username, &config.auth, &config.proxy, config.forward_agent)?;
                     // No waiting inside a single attempt: with several addresses,
                     // sitting on the first one defeats the point of the list.
-                    match self.dial_first_hop(opts, candidate.tunnel_id.as_deref(), candidate.tailscale_id.as_deref(), 0, &verifier, &key, &candidate.vpn_name).await {
+                    match self
+                        .dial_first_hop(
+                            opts,
+                            candidate.tunnel_id.as_deref(),
+                            candidate.tailscale_id.as_deref(),
+                            0,
+                            &verifier,
+                            &key,
+                            &candidate.vpn_name,
+                            candidate.tunnel_fallback,
+                        )
+                        .await
+                    {
                         Ok(client) => {
                             *self.used_endpoint.lock() = Some(candidate.clone());
                             self.step(&key, format!("Connected to {name}"), StepStatus::Done);
@@ -1872,7 +1888,7 @@ impl Inner {
                 None => {
                     self.step(&key, format!("Connecting to jump host {label}"), StepStatus::Running);
                     let tunnel = hop.tunnel_id.as_deref().or(config.tunnel_id.as_deref());
-                    match self.dial_first_hop(opts, tunnel, hop.tailscale_id.as_deref(), 0, &verifier, &key, "").await {
+                    match self.dial_first_hop(opts, tunnel, hop.tailscale_id.as_deref(), 0, &verifier, &key, "", self.tunnel_fallback()).await {
                         Ok(c) => c,
                         Err(e) => {
                             self.step(&key, format!("Jump host {label}: {e}"), StepStatus::Failed);
@@ -2001,12 +2017,14 @@ impl Inner {
         step_key: &str,
         // What the tunnel or tailnet is called, for its own step line.
         vpn_name: &str,
+        // Whether this address would rather be tried directly first.
+        tunnel_fallback: bool,
     ) -> Result<SshClient, CoreError> {
         let say = |msg: String| self.step(step_key, msg, StepStatus::Running);
         let target = format!("{}:{}", opts.host, opts.port);
         // Smart tunnel use: reachable directly? Then no tunnel. Otherwise go through it.
         let tunnel_id = match tunnel_id {
-            Some(id) if self.tunnel_fallback() && tailscale_id.is_none() => {
+            Some(id) if tunnel_fallback && tailscale_id.is_none() => {
                 say(format!("Trying {target} directly first"));
                 let mut quick = opts.clone();
                 quick.connect_timeout = Duration::from_secs(4);

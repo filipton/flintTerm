@@ -67,6 +67,7 @@ object StoreJson {
                             put(JSONObject().apply {
                                 put("id", a.id); put("label", a.label); put("hostname", a.hostname); put("port", a.port)
                                 put("tunnelId", a.tunnelId ?: JSONObject.NULL); put("tailscaleId", a.tailscaleId ?: JSONObject.NULL)
+                                put("tunnelMode", a.tunnelMode.name)
                             })
                         }
                     })
@@ -318,6 +319,8 @@ object StoreJson {
                                 port = a.optInt("port"),
                                 tunnelId = a.optId("tunnelId"),
                                 tailscaleId = a.optId("tailscaleId"),
+                                tunnelMode = runCatching { TunnelMode.valueOf(a.optString("tunnelMode")) }
+                                    .getOrDefault(TunnelMode.WHEN_NEEDED),
                             )
                         }
                     } ?: emptyList(),

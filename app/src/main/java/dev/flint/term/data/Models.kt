@@ -312,6 +312,15 @@ data class HostAddress(
     val port: Int = 0,
     val tunnelId: String? = null,
     val tailscaleId: String? = null,
+    /**
+     * When the tunnel above is used, for this address alone.
+     *
+     * Its own rather than the host's, because the whole point of a second
+     * address is that it is reached differently: a wired LAN address wants the
+     * tunnel only when the phone is somewhere else, while the address that
+     * exists purely as the remote way in wants it always.
+     */
+    val tunnelMode: TunnelMode = TunnelMode.WHEN_NEEDED,
 )
 
 /** Icons a host can show on its card; keys are stored, so keep them stable. */

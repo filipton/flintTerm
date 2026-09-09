@@ -6,7 +6,10 @@ import org.junit.Test
 
 class EndpointsTest {
     private fun ep(host: String, label: String = "", tunnel: String? = null, tailscale: String? = null) =
-        Endpoint(label = label, host = host, port = 22u, tunnelId = tunnel, tailscaleId = tailscale, vpnName = "")
+        Endpoint(
+            label = label, host = host, port = 22u, tunnelId = tunnel, tailscaleId = tailscale,
+            vpnName = "", tunnelFallback = false,
+        )
 
     /** As if the phone were on 192.168.1.0/24 and nothing else. */
     private val here: (String) -> Boolean = { it.startsWith("192.168.1.") }
