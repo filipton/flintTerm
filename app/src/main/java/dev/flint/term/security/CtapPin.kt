@@ -320,7 +320,8 @@ object ClientPin {
     /** y² = x³ - 3x + b over the P-256 prime field. */
     internal fun onCurve(x: BigInteger, y: BigInteger): Boolean {
         if (x.signum() < 0 || y.signum() < 0 || x >= P || y >= P) return false
-        val left = y.modPow(BigInteger.TWO, P)
+        // BigInteger.TWO is API 33, and this runs on anything from Android 8.
+        val left = y.modPow(BigInteger.valueOf(2), P)
         val right = (x.modPow(BigInteger.valueOf(3), P) - x.multiply(BigInteger.valueOf(3)) + B).mod(P)
         return left == right
     }
