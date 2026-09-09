@@ -93,10 +93,14 @@ private val FUNCTIONS = listOf(
     // row, and of every other terminal's key bar. Kept adjacent so the eye finds
     // the group rather than four keys that happen to be arrows.
     //
+    // In the middle of the row rather than at its left edge, which is the corner
+    // a thumb reaches for last, and which is roughly where the key bar keeps its
+    // own arrows: one place to look for them whichever of the two is up.
+    //
     // Ten across and flush, like every other row on both pages: a row indented
     // by half a key puts this page's caps between the other page's, and paging
     // between the two then moves every key under the thumb.
-    row("LEFT", "DOWN", "UP", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV", "SEARCH"),
+    row("HOME", "END", "PGUP", "PGDN", "LEFT", "DOWN", "UP", "RIGHT", "NAV", "SEARCH"),
     KeyboardRow(
         listOf(Key(PAGE, 1.5f)) + listOf("F11", "F12", "ALT", "SHIFT", "STAB", "PASTE", "KEYBOARD").map { Key(it) } + Key("BKSP", 1.5f),
     ),
