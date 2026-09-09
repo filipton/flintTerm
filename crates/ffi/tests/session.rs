@@ -164,6 +164,64 @@ fn local_shell_roundtrip() {
     }
 }
 
+/// A person in front of the host-key prompt is a connection that waits, and the
+/// view finishes measuring while they read the fingerprint. That resize has no
+/// writer to reach yet, so the size the pty is asked for has to be read when it
+/// is asked for — not before dialing. Getting this wrong left the first session
+/// to every new host at 80x24, with nothing afterwards to correct it.
+#[test]
+fn a_resize_while_the_host_key_is_being_checked_reaches_the_pty() {
+    let Ok(port) = std::env::var("SSH_TEST_PORT") else { return };
+    let key = std::fs::read_to_string(std::env::var("SSH_TEST_KEY").unwrap()).unwrap();
+
+    /// Somebody reading a fingerprint before they tap Trust.
+    struct Slow;
+    impl HostKeyVerifier for Slow {
+        fn verify(&self, _: HostKey) -> bool {
+            std::thread::sleep(Duration::from_millis(600));
+            true
+        }
+    }
+
+    let listener = Listener::new();
+    let backend = Backend::Ssh {
+        config: SshConfig {
+            host: "127.0.0.1".into(),
+            port: port.parse().unwrap(),
+            username: std::env::var("USER").unwrap(),
+            auth: vec![AuthMethod::Key { private_key: key, passphrase: None, certificate: String::new() }],
+            keepalive_secs: 10,
+            connect_timeout_secs: 10,
+            proxy: None,
+            jumps: vec![],
+            tunnel_id: None,
+            wait_for_host_secs: 0,
+            tailscale_id: None,
+            tunnel_fallback: false,
+            forward_agent: false,
+            agent_keys: vec![],
+            agent_approval: None,
+            env: vec![],
+            alternates: vec![],
+            vpn_name: String::new(),
+        },
+    };
+    let session = Session::new(backend, 80, 24, 1000, listener.clone(), Arc::new(Slow), Arc::new(NoQuestions), Options::default());
+    session.start();
+    // The view settles while the prompt is still up.
+    std::thread::sleep(Duration::from_millis(200));
+    session.resize(100, 40);
+
+    let start = Instant::now();
+    while !matches!(session.state(), SessionState::Connected) {
+        assert!(start.elapsed() < Duration::from_secs(10), "state: {:?}", session.state());
+        std::thread::sleep(Duration::from_millis(30));
+    }
+    session.send_text("stty size\n".into());
+    wait_for(&session, "40 100");
+    session.disconnect();
+}
+
 #[test]
 fn ssh_session_roundtrip() {
     let Ok(port) = std::env::var("SSH_TEST_PORT") else { return };

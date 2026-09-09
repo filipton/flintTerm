@@ -1543,12 +1543,19 @@ impl Inner {
     }
 
     async fn connect(self: Arc<Self>) -> Result<Reader, CoreError> {
-        let (cols, rows) = *self.size.lock();
+        // The size is read at each point it is sent, never once up front. What
+        // happens in between can wait on a person — a host key to trust, a
+        // password, a touch on a security key — and the view finishes measuring
+        // while they decide. A resize arriving in that window has no writer to
+        // reach and is dropped, so a size read before dialing would be the
+        // 80x24 the session was constructed with, and nothing later would
+        // correct it.
         match &self.backend {
             Backend::Ssh { config } => {
                 let client = Arc::new(self.connect_ssh(config).await?);
                 self.probe_os(&client).await;
                 let env = self.shell_env(&config.env);
+                let (cols, rows) = *self.size.lock();
                 let shell = client.open_shell_env("xterm-256color", cols, rows, &env).await?;
                 *self.writer.lock() = Some(Writer::Ssh(shell.writer()));
                 *self.ssh.lock().await = Some(client);
@@ -1630,9 +1637,6 @@ impl Inner {
                 // The Mosh client's own notes update the Mosh line rather than
                 // stacking up under it.
                 let progress = std::sync::Arc::new(move |m: String| listener.on_progress("mosh".into(), m, StepStatus::Running));
-                // Re-read the size: the bootstrap takes seconds, and the view has
-                // usually finished measuring by now. Sending a stale size leaves the
-                // remote terminal the wrong shape with no later resize to correct it.
                 let (cols, rows) = *self.size.lock();
                 // The tunnel carries the UDP session too, so a host reached over
                 // WireGuard keeps working; smoltcp gives us real datagrams there.
@@ -1688,6 +1692,7 @@ impl Inner {
                         self.warn("Continuing over SSH — the session will not survive a network change");
                         self.predict.lock().reset();
                         let env = self.shell_env(&config.ssh.env);
+                        let (cols, rows) = *self.size.lock();
                         let shell = client.open_shell_env("xterm-256color", cols, rows, &env).await?;
                         *self.writer.lock() = Some(Writer::Ssh(shell.writer()));
                         *self.ssh.lock().await = Some(client);
@@ -1700,6 +1705,7 @@ impl Inner {
                     .dial_plain(&config.host, config.port, config.connect_timeout_secs, config.wait_for_host_secs, config.tunnel_id.as_deref(), config.tailscale_id.as_deref())
                     .await?;
                 self.progress("Connected, negotiating telnet options");
+                let (cols, rows) = *self.size.lock();
                 let (reader, writer) = TelnetIo::new(stream, cols, rows);
                 *self.writer.lock() = Some(Writer::Telnet(writer));
                 Ok(Reader::Telnet(reader))
@@ -1715,6 +1721,7 @@ impl Inner {
             }
             Backend::Local { config } => {
                 let env: Vec<(String, String)> = config.env.iter().map(|e| (e.name.clone(), e.value.clone())).collect();
+                let (cols, rows) = *self.size.lock();
                 let pty = pty::Pty::spawn(pty::SpawnOptions {
                     program: &config.program,
                     args: &config.args,
