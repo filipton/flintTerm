@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.flint.term.terminal.TerminalView
@@ -73,6 +74,15 @@ private val FUNCTIONS = listOf(
     ),
 )
 
+/** Uniform, so no row is a hair shorter than the one above it. */
+private val CAP_HEIGHT = 46.dp
+
+/** Keys that do something rather than type something, drawn a shade darker. */
+private val SPECIAL = setOf("SHIFT", "BKSP", "ENTER", "CTRL", "ALT", "ESC", "TAB", "STAB", "DEL", "INS")
+
+/** What a key reads as here, where a word would not fit or a glyph says it better. */
+private val LABELS = mapOf("SHIFT" to "⇧", "ENTER" to "⏎", "BKSP" to "⌫")
+
 /** The three layers, and what the bottom-left key says to get to the next one. */
 private enum class Layer(val next: String) { LETTERS("?123"), SYMBOLS("Fn"), FUNCTIONS("abc") }
 
@@ -98,9 +108,24 @@ fun TerminalKeyboard(
     val capText = onChrome.copy(alpha = 0.9f)
     var layer by remember { mutableStateOf(Layer.LETTERS) }
 
+    // Everything that is not a letter is drawn a shade darker, the way a phone
+    // keyboard separates the keys that type from the keys that do something.
+    val special = cap.copy(alpha = 0.04f).compositeOver(chrome)
+
     @Composable
     fun RowScope.key(token: String, weight: Float) {
-        KeyFor(token, actions, mods, cap, capText, Modifier.weight(weight).padding(horizontal = 2.dp), compact = true)
+        val isSpecial = token in SPECIAL
+        KeyFor(
+            token,
+            actions,
+            mods,
+            if (isSpecial) special else cap,
+            capText,
+            Modifier.weight(weight).padding(horizontal = 2.dp),
+            compact = true,
+            capHeight = CAP_HEIGHT,
+            labelOverride = LABELS[token],
+        )
     }
 
     Column(modifier.background(chrome).padding(horizontal = 3.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -120,14 +145,14 @@ fun TerminalKeyboard(
         // comma keeps its place beside it, and space, full stop and enter keep
         // theirs, so the row still reads the way the hand expects.
         Row(Modifier.fillMaxWidth()) {
-            KeyCapText(layer.next, cap, capText, Modifier.weight(1.5f).padding(horizontal = 2.dp)) {
+            KeyCapText(layer.next, special, capText, Modifier.weight(1.35f).padding(horizontal = 2.dp), CAP_HEIGHT) {
                 layer = Layer.entries[(layer.ordinal + 1) % Layer.entries.size]
             }
-            key("CTRL", 1.3f)
-            key(",", 1f)
-            key(" ", 3.7f)
-            key(".", 1f)
-            key("ENTER", 1.5f)
+            key("CTRL", 1.2f)
+            key(",", 0.9f)
+            key(" ", 4.25f)
+            key(".", 0.9f)
+            key("ENTER", 1.4f)
         }
     }
 }

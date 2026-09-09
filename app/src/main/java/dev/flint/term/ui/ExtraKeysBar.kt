@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.remember
@@ -135,19 +136,42 @@ fun ExtraKeysBar(
 private val CapShape = RoundedCornerShape(10.dp)
 
 @Composable
-private fun KeyCap(label: String, cap: Color, text: Color, modifier: Modifier = Modifier, mono: Boolean = false, accent: Boolean = false, compact: Boolean = false, onClick: () -> Unit) {
+private fun KeyCap(
+    label: String,
+    cap: Color,
+    text: Color,
+    modifier: Modifier = Modifier,
+    mono: Boolean = false,
+    accent: Boolean = false,
+    compact: Boolean = false,
+    capHeight: androidx.compose.ui.unit.Dp = 38.dp,
+    onClick: () -> Unit,
+) {
     val haptic = LocalHapticFeedback.current
     val primary = MaterialTheme.colorScheme.primary
+    // A key with no visible press is a key you cannot tell you hit. The colour
+    // is held for as long as the finger is down rather than flashed, because a
+    // flash is exactly what a slow frame swallows.
+    var down by remember { mutableStateOf(false) }
     Box(
         modifier
-            .height(38.dp)
+            .height(capHeight)
             .widthIn(min = if (mono) 38.dp else 46.dp)
             .clip(CapShape)
-            .background(if (accent) primary.copy(alpha = 0.22f) else cap)
+            .background(
+                when {
+                    down -> pressedOver(cap, text)
+                    accent -> primary.copy(alpha = 0.22f)
+                    else -> cap
+                },
+            )
             .pointerInput(onClick) {
                 detectTapGestures(onPress = {
+                    down = true
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onClick()
+                    tryAwaitRelease()
+                    down = false
                 })
             }
             .padding(horizontal = if (compact) 2.dp else 8.dp),
@@ -155,7 +179,8 @@ private fun KeyCap(label: String, cap: Color, text: Color, modifier: Modifier = 
     ) {
         Text(
             label,
-            fontSize = if (compact) 11.sp else if (mono) 16.sp else 12.sp,
+            // One character has room to be read; a word among ten across does not.
+            fontSize = if (compact) (if (label.length <= 1) 16.sp else 11.sp) else if (mono) 16.sp else 12.sp,
             fontFamily = if (mono) MonoFamily else null,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = if (mono) 0.sp else 0.4.sp,
@@ -173,6 +198,7 @@ private fun ModifierCap(
     cap: Color,
     text: Color,
     modifier: Modifier = Modifier,
+    capHeight: androidx.compose.ui.unit.Dp = 38.dp,
     onTap: () -> Unit,
     onLong: () -> Unit,
     /** Letters offered on a press-and-slide; empty leaves the long press alone. */
@@ -181,8 +207,9 @@ private fun ModifierCap(
 ) {
     val haptic = LocalHapticFeedback.current
     val primary = MaterialTheme.colorScheme.primary
+    var held by remember { mutableStateOf(false) }
     val (bg, fg) = when (state) {
-        ModState.OFF -> cap to text
+        ModState.OFF -> (if (held) pressedOver(cap, text) else cap) to text
         ModState.ONCE -> primary.copy(alpha = 0.28f) to primary
         ModState.LOCKED -> primary to MaterialTheme.colorScheme.onPrimary
     }
@@ -210,13 +237,18 @@ private fun ModifierCap(
     if (sliding) SlideStrip(slideTargets, hovered)
     Box(
         modifier
-            .height(38.dp)
+            .height(capHeight)
             .clip(CapShape)
             .background(bg)
             .then(
                 if (slideTargets.isEmpty()) {
                     Modifier.pointerInput(Unit) {
                         detectTapGestures(
+                            onPress = {
+                                held = true
+                                tryAwaitRelease()
+                                held = false
+                            },
                             onTap = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onTap() },
                             onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLong() },
                         )
@@ -270,11 +302,11 @@ private fun ModifierCap(
  * through that the drag was meant to scroll it sideways.
  */
 @Composable
-private fun NavCap(label: String, cap: Color, text: Color, modifier: Modifier = Modifier, view: TerminalView) {
+private fun NavCap(label: String, cap: Color, text: Color, modifier: Modifier = Modifier, capHeight: androidx.compose.ui.unit.Dp = 38.dp, view: TerminalView) {
     val haptic = LocalHapticFeedback.current
     Box(
         modifier
-            .height(38.dp)
+            .height(capHeight)
             .widthIn(min = 38.dp)
             .clip(CapShape)
             .background(cap)
@@ -299,17 +331,19 @@ private fun NavCap(label: String, cap: Color, text: Color, modifier: Modifier = 
 }
 
 @Composable
-private fun RepeatCap(icon: ImageVector?, label: String, cap: Color, text: Color, modifier: Modifier = Modifier, onKey: () -> Unit) {
+private fun RepeatCap(icon: ImageVector?, label: String, cap: Color, text: Color, modifier: Modifier = Modifier, capHeight: androidx.compose.ui.unit.Dp = 38.dp, compact: Boolean = false, onKey: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
+    var down by remember { mutableStateOf(false) }
     Box(
         modifier
-            .height(38.dp)
+            .height(capHeight)
             .clip(CapShape)
-            .background(cap)
+            .background(if (down) pressedOver(cap, text) else cap)
             .pointerInput(onKey) {
                 awaitEachGesture {
                     awaitFirstDown()
+                    down = true
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     onKey()
                     val repeater = scope.launch {
@@ -322,6 +356,7 @@ private fun RepeatCap(icon: ImageVector?, label: String, cap: Color, text: Color
                     try {
                         waitForUpOrCancellation()
                     } finally {
+                        down = false
                         repeater.cancel()
                     }
                 }
@@ -336,10 +371,13 @@ private fun RepeatCap(icon: ImageVector?, label: String, cap: Color, text: Color
     }
 }
 
+/** The cap colour while a finger is on it: the same cap, lifted towards its text. */
+private fun pressedOver(cap: Color, text: Color): Color = text.copy(alpha = 0.28f).compositeOver(cap)
+
 /** A cap that is not a key at all: it does something to the keyboard drawing it. */
 @Composable
-fun KeyCapText(label: String, cap: Color, text: Color, modifier: Modifier = Modifier, onTap: () -> Unit) {
-    KeyCap(label, cap, text, modifier, onClick = onTap)
+fun KeyCapText(label: String, cap: Color, text: Color, modifier: Modifier = Modifier, capHeight: androidx.compose.ui.unit.Dp = 38.dp, onTap: () -> Unit) {
+    KeyCap(label, cap, text, modifier, compact = true, capHeight = capHeight, onClick = onTap)
 }
 
 /** The letters a held Ctrl offers, in the order the shell needs them. */
@@ -373,15 +411,23 @@ fun KeyFor(
     modifier: Modifier = Modifier,
     /** Ten caps across a phone leaves little room; trims the padding and the text. */
     compact: Boolean = false,
+    /** Every cap in one keyboard is the same height, whatever row it is on. */
+    capHeight: androidx.compose.ui.unit.Dp = 38.dp,
+    /** Shown instead of the token's own label, for a key that reads differently here. */
+    labelOverride: String? = null,
 ) {
     val view = actions.view
-    val def = ExtraKeys.resolve(token)
+    val resolved = ExtraKeys.resolve(token)
+    // A letter shows the case it would type, so a held shift is visible on every
+    // cap rather than only on the shift itself.
+    val shifted = mods.shift != ModState.OFF && resolved.label.length == 1 && resolved.label[0].isLetter()
+    val def = resolved.copy(label = labelOverride ?: if (shifted) resolved.label.uppercase() else resolved.label)
     when (val a = def.action) {
         is ExtraKeys.Action.Modifier -> {
             val state = when (a.which) { 'c' -> mods.ctrl; 'a' -> mods.alt; else -> mods.shift }
             val chords = actions.onChords?.takeIf { a.which == 'c' }
             ModifierCap(
-                def.label, state, cap, capText, modifier,
+                def.label, state, cap, capText, modifier, capHeight,
                 onTap = { view.toggleModifier(a.which) },
                 onLong = { chords?.invoke() ?: view.toggleModifier(a.which, lock = true) },
                 slideTargets = if (a.which == 'c' && actions.slideCtrl) CTRL_SLIDE else emptyList(),
@@ -399,19 +445,19 @@ fun KeyFor(
                     "RIGHT" -> Icons.Rounded.KeyboardArrowRight
                     else -> null
                 },
-                def.label, cap, capText, modifier,
+                def.label, cap, capText, modifier, capHeight, compact,
             ) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
         } else {
-            KeyCap(def.label, cap, capText, modifier, mono = def.mono, compact = compact) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
+            KeyCap(def.label, cap, capText, modifier, mono = def.mono, compact = compact, capHeight = capHeight) { view.sendKey(a.code, a.ctrl, a.alt, a.shift) }
         }
-        is ExtraKeys.Action.Text -> KeyCap(def.label, cap, capText, modifier, mono = def.mono, compact = compact) { view.sendText(a.text) }
-        ExtraKeys.Action.Snippets -> KeyCap(def.label, cap, capText, modifier, mono = true, accent = true, compact = compact) { actions.onSnippets() }
-        ExtraKeys.Action.Search -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact) { actions.onSearch() }
-        ExtraKeys.Action.ToggleKeyboard -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact) { view.toggleKeyboard() }
-        ExtraKeys.Action.Paste -> KeyCap(def.label, cap, capText, modifier, compact = compact) { view.paste() }
-        ExtraKeys.Action.InsertFile -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact) { actions.onInsertFile() }
-        ExtraKeys.Action.Compose -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact) { actions.onCompose() }
-        ExtraKeys.Action.Nav -> NavCap(def.label, cap, capText, modifier, view)
+        is ExtraKeys.Action.Text -> KeyCap(def.label, cap, capText, modifier, mono = def.mono, compact = compact, capHeight = capHeight) { view.sendText(a.text) }
+        ExtraKeys.Action.Snippets -> KeyCap(def.label, cap, capText, modifier, mono = true, accent = true, compact = compact, capHeight = capHeight) { actions.onSnippets() }
+        ExtraKeys.Action.Search -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact, capHeight = capHeight) { actions.onSearch() }
+        ExtraKeys.Action.ToggleKeyboard -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact, capHeight = capHeight) { view.toggleKeyboard() }
+        ExtraKeys.Action.Paste -> KeyCap(def.label, cap, capText, modifier, compact = compact, capHeight = capHeight) { view.paste() }
+        ExtraKeys.Action.InsertFile -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact, capHeight = capHeight) { actions.onInsertFile() }
+        ExtraKeys.Action.Compose -> KeyCap(def.label, cap, capText, modifier, mono = true, compact = compact, capHeight = capHeight) { actions.onCompose() }
+        ExtraKeys.Action.Nav -> NavCap(def.label, cap, capText, modifier, capHeight, view)
     }
 }
 
