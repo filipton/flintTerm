@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentPaste
+import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,15 +74,20 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
     // was copied while the app was away arrives with no notification at all.
     var offered by remember { mutableStateOf(0L) }
     var settled by remember { mutableLongStateOf(0L) }
+    // A picture cannot be typed: it goes up to the host as a file, so the offer
+    // says so rather than promising a paste.
+    var picture by remember { mutableStateOf(false) }
 
     DisposableEffect(clipboard, owner) {
         fun look() {
             val d = runCatching { clipboard.primaryClipDescription }.getOrNull()
             val stamp = d?.timestamp ?: 0L
+            val image = d?.hasMimeType("image/*") == true
             val text = d?.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) == true ||
                 d?.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML) == true
             val fresh = stamp > System.currentTimeMillis() - FRESH_MS
-            offered = if (text && fresh && stamp > settled) stamp else 0L
+            picture = image && !text
+            offered = if ((text || image) && fresh && stamp > settled) stamp else 0L
         }
         val onClip = ClipboardManager.OnPrimaryClipChangedListener { look() }
         // Resume as well as the listener: a copy made in another app happens
@@ -125,9 +131,12 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Icon(Icons.Rounded.ContentPaste, null, Modifier.size(15.dp), tint = onChrome.copy(alpha = 0.75f))
+            Icon(
+                if (picture) Icons.Rounded.Image else Icons.Rounded.ContentPaste,
+                null, Modifier.size(15.dp), tint = onChrome.copy(alpha = 0.75f),
+            )
             Text(
-                "Paste what you copied",
+                if (picture) "Send the picture you copied" else "Paste what you copied",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = onChrome.copy(alpha = 0.85f),
