@@ -254,6 +254,10 @@ Everything the app does, at length. The short list is in the [README](../README.
   `~/.zsh_history` / `~/.bash_history` can be imported from its menu, so the suggestions are useful
   from the first session. Which part of the line is "typed" is worked out by matching the line's
   suffixes against the history rather than guessing what the prompt looks like.
+- **A redraw limit, off by default**: a terminal repaints when something on it changes, up to
+  whatever the screen refreshes at, and not at all while the screen is still. Settings → Terminal can
+  cap it, which only bites when output is pouring in faster than that — a flood costs about a fifth
+  less battery at 30 a second, on output going past far too fast to read either way.
 
 ### Keyboard and input
 
@@ -415,7 +419,8 @@ Everything the app does, at length. The short list is in the [README](../README.
 ### Appearance
 
 - Dark-first UI (system / dark / light, optional Material You tint), a terminal color scheme **per
-  host** or app-wide, adjustable scrollback and font size, vibrate on bell, keep screen on.
+  host** or app-wide, adjustable scrollback and font size, vibrate on bell, and keeping the screen
+  awake — off by default, because a screen left on costs more than everything else here put together.
 - **Six hundred color schemes**, bundled rather than fetched, each drawn as a small terminal running
   in it: Featured first, then every dark one and every light one alphabetically, behind a search box
   that collapses the lot into one ranked list as you type. A host or a group can override the app's

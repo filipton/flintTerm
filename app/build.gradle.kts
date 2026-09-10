@@ -45,7 +45,7 @@ android {
         // The one number a phone compares when deciding whether an APK is an
         // update. Derived from the name so cutting a release cannot forget it:
         // 0.1.0 -> 100, 0.2.3 -> 2003, 1.0.0 -> 10000.
-        versionName = "0.1.1"
+        versionName = "0.1.2"
         versionCode = versionName!!.split(".").map { it.takeWhile(Char::isDigit).toInt() }
             .let { (major, minor, patch) -> major * 10_000 + minor * 100 + patch }
         ndk { abiFilters += rustTargets }

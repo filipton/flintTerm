@@ -6,6 +6,18 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-09-11
+
+### Changed
+
+- The screen is left to sleep unless a session is set to keep it awake
+- The redraw limit is off by default and a switch of its own; turned on, it now holds the rate it promises
+
+### Performance
+
+- A session costs a fraction of the CPU it did, awake or in a pocket
+- Battery-first defaults, and less work per frame
+
 ## [0.1.1] - 2026-09-09
 
 ### Added
