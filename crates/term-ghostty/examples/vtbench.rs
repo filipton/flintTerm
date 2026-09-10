@@ -132,6 +132,27 @@ fn best<F: FnMut() -> Duration>(mut run: F) -> Duration {
     (0..5).map(|_| run()).min().unwrap()
 }
 
+/// The same, with the filter switched on the way the app runs it.
+///
+/// Prompt marks and the rest mean every chunk goes through the interceptor
+/// instead of straight to the parser, which is the path a real session takes
+/// and the one the plain [`bench_feed`] never touches.
+fn bench_feed_filtered(backend: &str, input: &[u8]) -> Duration {
+    let mut e = make(backend, COLS, ROWS);
+    e.set_intercept(term_core::InterceptOptions {
+        notifications: true,
+        prompt_marks: true,
+        working_directory: true,
+        ..Default::default()
+    });
+    let start = Instant::now();
+    for chunk in input.chunks(8192) {
+        e.feed(chunk);
+        e.take_events();
+    }
+    start.elapsed()
+}
+
 fn bench_feed(backend: &str, input: &[u8]) -> Duration {
     let mut e = make(backend, COLS, ROWS);
     let start = Instant::now();
@@ -267,6 +288,20 @@ fn main() {
             name,
             best(|| bench_feed("alacritty", input)),
             best(|| bench_feed("ghostty", input)),
+        );
+    }
+
+    println!("\nthe same with the OSC filter on, which is how a session runs\n");
+    for (name, input) in [
+        ("filtered plain", &plain),
+        ("filtered styled", &styled),
+        ("filtered mixed", &mixed),
+        ("filtered alt-screen", &alt),
+    ] {
+        row(
+            name,
+            best(|| bench_feed_filtered("alacritty", input)),
+            best(|| bench_feed_filtered("ghostty", input)),
         );
     }
 

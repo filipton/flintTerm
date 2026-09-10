@@ -38,8 +38,12 @@ decoration: `tools/changelog.py` groups the log into `CHANGELOG.md` by it, so a 
 have been a `fix` lands in the wrong section of the release notes.
 
 Write the subject as plain engineering English, describing the app as it behaves after the change.
-Lowercase after the colon, no full stop, under about 100 characters. What the reader wants is what
-changed for them, not which function was edited.
+Lowercase after the colon, no full stop, and keep it short — aim for well under 60 characters. What
+the reader wants is what changed for them, not which function was edited.
+
+One commit per piece of work, not per file. A change that touches the Rust core and the Kotlin that
+calls it is one commit; so is a set of fixes that share a reason. Splitting them makes the log
+longer without making it say more.
 
 ```
 fix: Ctrl+C interrupts from the key bar too, not only from the menu

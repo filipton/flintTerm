@@ -2,6 +2,7 @@ package dev.flint.term.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -78,6 +79,23 @@ fun TerminalSettings(nav: NavController) {
                     valueRange = 1000f..50000f,
                 )
                 Text("Applies to new sessions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Redraw limit", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text("${settings.maxFps} per second", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                }
+                AppSlider(
+                    value = settings.maxFps.toFloat(),
+                    onValueChange = { v -> app.store.updateSettings { it.copy(maxFps = (v / 15).roundToInt().coerceAtLeast(1) * 15) } },
+                    valueRange = 15f..120f,
+                )
+                Text(
+                    "How often a terminal repaints while something on it is changing. Higher is smoother " +
+                        "and costs battery: every redraw repacks and repaints the whole grid, so 120 costs " +
+                        "four times what 30 does. Above 30 a terminal does not look any different.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             RowDivider()
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

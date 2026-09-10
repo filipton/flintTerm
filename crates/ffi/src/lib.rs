@@ -8,6 +8,8 @@
 
 uniffi::setup_scaffolding!();
 
+mod command_watch;
+mod links;
 mod emulator;
 mod external;
 mod mosh;

@@ -306,6 +306,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     view.nerdGlyphs = settings.nerdGlyphs
     view.cursorStyle = settings.cursorStyle
     view.cursorBlink = settings.cursorBlink
+    view.maxFps = settings.maxFps
     // Bold-as-bright is resolved down in the core; the session manager pushes
     // every option change to the sessions that are already open, so nothing is
     // needed here beyond the knobs the view itself reads.

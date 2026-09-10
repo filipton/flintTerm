@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use ssh_core::{LocalForward, RemoteForward, SshClient};
 use term_core::{
     encode_key, encode_mouse, encode_paste, Emulator, EmulatorEvent, InterceptOptions, Key, KeyEvent, KeyKind,
-    Modifiers, MouseButton, MouseEvent, Palette, PromptMark, SelectionKind, ViewPoint,
+    Modifiers, MouseButton, MouseEvent, Palette, PromptMark, SelectionKind, ViewPoint, CELL_BYTES, HEADER_BYTES,
 };
 
 use crate::emulator;
@@ -291,6 +291,10 @@ pub enum SessionState {
 pub trait SessionListener: Send + Sync {
     /// The grid changed; the view should pull a fresh snapshot on its next frame.
     fn on_damage(&self);
+
+    /// A command slow enough to walk away from has ended. Only sent when the
+    /// app asked for it with [`Session::watch_commands`].
+    fn on_command_finished(&self, elapsed_millis: u64, exit_status: Option<i32>);
     fn on_state(&self, state: SessionState);
     fn on_title(&self, title: Option<String>);
     fn on_bell(&self);
@@ -621,8 +625,21 @@ struct Inner {
     next_forward: AtomicU64,
     closed: AtomicBool,
     /// Output watch: compiled regexes and the current partial line (escape sequences stripped).
+    /// Whether anything at all wants a look at each chunk of output.
+    ///
+    /// The three below — pattern watching, the command watch, the recording
+    /// sink — are all off in an ordinary session, and taking a mutex for each
+    /// of them on every chunk to find that out is most of what this function
+    /// used to do. The flag is the fast answer; the mutexes still hold the
+    /// truth and are taken once it says yes.
+    taps: AtomicBool,
     watch: Mutex<Vec<(String, regex::Regex)>>,
     watch_line: Mutex<WatchLine>,
+    /// Set while the app wants to be told about long commands; see
+    /// [`crate::command_watch`] for why the watching happens on this side.
+    command_watch: Mutex<Option<crate::command_watch::CommandWatch>>,
+    /// Links found on the visible grid, kept against the rows they came from.
+    link_cache: Mutex<crate::links::LinkCache>,
     /// Endpoint for `Backend::External`; unused by the other backends.
     external: Arc<ExternalPipe>,
     /// Which tunnel the first hop actually went through, once decided. "Only
@@ -659,6 +676,32 @@ struct WatchLine {
     text: String,
     /// Inside an escape sequence: 0 = no, 1 = after ESC, 2 = CSI, 3 = OSC.
     esc: u8,
+}
+
+/// Where a packed grid sits in memory, for a caller that will read it directly.
+#[derive(Debug, Clone, Copy, uniffi::Record)]
+pub struct SnapshotSpan {
+    /// Valid until the next [`Session::snapshot_into`] on the same buffer, and
+    /// only for as long as the buffer itself is alive.
+    pub ptr: u64,
+    pub len: u64,
+}
+
+/// A grid-sized buffer the renderer keeps and the core fills.
+///
+/// Owned by whoever draws, not by the session, so that letting go of a session
+/// cannot pull the memory out from under a frame that is still being painted.
+#[derive(uniffi::Object, Default)]
+pub struct SnapshotBuffer {
+    data: Mutex<Vec<u8>>,
+}
+
+#[uniffi::export]
+impl SnapshotBuffer {
+    #[uniffi::constructor]
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self::default())
+    }
 }
 
 #[derive(uniffi::Object)]
@@ -750,8 +793,11 @@ impl Session {
                 forwards: Mutex::new(HashMap::new()),
                 next_forward: AtomicU64::new(1),
                 closed: AtomicBool::new(false),
+                taps: AtomicBool::new(false),
                 watch: Mutex::new(Vec::new()),
                 watch_line: Mutex::new(WatchLine::default()),
+                command_watch: Mutex::new(None),
+                link_cache: Mutex::new(Default::default()),
                 external: Arc::new(ExternalPipe::new()),
                 used_tunnel: Mutex::new(None),
                 used_endpoint: Mutex::new(None),
@@ -881,11 +927,39 @@ impl Session {
 
     // ---- output ----------------------------------------------------------
 
+    /// Pack the grid into [`SnapshotBuffer`] and say where it landed.
+    ///
+    /// The frame loop asks for this once per drawn frame, and the grid is tens
+    /// of kilobytes: returning it as a `Vec<u8>` meant the bridge minted a new
+    /// Java array every frame, large enough to go straight to the large-object
+    /// heap and be collected again a moment later. Filling a buffer the caller
+    /// already owns and handing back where it is copies nothing and allocates
+    /// nothing once the buffer has grown to size.
+    ///
+    /// The buffer belongs to the caller on purpose: it has to outlive this
+    /// session, because a session can be destroyed from another thread while a
+    /// frame that is already reading the pointer is still on its way out.
+    pub fn snapshot_into(&self, out: Arc<SnapshotBuffer>) -> SnapshotSpan {
+        self.inner.dirty.store(false, Ordering::Release);
+        let (cols, rows) = *self.inner.size.lock();
+        let mut buf = out.data.lock();
+        buf.clear();
+        buf.reserve(HEADER_BYTES + cols as usize * rows as usize * CELL_BYTES);
+        let palette = self.inner.palette.lock();
+        self.inner.emu.lock().snapshot(&palette, &mut buf);
+        // Read after filling: growing the buffer moves it.
+        SnapshotSpan { ptr: buf.as_ptr() as u64, len: buf.len() as u64 }
+    }
+
     /// Packed grid (see `term_core::snapshot`). Clears the damage flag.
     pub fn snapshot(&self) -> Vec<u8> {
         self.inner.dirty.store(false, Ordering::Release);
-        let palette = self.inner.palette.lock().clone();
-        let mut out = Vec::new();
+        // Sized up front and the palette borrowed rather than copied: this runs
+        // once per displayed frame, so a grid's worth of reallocation and a
+        // kilobyte of palette per call is a steady drain for nothing.
+        let (cols, rows) = *self.inner.size.lock();
+        let mut out = Vec::with_capacity(HEADER_BYTES + cols as usize * rows as usize * CELL_BYTES);
+        let palette = self.inner.palette.lock();
         self.inner.emu.lock().snapshot(&palette, &mut out);
         out
     }
@@ -1185,6 +1259,20 @@ impl Session {
         }
     }
 
+    /// Tappable URLs and paths on the visible grid.
+    ///
+    /// Asked for once a frame. The rows it reads are right here, and the
+    /// answers are cached against them, so a screen that is sitting still
+    /// costs nothing and only the rows that moved are looked at again.
+    pub fn visible_links(&self) -> Vec<crate::links::LinkSpan> {
+        let (cols, rows) = *self.inner.size.lock();
+        let texts: Vec<String> = {
+            let emu = self.inner.emu.lock();
+            (0..rows).map(|r| emu.row_text(r)).collect()
+        };
+        self.inner.link_cache.lock().scan(&texts, cols)
+    }
+
     pub fn row_text(&self, row: u16) -> String {
         self.inner.emu.lock().row_text(row)
     }
@@ -1200,6 +1288,20 @@ impl Session {
         self.inner.mark_dirty();
     }
 
+    /// Start telling this session's listener when a slow command ends.
+    ///
+    /// `min_millis` is the shortest command worth a word: below it, the command
+    /// was over before anyone could look away. Calling it again only changes
+    /// that threshold, so a session keeps what it has learned about its shell.
+    pub fn watch_commands(&self, min_millis: u64) {
+        self.inner.taps.store(true, Ordering::Release);
+        let mut w = self.inner.command_watch.lock();
+        match w.as_mut() {
+            Some(_) => {}
+            None => *w = Some(crate::command_watch::CommandWatch::new(min_millis)),
+        }
+    }
+
     /// Regexes matched against every completed output line; hits arrive via `on_pattern`.
     pub fn set_watch_patterns(&self, patterns: Vec<String>) -> Result<(), CoreError> {
         let mut compiled = Vec::new();
@@ -1211,18 +1313,28 @@ impl Session {
                 .map_err(|e| CoreError::Other(format!("bad pattern '{p}': {e}")))?;
             compiled.push((p, re));
         }
+        if !compiled.is_empty() {
+            self.inner.taps.store(true, Ordering::Release);
+        }
         *self.inner.watch.lock() = compiled;
+        // Clearing the list is the one case that can turn the flag back off.
+        self.inner.refresh_taps();
         Ok(())
     }
 
     /// Send every byte the terminal receives to [sink] as well, until
     /// [`Session::stop_output_capture`].
     pub fn capture_output(&self, sink: Arc<dyn OutputSink>) {
+        // Armed before it is set, so a chunk already on its way finds the sink
+        // rather than skipping the whole look.
+        self.inner.taps.store(true, Ordering::Release);
         *self.inner.sink.lock() = Some(sink);
     }
 
     pub fn stop_output_capture(&self) {
         *self.inner.sink.lock() = None;
+        // Only the sink went; the others may still want the stream.
+        self.inner.refresh_taps();
     }
 
     // ---- the phone's traffic ---------------------------------------------
@@ -1385,6 +1497,14 @@ impl Inner {
         self.listener.on_state(state);
     }
 
+    /// Recompute whether anything still wants each chunk of output.
+    fn refresh_taps(&self) {
+        let any = !self.watch.lock().is_empty()
+            || self.command_watch.lock().is_some()
+            || self.sink.lock().is_some();
+        self.taps.store(any, Ordering::Release);
+    }
+
     fn mark_dirty(&self) {
         if !self.dirty.swap(true, Ordering::AcqRel) {
             self.listener.on_damage();
@@ -1429,6 +1549,10 @@ impl Inner {
 
     /// Check outstanding guesses against what the server actually sent.
     fn reconcile_predictions(&self) {
+        // Only a Mosh session ever guesses; everything else can skip the lock.
+        if !matches!(self.backend, Backend::Mosh { .. }) {
+            return;
+        }
         let now = self.millis();
         let mut p = self.predict.lock();
         if p.is_empty() {
@@ -2283,13 +2407,33 @@ impl Inner {
         }
     }
 
+    /// Hand the stream to the command watcher, when one is running.
+    fn watch_commands_output(&self, data: &[u8]) {
+        let now = self.millis();
+        let finished = {
+            let mut w = self.command_watch.lock();
+            match w.as_mut() {
+                // Nothing to do, and nothing crosses the bridge: this is the
+                // whole reason the watching moved to this side.
+                None => return,
+                Some(w) => w.on_output(data, now),
+            }
+        };
+        if let Some(f) = finished {
+            self.listener.on_command_finished(f.elapsed_millis, f.exit_status);
+        }
+    }
+
     fn feed(&self, data: &[u8]) {
-        self.watch_output(data);
-        // Cloned out of the lock first: the sink is foreign code, and holding a
-        // mutex across a call into the app is how deadlocks are made.
-        let sink = self.sink.lock().clone();
-        if let Some(sink) = sink {
-            sink.on_output(data.to_vec());
+        if self.taps.load(Ordering::Acquire) {
+            self.watch_output(data);
+            self.watch_commands_output(data);
+            // Cloned out of the lock first: the sink is foreign code, and
+            // holding a mutex across a call into the app makes deadlocks.
+            let sink = self.sink.lock().clone();
+            if let Some(sink) = sink {
+                sink.on_output(data.to_vec());
+            }
         }
         let events = {
             let mut emu = self.emu.lock();
@@ -2309,6 +2453,13 @@ impl Inner {
                 EmulatorEvent::ClipboardStore(s) => self.listener.on_clipboard(s),
                 EmulatorEvent::Notify { title, body } => self.listener.on_notify(title, body),
                 EmulatorEvent::Mark(m) => {
+                    // The watcher first: a mark is the truth about this shell,
+                    // and it retires the guessing the moment one arrives.
+                    let now = self.millis();
+                    let finished = self.command_watch.lock().as_mut().and_then(|w| w.on_mark(m, now));
+                    if let Some(f) = finished {
+                        self.listener.on_command_finished(f.elapsed_millis, f.exit_status);
+                    }
                     let (kind, exit) = split_mark(m);
                     self.listener.on_prompt_mark(kind, exit);
                 }

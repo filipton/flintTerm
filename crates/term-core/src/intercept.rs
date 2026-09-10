@@ -171,8 +171,32 @@ impl Interceptor {
             out.extend_from_slice(bytes);
             return events;
         }
-        for &b in bytes {
-            self.byte(b, out, &mut events);
+        // Nothing here ever emits more than it was given, so one reservation
+        // covers the whole chunk and the buffer stops growing a byte at a time.
+        out.reserve(bytes.len());
+        let mut i = 0;
+        while i < bytes.len() {
+            // On the ground everything up to the next ESC is ordinary text, and
+            // [`Self::byte`] would do nothing with it but push it one at a
+            // time. A terminal stream is mostly ordinary text, so copying the
+            // whole run at once is most of what this loop does.
+            if matches!(self.state, State::Ground) {
+                let rest = &bytes[i..];
+                match rest.iter().position(|&b| b == 0x1b) {
+                    None => {
+                        out.extend_from_slice(rest);
+                        break;
+                    }
+                    Some(0) => {}
+                    Some(n) => {
+                        out.extend_from_slice(&rest[..n]);
+                        i += n;
+                        continue;
+                    }
+                }
+            }
+            self.byte(bytes[i], out, &mut events);
+            i += 1;
         }
         events
     }

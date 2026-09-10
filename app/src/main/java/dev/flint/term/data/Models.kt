@@ -749,9 +749,9 @@ data class Settings(
      *
      * "Long" is the point: a notification for every `ls` would be noise, so
      * only a command that ran long enough for somebody to have walked away
-     * counts (see [dev.flint.term.session.CommandWatch]).
+     * counts (see [dev.flint.term.session.CommandFinished]).
      */
-    val notifyOnCommandFinish: Boolean = true,
+    val notifyOnCommandFinish: Boolean = false,
     /**
      * Read a host's own shell history on connect, so what you have run there
      * before can complete what you type. It is one small file read over the
@@ -923,6 +923,18 @@ data class Settings(
     val boldIsBright: Boolean = false,
     val cursorStyle: CursorStyle = CursorStyle.BLOCK,
     val cursorBlink: Boolean = false,
+    /**
+     * The most redraws a second a terminal will do, or 0 for as many as the
+     * display will take.
+     *
+     * A program that redraws itself — a build log, `btop`, a spinner — damages
+     * the grid faster than any eye can follow, and without a cap the view
+     * repaints at whatever the panel runs at, which on a modern phone is 120
+     * times a second. Every one of those repacks the grid, rescans it and
+     * paints it. Thirty is past the point where a terminal looks any smoother
+     * and costs a quarter of what 120 does.
+     */
+    val maxFps: Int = 30,
     val highlightEnabled: Boolean = false,
     val highlightRules: List<HighlightRule> = emptyList(),
     /** Which inline-image protocols sessions answer to. */

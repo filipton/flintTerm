@@ -160,6 +160,22 @@ pub trait BannerSink: Send + Sync + std::fmt::Debug {
 /// The four `ext-info` / `kex-strict` entries are not key exchanges at all but
 /// the signals that turn on RFC 8308 extension negotiation and OpenSSH's strict
 /// KEX; leaving them out of an explicit list would turn both off.
+/// Ciphers in the order this client asks for them.
+///
+/// AES-GCM ahead of ChaCha20-Poly1305, which is the other way round from the
+/// library's default. ChaCha20 is the right default for a CPU with no AES
+/// instructions, because a software AES is both slower and harder to keep
+/// constant-time — but every ARMv8 phone has the AES and PMULL instructions,
+/// and with them AES-GCM decrypts a stream several times more cheaply. On a
+/// session watching something that redraws itself, that is battery.
+const CIPHER_ORDER: &[russh::cipher::Name] = &[
+    russh::cipher::AES_256_GCM,
+    russh::cipher::CHACHA20_POLY1305,
+    russh::cipher::AES_256_CTR,
+    russh::cipher::AES_192_CTR,
+    russh::cipher::AES_128_CTR,
+];
+
 const KEX_ORDER: &[russh::kex::Name] = &[
     russh::kex::MLKEM768X25519_SHA256,
     russh::kex::CURVE25519,
@@ -390,7 +406,11 @@ impl SshClient {
             keepalive_interval: opts.keepalive_interval,
             keepalive_max: 3,
             nodelay: true,
-            preferred: russh::Preferred { kex: std::borrow::Cow::Borrowed(KEX_ORDER), ..Default::default() },
+            preferred: russh::Preferred {
+                kex: std::borrow::Cow::Borrowed(KEX_ORDER),
+                cipher: std::borrow::Cow::Borrowed(CIPHER_ORDER),
+                ..Default::default()
+            },
             ..Default::default()
         };
         let remote_targets: RemoteTargets = Default::default();

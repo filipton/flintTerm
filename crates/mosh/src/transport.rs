@@ -30,7 +30,16 @@ pub const SEND_MINDELAY: u64 = 8;
 /// move past a state it has not seen acknowledged, so this cannot be skipped.
 pub const ACK_DELAY: u64 = 100;
 /// Give up on a silent server after this long.
-pub const ACTIVE_RETRY_TIMEOUT: u64 = 10_000;
+///
+/// Long on purpose. Mosh exists so that a session survives a tunnel, a lift and
+/// a change of network, and ten seconds of quiet — which is one traffic light —
+/// is not evidence that a server has gone. The session is the thing being
+/// protected here; [`Transport::send_interval`] is what keeps the waiting cheap.
+pub const ACTIVE_RETRY_TIMEOUT: u64 = 10 * 60 * 1000;
+
+/// The slowest a silent link is poked. Reached after a few seconds of quiet, so
+/// an outage costs a datagram every few seconds rather than fifty a second.
+pub const RETRY_INTERVAL_MAX: u64 = 4_000;
 
 /// Payload budget for one datagram, leaving room for IP, UDP and the AEAD tag.
 pub const DEFAULT_MTU: usize = 1280;
@@ -162,9 +171,9 @@ impl Transport {
         } else if let Some(t) = self.ack_pending_since {
             t + ACK_DELAY
         } else if !self.all_acked() {
-            self.last_send + SEND_INTERVAL_MIN
+            self.last_send + self.send_interval(now)
         } else {
-            self.last_send + ACK_INTERVAL.min(SEND_INTERVAL_MAX.max(ACK_INTERVAL))
+            self.last_send + ACK_INTERVAL.max(self.send_interval(now))
         };
         deadline.saturating_sub(now)
     }
@@ -185,12 +194,30 @@ impl Transport {
         self.last_heard.map(|t| now.saturating_sub(t))
     }
 
+    /// How long to leave between datagrams, given how long the peer has been
+    /// quiet.
+    ///
+    /// While the link is healthy this is [`SEND_INTERVAL_MIN`], which is what
+    /// makes a keystroke feel immediate. Once the server stops answering,
+    /// retransmitting at that rate is fifty datagrams a second into a network
+    /// that is not there, so it doubles away to [`RETRY_INTERVAL_MAX`] — and
+    /// comes straight back the moment anything is heard.
+    fn send_interval(&self, now: u64) -> u64 {
+        let silent = self.silent_for(now).unwrap_or(0);
+        if silent <= SEND_INTERVAL_MAX {
+            return SEND_INTERVAL_MIN;
+        }
+        let steps = (silent / 1000).min(16) as u32;
+        SEND_INTERVAL_MIN.checked_shl(steps).unwrap_or(RETRY_INTERVAL_MAX).min(RETRY_INTERVAL_MAX)
+    }
+
     /// Datagrams to send right now. Empty when it is not yet time.
     pub fn tick(&mut self, now: u64) -> Result<Vec<Vec<u8>>, MoshError> {
         let input_ready = !self.pending.is_empty()
             && (!self.ever_sent || now.saturating_sub(self.pending_since.unwrap_or(now)) >= SEND_MINDELAY);
-        let retransmit = !self.all_acked() && now.saturating_sub(self.last_send) >= SEND_INTERVAL_MIN;
-        let heartbeat = now.saturating_sub(self.last_send) >= ACK_INTERVAL;
+        let interval = self.send_interval(now);
+        let retransmit = !self.all_acked() && now.saturating_sub(self.last_send) >= interval;
+        let heartbeat = now.saturating_sub(self.last_send) >= ACK_INTERVAL.max(interval);
         let ack_due = matches!(self.ack_pending_since, Some(t) if now.saturating_sub(t) >= ACK_DELAY);
         // A shutdown ack is the one ack worth sending straight away: the server
         // is waiting for it before it exits, and nothing else is coming.
@@ -620,6 +647,41 @@ mod tests {
         assert!(!t.timed_out(1000 + ACTIVE_RETRY_TIMEOUT));
         assert!(t.timed_out(1001 + ACTIVE_RETRY_TIMEOUT));
         assert_eq!(t.silent_for(2000), Some(1000));
+    }
+
+    #[test]
+    fn a_session_outlives_the_kind_of_outage_it_exists_for() {
+        let mut t = transport();
+        let dg = server_datagram(0, 1, 0, &[], 0);
+        t.receive(&dg, 1000).unwrap();
+        // A tunnel, a lift, a handover from wifi to mobile: none of these are a
+        // dead server, and mosh is chosen precisely to ride them out.
+        for quiet in [10_000u64, 60_000, 120_000, 5 * 60_000] {
+            assert!(!t.timed_out(1000 + quiet), "gave up after {quiet}ms of quiet");
+        }
+    }
+
+    #[test]
+    fn a_quiet_link_is_poked_less_and_less_rather_than_fifty_times_a_second() {
+        let mut t = transport();
+        let dg = server_datagram(0, 1, 0, &[], 0);
+        t.receive(&dg, 1000).unwrap();
+        // While it is answering, a keystroke still goes out at once.
+        assert_eq!(t.send_interval(1000), SEND_INTERVAL_MIN);
+        // Once it stops, the gap grows, and it is bounded.
+        assert!(t.send_interval(3_000) > SEND_INTERVAL_MIN, "should have backed off");
+        assert!(t.send_interval(10_000) <= RETRY_INTERVAL_MAX);
+        assert_eq!(t.send_interval(5 * 60_000), RETRY_INTERVAL_MAX, "and it stays bounded");
+    }
+
+    #[test]
+    fn hearing_from_the_server_again_restores_the_fast_rate() {
+        let mut t = transport();
+        t.receive(&server_datagram(0, 1, 0, &[], 0), 1000).unwrap();
+        assert_eq!(t.send_interval(60_000), RETRY_INTERVAL_MAX);
+        // The network came back.
+        t.receive(&server_datagram(1, 2, 0, &[], 0), 60_000).unwrap();
+        assert_eq!(t.send_interval(60_000), SEND_INTERVAL_MIN, "back to responsive at once");
     }
 
     #[test]

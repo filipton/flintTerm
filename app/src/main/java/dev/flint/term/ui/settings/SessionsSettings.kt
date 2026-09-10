@@ -66,7 +66,8 @@ fun SessionsSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Keep screen on", subtitle = "While a terminal is open", icon = Icons.Rounded.Visibility, iconTint = MaterialTheme.colorScheme.secondary,
+                title = "Keep screen on", subtitle = "While a terminal is open · uses the most battery of any setting here",
+                icon = Icons.Rounded.Visibility, iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.keepScreenOn, onCheckedChange = { v -> app.store.updateSettings { it.copy(keepScreenOn = v) } },
             )
         }

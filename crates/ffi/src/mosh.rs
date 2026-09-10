@@ -316,6 +316,8 @@ pub async fn connect(
 
 /// How long to wait for the first datagram back before giving up on UDP.
 const PROBE_MS: u64 = 4000;
+/// The longest the pump sleeps when the transport has nothing due.
+const IDLE_WAKE_MS: u64 = 1000;
 const PROBE_RETRY_MS: u64 = 400;
 
 async fn pump(
@@ -367,7 +369,12 @@ async fn pump(
             _ => {}
         }
 
-        let wait = Duration::from_millis(transport.wait_time(now(())).clamp(1, 250));
+        // The select below already wakes on a datagram or a keystroke, so this
+        // timer only exists for the transport's own deadlines and the quiet
+        // warning above. Capping it at a quarter second woke the CPU four times
+        // a second on a link with nothing to say, which on a phone in a pocket
+        // is the whole cost of an idle session.
+        let wait = Duration::from_millis(transport.wait_time(now(())).clamp(1, IDLE_WAKE_MS));
         tokio::select! {
             received = input.recv() => match received {
                 Some(event) => {

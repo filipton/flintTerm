@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.UUID
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.CopyOnWriteArrayList
 
 /** What the UI must decide before a connection can proceed. */
 data class HostKeyPrompt(
@@ -164,16 +164,42 @@ class TerminalSession(
     /** Consecutive automatic reconnects; reset on a successful connection. */
     @Volatile var reconnectAttempts: Int = 0
 
-    /** Set by the attached view; called from a core thread. */
-    val damageListener = AtomicReference<(() -> Unit)?>(null)
+    /**
+     * The views showing this session; called from a core thread when the screen
+     * has moved.
+     *
+     * A list rather than a slot because a session really can be on screen twice
+     * at once: the floating window shows the same session as the screen behind
+     * it. With one slot between them the second view to attach took it, and the
+     * first stopped hearing about frames and sat there frozen — which is the
+     * floating window that stops updating, and it depended on which view the
+     * framework happened to attach last.
+     */
+    private val damageListeners = CopyOnWriteArrayList<() -> Unit>()
+
+    fun addDamageListener(listener: () -> Unit) {
+        damageListeners.addIfAbsent(listener)
+    }
+
+    fun removeDamageListener(listener: () -> Unit) {
+        damageListeners.remove(listener)
+    }
 
     /**
-     * Also set by the attached view, and for the same reason: the view has no
-     * scope of its own to collect [imagesChanged] in, and the only thing it
-     * needs to know is that this session has images at all — after that it
-     * reads their positions out of every frame.
+     * Also held per view, and for the same reason: the view has no scope of its
+     * own to collect [imagesChanged] in, and the only thing it needs to know is
+     * that this session has images at all — after that it reads their positions
+     * out of every frame.
      */
-    val imagesListener = AtomicReference<(() -> Unit)?>(null)
+    private val imagesListeners = CopyOnWriteArrayList<() -> Unit>()
+
+    fun addImagesListener(listener: () -> Unit) {
+        imagesListeners.addIfAbsent(listener)
+    }
+
+    fun removeImagesListener(listener: () -> Unit) {
+        imagesListeners.remove(listener)
+    }
 
     val core: Session = Session(
         backend,
@@ -181,27 +207,38 @@ class TerminalSession(
         initialRows.toUShort(),
         scrollback.toUInt(),
         object : SessionListener {
+            override fun onCommandFinished(elapsedMillis: ULong, exitStatus: Int?) {
+                CoreThreads.keepAttached()
+                _commandFinished.tryEmit(CommandFinished(elapsedMillis.toLong(), exitStatus))
+            }
+
             override fun onDamage() {
-                damageListener.get()?.invoke()
+                CoreThreads.keepAttached()
+                damageListeners.forEach { it() }
             }
 
             override fun onState(state: SessionState) {
+                CoreThreads.keepAttached()
                 _state.value = state
             }
 
             override fun onTitle(title: String?) {
+                CoreThreads.keepAttached()
                 _title.value = title
             }
 
             override fun onBell() {
+                CoreThreads.keepAttached()
                 _bell.tryEmit(Unit)
             }
 
             override fun onClipboard(text: String) {
+                CoreThreads.keepAttached()
                 _clipboard.tryEmit(text)
             }
 
             override fun onProgress(key: String, message: String, status: dev.flint.term.core.StepStatus) {
+                CoreThreads.keepAttached()
                 // Steps sharing a key are the same thing progressing, so the row
                 // is replaced where it stands instead of a new one piling on.
                 _progress.update { steps ->
@@ -212,35 +249,40 @@ class TerminalSession(
             }
 
             override fun onPattern(pattern: String, line: String) {
+                CoreThreads.keepAttached()
                 _patterns.tryEmit(pattern to line)
             }
 
             override fun onNotify(title: String, body: String) {
+                CoreThreads.keepAttached()
                 _notifications.tryEmit(title to body)
             }
 
             override fun onPromptMark(kind: PromptKind, exit: Int?) {
+                CoreThreads.keepAttached()
                 // Handed to the watcher here rather than through the flow: it
                 // reads the marks against the output around them, and a
                 // collector on another thread cannot promise that order.
-                watch?.onMark(kind, exit)?.let { _commandFinished.tryEmit(it) }
                 _marksPrompts.value = true
                 _marks.tryEmit(kind to exit)
             }
 
             override fun onCwd(path: String) {
+                CoreThreads.keepAttached()
                 _cwd.value = path
             }
 
             override fun onBanner(text: String) {
+                CoreThreads.keepAttached()
                 // Kept rather than emitted: it is shown for as long as the
                 // connection sheet is open, and again from the menu afterwards.
                 _banner.value = text.trimEnd().ifBlank { null }
             }
 
             override fun onImagesChanged() {
+                CoreThreads.keepAttached()
                 _imagesChanged.tryEmit(Unit)
-                imagesListener.get()?.invoke()
+                imagesListeners.forEach { it() }
             }
         },
         object : HostKeyVerifier {
@@ -317,16 +359,8 @@ class TerminalSession(
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    /**
-     * Watches for a long command ending, when anyone is listening for it.
-     *
-     * Created lazily and dropped with the session: a watcher costs a little
-     * work on every chunk of output, which is not worth spending on sessions
-     * nobody asked to be told about.
-     */
-    private var watch: CommandWatch? = null
-    private val _commandFinished = MutableSharedFlow<CommandWatch.Finished>(extraBufferCapacity = 4)
-    val commandFinished: SharedFlow<CommandWatch.Finished> = _commandFinished
+    private val _commandFinished = MutableSharedFlow<CommandFinished>(extraBufferCapacity = 4)
+    val commandFinished: SharedFlow<CommandFinished> = _commandFinished
 
     /**
      * The one place the raw stream is taken apart.
@@ -338,18 +372,26 @@ class TerminalSession(
      */
     private val sink = object : dev.flint.term.core.OutputSink {
         override fun onOutput(bytes: ByteArray) {
-            val text = String(bytes, Charsets.UTF_8)
-            _recording.value?.append(text)
-            watch?.let { w ->
-                val finished = w.onOutput(SessionLog.stripEscapes(text))
-                if (finished != null) _commandFinished.tryEmit(finished)
-            }
+            CoreThreads.keepAttached()
+            // Only a recording reads the raw stream now, and only while one is
+            // running: decoding a chunk nobody wants was the most expensive
+            // thing this class did per byte.
+            val recording = _recording.value ?: return
+            recording.append(String(bytes, Charsets.UTF_8))
         }
     }
 
-    /** Attached while something needs the stream, and only then. */
+    /**
+     * Attached while a recording is running, and only then.
+     *
+     * Capture is not free: every chunk of output crosses back into Kotlin as
+     * its own array and is decoded to a string. A session watching a program
+     * that redraws itself produces chunks by the dozen per second, so nothing
+     * but a recording — which the user asked for and can see — is worth that.
+     */
+    @Synchronized
     private fun updateCapture() {
-        val wanted = _recording.value != null || watch != null
+        val wanted = _recording.value != null
         if (wanted == capturing) return
         capturing = wanted
         runCatching { if (wanted) core.captureOutput(sink) else core.stopOutputCapture() }
@@ -357,11 +399,14 @@ class TerminalSession(
 
     private var capturing = false
 
-    /** Start telling this session's watchers when a slow command ends. */
+    /**
+     * Start telling this session's watchers when a slow command ends.
+     *
+     * The watching itself happens in the core, next to the bytes: the stream
+     * does not come back over the bridge for it.
+     */
     fun watchCommands(minMillis: Long) {
-        if (watch != null) return
-        watch = CommandWatch(minMillis)
-        updateCapture()
+        if (!destroyed) runCatching { core.watchCommands(minMillis.toULong()) }
     }
 
     // ---- recording ---------------------------------------------------------
@@ -401,9 +446,9 @@ class TerminalSession(
         destroyed = true
         // Before the core goes, so the last of the stream still reaches the file.
         stopRecording()
-        watch = null
         close()
-        damageListener.set(null)
+        damageListeners.clear()
+        imagesListeners.clear()
         scope.cancel()
         runCatching { core.destroy() }
     }

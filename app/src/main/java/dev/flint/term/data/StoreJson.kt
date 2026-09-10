@@ -181,6 +181,7 @@ object StoreJson {
         root.put("settings", JSONObject().apply {
             put("fontSizeSp", s.fontSizeSp.toDouble()); put("theme", s.theme); put("scrollback", s.scrollback); put("fontFamily", s.fontFamily); put("ligatures", s.ligatures); put("predictiveEcho", s.predictiveEcho.name); put("dataSaver", s.dataSaver.name)
             put("vibrateOnBell", s.vibrateOnBell); put("keepScreenOn", s.keepScreenOn); put("keepaliveSeconds", s.keepaliveSeconds)
+            put("maxFps", s.maxFps)
             put("appTheme", s.appTheme.name); put("dynamicColor", s.dynamicColor); put("showHiddenFiles", s.showHiddenFiles)
             s.extraKeysRow1?.let { put("extraKeysRow1", JSONArray(it)) }; s.extraKeysRow2?.let { put("extraKeysRow2", JSONArray(it)) }
             put("hideExtraKeysWithHardwareKeyboard", s.hideExtraKeysWithHardwareKeyboard)
@@ -564,6 +565,7 @@ object StoreJson {
                 vibrateOnBell = o.optBoolean("vibrateOnBell", true),
                 keepScreenOn = o.optBoolean("keepScreenOn", true),
                 keepaliveSeconds = o.optInt("keepaliveSeconds", 30),
+                maxFps = o.optInt("maxFps", 30),
                 appTheme = runCatching { AppTheme.valueOf(o.optString("appTheme")) }.getOrDefault(AppTheme.DARK),
                 dynamicColor = o.optBoolean("dynamicColor", false),
                 showHiddenFiles = o.optBoolean("showHiddenFiles", true),
@@ -578,7 +580,7 @@ object StoreJson {
                 appLock = o.optBoolean("appLock", false),
                 appLockGraceSeconds = o.optInt("appLockGraceSeconds", 60),
                 notifyOnBell = o.optBoolean("notifyOnBell", true),
-                notifyOnCommandFinish = o.optBoolean("notifyOnCommandFinish", true),
+                notifyOnCommandFinish = o.optBoolean("notifyOnCommandFinish", false),
                 importShellHistory = o.optBoolean("importShellHistory", true),
                 swipeBetweenSessions = o.optBoolean("swipeBetweenSessions", true),
                 showSessionTabs = o.optBoolean("showSessionTabs", true),

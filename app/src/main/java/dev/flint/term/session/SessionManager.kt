@@ -901,7 +901,7 @@ class SessionManager(
      * known. Only a shell emitting OSC 133 reports a status; the prompt
      * heuristic can see that a command ended but never how.
      */
-    private fun howItWent(done: CommandWatch.Finished): String = when (done.exitStatus) {
+    private fun howItWent(done: CommandFinished): String = when (done.exitStatus) {
         null -> "The command took ${howLong(done.elapsedMillis)}"
         0 -> "Done in ${howLong(done.elapsedMillis)}"
         else -> "Failed with status ${done.exitStatus} after ${howLong(done.elapsedMillis)}"

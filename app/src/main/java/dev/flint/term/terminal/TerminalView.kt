@@ -75,22 +75,57 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      * Kept as fields rather than written inline at every call, so that letting
      * go of a session only ever takes back *this* view's callback.
      *
-     * Two views share a session for a moment: the floating window is composed
-     * before the screen behind it is disposed, so a blind `set(null)` on the
-     * way out clears the listener the window has just installed, and it never
-     * hears about another frame. Whoever attached last owns the slot.
+     * Two views really do share a session — the floating window and the screen
+     * behind it — and both have to keep hearing about frames, so the session
+     * holds a list and these are this view's entry in it.
      */
-    private val onDamage: () -> Unit = { postInvalidateOnAnimation() }
-    private val onImages: () -> Unit = { imagesActive = true; postInvalidateOnAnimation() }
+    private val onDamage: () -> Unit = { requestFrame() }
+    private val onImages: () -> Unit = { imagesActive = true; requestFrame() }
+
+    /**
+     * The most frames a second this view will draw; 0 for as many as the
+     * display will take. See [dev.flint.term.data.Settings.maxFps].
+     */
+    var maxFps: Int = 30
+
+    /** Set while a capped frame is already waiting its turn. */
+    private val frameWaiting = java.util.concurrent.atomic.AtomicBoolean(false)
+    @Volatile private var lastFrameAt = 0L
+
+    /**
+     * Ask for a repaint, no more often than [maxFps].
+     *
+     * Called from a core thread, so everything here has to be safe off the main
+     * thread — which is why it is `postInvalidateDelayed` rather than a posted
+     * Runnable. Dropping a frame loses nothing: the core coalesces damage until
+     * somebody reads the grid, so the frame that does land is the current one,
+     * not a stale one caught up with later.
+     */
+    private fun requestFrame() {
+        val cap = maxFps
+        if (cap <= 0) {
+            postInvalidateOnAnimation()
+            return
+        }
+        val interval = 1000L / cap
+        val now = android.os.SystemClock.uptimeMillis()
+        val since = now - lastFrameAt
+        if (since >= interval) {
+            lastFrameAt = now
+            postInvalidateOnAnimation()
+        } else if (frameWaiting.compareAndSet(false, true)) {
+            postInvalidateDelayed(interval - since)
+        }
+    }
 
     var session: TerminalSession? = null
         set(value) {
-            field?.damageListener?.compareAndSet(onDamage, null)
-            field?.imagesListener?.compareAndSet(onImages, null)
+            field?.removeDamageListener(onDamage)
+            field?.removeImagesListener(onImages)
             field = value
             sink.primary = value?.let(::SessionTarget)
-            value?.damageListener?.set(onDamage)
-            value?.imagesListener?.set(onImages)
+            value?.addDamageListener(onDamage)
+            value?.addImagesListener(onImages)
             snapshot = null
             dropBitmaps()
             imagesActive = false
@@ -170,56 +205,29 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         if (!detectLinks && hl == null) return
         val c = core ?: return
         val sc = snapCols
-        if (hl != null) {
-            if (highlightColors.size != sc * sr) {
-                highlightColors = IntArray(sc * sr)
-                highlightRowText = arrayOfNulls(sr)
-            } else if (highlightRowText.size != sr) {
-                highlightRowText = arrayOfNulls(sr)
+        // Links are found in the core, against rows it already holds, and come
+        // back once for the whole screen rather than a string per row.
+        if (detectLinks) {
+            runCatching { c.visibleLinks() }.getOrNull()?.forEach {
+                links += LinkSpan(it.row.toInt(), it.start.toInt(), it.end.toInt(), Link(it.text, it.isUrl))
             }
         }
+        if (hl == null) return
+        if (highlightColors.size != sc * sr) {
+            highlightColors = IntArray(sc * sr)
+            highlightRowText = arrayOfNulls(sr)
+        } else if (highlightRowText.size != sr) {
+            highlightRowText = arrayOfNulls(sr)
+        }
         for (r in 0 until sr) {
+            // Only the user's own colour rules still need the text over here,
+            // and they are off until somebody writes one.
             val text = try { c.rowText(r.toUShort()) } catch (e: Exception) { return }
-            if (hl != null && highlightRowText[r] != text) {
+            if (highlightRowText[r] != text) {
                 highlightRowText[r] = text
                 highlightColors.fill(0, r * sc, (r + 1) * sc)
                 hl.fill(text, highlightColors, r * sc, sc)
             }
-            if (detectLinks) collectLinks(r, text)
-        }
-        if (detectLinks) joinWrappedLinks()
-    }
-
-    /** URLs and absolute / home-relative paths on one row. */
-    private fun collectLinks(r: Int, text: String) {
-        if (text.indexOf("://") < 0 && text.indexOf('/') < 0) return
-        for (m in URL_RE.findAll(text)) {
-            var end = m.range.last + 1
-            while (end > m.range.first && text[end - 1] in ".,;:!?'\"") end--
-            if (end > m.range.first) links += LinkSpan(r, m.range.first, end, Link(text.substring(m.range.first, end), true))
-        }
-        for (m in PATH_RE.findAll(text)) {
-            if (links.any { it.row == r && m.range.first < it.end && m.range.last >= it.start }) continue
-            var end = m.range.last + 1
-            while (end > m.range.first && text[end - 1] in ".,;:!?'\"") end--
-            val t = text.substring(m.range.first, end)
-            if (t.length < 3 || t == "~/" || t.count { it == '/' } == 1 && t.startsWith("/") && t.length < 4) continue
-            links += LinkSpan(r, m.range.first, end, Link(t, false))
-        }
-    }
-
-    private fun joinWrappedLinks() {
-        // A link that runs into the right edge continues on the next row: join the two spans.
-        var i = 0
-        while (i < links.size) {
-            val a = links[i]
-            val b = links.firstOrNull { it.row == a.row + 1 && it.start == 0 }
-            if (b != null && a.end >= snapCols && a.link.isUrl == b.link.isUrl && (!b.link.isUrl || b.link.text.indexOf("://") < 0)) {
-                val joined = Link(a.link.text + b.link.text.removePrefix("~"), a.link.isUrl)
-                links[i] = LinkSpan(a.row, a.start, a.end, joined)
-                links[links.indexOf(b)] = LinkSpan(b.row, b.start, b.end, joined)
-            }
-            i++
         }
     }
 
@@ -726,15 +734,35 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     // ---- drawing ----------------------------------------------------------
 
+    /**
+     * The grid the core packs into, kept by this view rather than by the
+     * session: a session can be let go from another thread, and the bytes have
+     * to stay put until the frame that is reading them is finished.
+     */
+    private val snapBuffer = dev.flint.term.core.SnapshotBuffer()
+
+    /** The same memory seen as a buffer; remade only when it moves or grows. */
+    private var snapDirect: ByteBuffer? = null
+    private var snapPtr = 0L
+    private var snapLen = 0L
+
     private fun pullSnapshot() {
         val s = session ?: return
         if (s.destroyed) return
-        val bytes = try {
-            core?.snapshot()
+        val span = try {
+            core?.snapshotInto(snapBuffer) ?: return
         } catch (e: IllegalStateException) {
             return // destroyed between the check and the call
         }
-        val buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        if (span.len == 0UL) return
+        if (span.ptr != snapPtr.toULong() || span.len != snapLen.toULong()) {
+            snapDirect = com.sun.jna.Pointer(span.ptr.toLong())
+                .getByteBuffer(0, span.len.toLong())
+                .order(ByteOrder.LITTLE_ENDIAN)
+            snapPtr = span.ptr.toLong()
+            snapLen = span.len.toLong()
+        }
+        val buf = snapDirect ?: return
         snapCols = buf.getShort(0).toInt() and 0xffff
         snapRows = buf.getShort(2).toInt() and 0xffff
         cursorCol = buf.getShort(4).toInt()
@@ -762,6 +790,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        lastFrameAt = android.os.SystemClock.uptimeMillis()
+        frameWaiting.set(false)
         val s = session ?: return
         pullSnapshot()
         pullImages()
@@ -865,7 +895,10 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // Images the program asked to keep under the text (kitty's z < 0).
         drawImages(canvas, ox, oy, above = false)
 
-        // Pass 2: text runs.
+        // Pass 2: text runs. Gathered by colour and put down in one go at the
+        // end, so Skia builds a handful of glyph containers instead of one per
+        // run; see [GlyphBatch].
+        batching = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !ligatures
         for (r in 0 until sr) {
             val y = oy + r * cellH
             val textY = y + baseline
@@ -905,14 +938,18 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
                 } else if (!blank) {
                     // A non-ASCII cell is already a run of its own, which is
                     // where the symbols font gets its chance to take over.
-                    val n = Character.toChars(cp, runChars, 0)
                     setPaintFor(fg, styleFlags, nerdGlyphs && RunSplitter.isSymbol(cp))
-                    canvas.drawText(runChars, 0, n, ox + c * cellW, textY, textPaint)
+                    if (!batchGlyph(cp, ox + c * cellW, textY)) {
+                        val n = Character.toChars(cp, runChars, 0)
+                        canvas.drawText(runChars, 0, n, ox + c * cellW, textY, textPaint)
+                    }
                     drawDecorations(canvas, ox + c * cellW, y, if (flags and FLAG_WIDE != 0) cellW * 2 else cellW, fg, styleFlags)
                 }
             }
             if (runLen > 0) drawRun(canvas, ox + runStartCol * cellW, textY, runLen, runFg, runFlags, runStartCol, r, sc)
         }
+        flushBatches(canvas)
+        batching = false
 
         drawImages(canvas, ox, oy, above = true)
 
@@ -995,8 +1032,266 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         var allSpace = true
         for (i in 0 until len) if (runChars[i] != ' ') { allSpace = false; break }
         setPaintFor(fg, flags)
-        if (!allSpace) canvas.drawText(runChars, 0, len, x, textY, textPaint)
+        if (!allSpace && !drawRunAsGlyphs(canvas, x, textY, len)) {
+            canvas.drawText(runChars, 0, len, x, textY, textPaint)
+        }
         drawDecorations(canvas, x, textY - baseline, len * cellW, fg, flags)
+    }
+
+    /**
+     * Paint a run as glyphs the font has already been asked about, or return
+     * false to let [Canvas.drawText] do it the ordinary way.
+     *
+     * `drawText` shapes and lays out the run every time it is called: harfbuzz
+     * decides which glyphs the characters become and minikin decides where they
+     * go. On a grid neither answer can change — the glyph for `a` is always the
+     * same glyph and column `n` is always `n` cells across — and yet a screen
+     * of changing output asks both questions again for every run of every
+     * frame. Between them they were a fifth of the app's work.
+     *
+     * So each character is shaped once, its glyph kept, and a run becomes a
+     * list of glyphs at known positions. Ligatures are the exception and take
+     * the ordinary path: joining `!=` into one glyph is exactly the shaping
+     * this skips.
+     */
+    private fun drawRunAsGlyphs(canvas: Canvas, x: Float, textY: Float, len: Int): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || ligatures) return false
+        val table = cachedTable() ?: return false
+        if (glyphIds.size < len) {
+            glyphIds = IntArray(len * 2)
+            glyphPos = FloatArray(len * 4)
+        }
+        if (batching) {
+            // The paint is reused for the next run, so what it is set to now —
+            // the colour, and the face the table came from — keys this batch.
+            for (i in 0 until len) {
+                val ch = runChars[i]
+                if (ch == ' ') continue // the background pass drew it
+                val id = table.ids[ch.code - 0x21]
+                if (id < 0) return false
+                batchInto(table.font, id, x + i * cellW, textY)
+            }
+            return true
+        }
+        var n = 0
+        for (i in 0 until len) {
+            val ch = runChars[i]
+            if (ch == ' ') continue // the background pass drew it
+            val id = table.ids[ch.code - 0x21]
+            if (id < 0) return false // this font had nothing to say about it
+            glyphIds[n] = id
+            glyphPos[n * 2] = x + i * cellW
+            glyphPos[n * 2 + 1] = textY
+            n++
+        }
+        if (n > 0) canvas.drawGlyphs(glyphIds, 0, glyphPos, 0, n, table.font, textPaint)
+        return true
+    }
+
+    /**
+     * The glyph [table] draws [cp] with, or [MISSING] when this font has no
+     * single glyph for it and the ordinary path has to draw it.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+    private fun glyphOf(table: GlyphTable, cp: Int): GlyphRef? {
+        if (cp in 0x21..0x7e) {
+            val id = table.ids[cp - 0x21]
+            return if (id == MISSING) null else GlyphRef(table.font, id)
+        }
+        if (table.extra.containsKey(cp)) return table.extra[cp]
+        val chars = CharArray(2)
+        val n = Character.toChars(cp, chars, 0)
+        val shaped = runCatching {
+            android.graphics.text.TextRunShaper.shapeTextRun(chars, 0, n, 0, n, 0f, 0f, false, textPaint)
+        }.getOrNull()
+        // One glyph is the whole condition now: which font drew it no longer
+        // matters, because the batch it joins is keyed on that font.
+        val ref = if (shaped != null && shaped.glyphCount() == 1) {
+            GlyphRef(shaped.getFont(0), shaped.getGlyphId(0))
+        } else {
+            null
+        }
+        table.extra[cp] = ref
+        return ref
+    }
+
+    /**
+     * Add one character to the batch it belongs in, and say whether it went.
+     *
+     * This is the path a TUI's box drawing takes: not ASCII, but the same few
+     * characters on every frame, so worth asking the font about once.
+     */
+    private fun batchGlyph(cp: Int, x: Float, textY: Float): Boolean {
+        if (!batching || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        val table = cachedTable() ?: return false
+        val ref = glyphOf(table, cp) ?: return false
+        batchInto(ref.font, ref.id, x, textY)
+        return true
+    }
+
+    /**
+     * Put one glyph in the batch for its colour and font.
+     *
+     * The batch a glyph belongs in almost never changes between one glyph and
+     * the next — a run is one colour in one font by construction — so the last
+     * one is kept. Looking it up per glyph meant hashing a `Font` tens of
+     * thousands of times a frame, which cost more than the batching saved.
+     */
+    private fun batchInto(font: android.graphics.fonts.Font, id: Int, x: Float, textY: Float) {
+        var b = lastBatch
+        if (b == null || textPaint.color != lastBatchColor || lastBatchFont !== font) {
+            b = batches.getOrPut(BatchKey(textPaint.color, font)) { GlyphBatch(font) }
+            lastBatch = b
+            lastBatchColor = textPaint.color
+            lastBatchFont = font
+        }
+        b.add(id, x, textY)
+    }
+
+    private var lastBatch: GlyphBatch? = null
+    private var lastBatchColor = 0
+    private var lastBatchFont: android.graphics.fonts.Font? = null
+
+    /** The table last asked for, for the same reason. */
+    private var lastTable: GlyphTable? = null
+    private var lastTableFace: android.graphics.Typeface? = null
+    private var lastTableSize = 0f
+
+    /** [glyphsFor] without the map lookup when the paint has not moved. */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+    private fun cachedTable(): GlyphTable? {
+        val face = textPaint.typeface
+        val size = textPaint.textSize
+        if (lastTable != null && face === lastTableFace && size == lastTableSize) return lastTable
+        val t = glyphsFor(face)
+        lastTable = t
+        lastTableFace = face
+        lastTableSize = size
+        return t
+    }
+
+    /** Put down everything the text pass gathered: one call per colour and face. */
+    private fun flushBatches(canvas: Canvas) {
+        if (!batching) return
+        for ((key, batch) in batches) {
+            if (batch.n == 0) continue
+            textPaint.color = key.color
+            canvas.drawGlyphs(batch.ids, 0, batch.pos, 0, batch.n, key.font, textPaint)
+            batch.n = 0
+        }
+        lastBatch = null
+        lastBatchFont = null
+    }
+
+    /**
+     * One glyph per printable ASCII character, for one typeface at one size,
+     * plus whatever else this screen has turned out to need.
+     *
+     * The box drawing a TUI is made of lives in [extra]: it is not worth
+     * shaping all of Unicode up front, but a terminal draws the same handful of
+     * lines and corners over and over, so each one is asked about once. A
+     * character this font does not own is remembered as [MISSING] so it is not
+     * asked about again on every frame.
+     */
+    private class GlyphTable(val font: android.graphics.fonts.Font, val ids: IntArray) {
+        /**
+         * Characters outside ASCII, each with the font it actually came out of.
+         *
+         * The font matters: a box corner comes from the terminal font, but the
+         * braille a CPU graph is drawn with, or an emoji, is usually somebody
+         * else's, and glyph numbers only mean anything within one font. Keeping
+         * the font alongside the glyph is what lets those be gathered too
+         * instead of falling back to a call each.
+         */
+        val extra = HashMap<Int, GlyphRef?>()
+    }
+
+    /** One glyph, and the font it is numbered in. */
+    private class GlyphRef(val font: android.graphics.fonts.Font, val id: Int)
+
+    /** A face at a size; both matter, and neither may be reduced to a hash. */
+    private data class TableKey(val face: android.graphics.Typeface?, val size: Float)
+
+    private val glyphTables = HashMap<TableKey, GlyphTable?>()
+    private var glyphIds = IntArray(0)
+    private var glyphPos = FloatArray(0)
+
+    /**
+     * Glyphs waiting to be drawn, gathered by the colour and style they share.
+     *
+     * Skia builds a container of glyph runs for every draw call, and a screen
+     * of coloured output is hundreds of short runs — `ls --color`, a build log,
+     * anything with a status line. Collecting the whole frame first turns that
+     * into one call per colour on screen, which is rarely more than a handful,
+     * and the glyphs of one colour never overlap so the order they go down in
+     * does not matter.
+     */
+    private class GlyphBatch(val font: android.graphics.fonts.Font) {
+        var ids = IntArray(256)
+        var pos = FloatArray(512)
+        var n = 0
+        fun add(id: Int, x: Float, y: Float) {
+            if (n == ids.size) {
+                ids = ids.copyOf(n * 2)
+                pos = pos.copyOf(n * 4)
+            }
+            ids[n] = id
+            pos[n * 2] = x
+            pos[n * 2 + 1] = y
+            n++
+        }
+    }
+
+    /**
+     * What one call can draw: everything of one colour out of one font.
+     *
+     * The font is part of the key by identity rather than by a packed hash.
+     * Glyph numbers only mean anything inside the font they came from, so two
+     * fonts landing in the same batch draws one of them with the other's
+     * numbering — which looks like the right text in the wrong alphabet.
+     */
+    private data class BatchKey(val color: Int, val font: android.graphics.fonts.Font)
+
+    private val batches = HashMap<BatchKey, GlyphBatch>()
+    private var batching = false
+
+    /**
+     * The glyphs [face] draws printable ASCII with, or null when it cannot be
+     * done this way — a character the font renders with more than one glyph, or
+     * out of a different font, means the shaper has something to say after all.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+    private fun glyphsFor(face: android.graphics.Typeface?): GlyphTable? {
+        // Size is part of the key: the same face at another size is other glyphs.
+        val key = TableKey(face, textPaint.textSize)
+        // Pinch-zoom walks through sizes and each one is its own table; the
+        // ones behind it are never asked for again.
+        if (glyphTables.size > 8) glyphTables.clear()
+        return glyphTables.getOrPut(key) {
+            val ids = IntArray(0x7f - 0x21)
+            var font: android.graphics.fonts.Font? = null
+            var usable = true
+            val one = CharArray(1)
+            for (cp in 0x21..0x7e) {
+                // The space is skipped on purpose: it is never drawn (the
+                // background pass has already painted it) and on some devices
+                // it is the one character that comes out of a different font.
+                one[0] = cp.toChar()
+                val shaped = runCatching {
+                    android.graphics.text.TextRunShaper.shapeTextRun(one, 0, 1, 0, 1, 0f, 0f, false, textPaint)
+                }.getOrNull()
+                if (shaped == null) { usable = false; break }
+                // More than one glyph means the shaper had something to say
+                // about this character after all, so the whole table is off.
+                if (shaped.glyphCount() != 1) { usable = false; break }
+                val f = shaped.getFont(0)
+                // Compared by value: the platform hands back a fresh wrapper
+                // for every call, so identity is never equal past the first.
+                if (font == null) font = f else if (font != f) { usable = false; break }
+                ids[cp - 0x21] = shaped.getGlyphId(0)
+            }
+            if (!usable) null else font?.let { GlyphTable(it, ids) }
+        }
     }
 
     private fun setPaintFor(fg: Int, flags: Int, symbol: Boolean = false) {
@@ -1845,17 +2140,17 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // Both of them, and on the way in: being attached is what makes a view
         // the visible one, so this is where a session changes hands when a
         // floating window opens over a screen or closes back into it.
-        session?.damageListener?.set(onDamage)
-        session?.imagesListener?.set(onImages)
+        session?.addDamageListener(onDamage)
+        session?.addImagesListener(onImages)
         post { requestFocus() }
         scheduleBlink()
     }
 
     override fun onDetachedFromWindow() {
-        session?.damageListener?.compareAndSet(onDamage, null)
+        session?.removeDamageListener(onDamage)
         removeCallbacks(blinkTick)
         removeCallbacks(applyPendingGrid)
-        session?.imagesListener?.compareAndSet(onImages, null)
+        session?.removeImagesListener(onImages)
         dropBitmaps()
         finishActionMode()
         super.onDetachedFromWindow()
@@ -1887,6 +2182,9 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
         /** Ctrl+these are another key's byte, so they stay a key event. */
         private val AMBIGUOUS_CONTROL = setOf('i', 'm', 'h', 'j')
+
+        /** No single glyph in this font for that character. */
+        private const val MISSING = -1
 
         /** Half a blink, the rate xterm has used since forever. */
         private const val BLINK_MS = 530L
@@ -1934,5 +2232,3 @@ object GridMemory {
     }
 }
 
-private val URL_RE = Regex("""(?:https?|ftp|ssh|sftp|file)://[^\s'"<>()\[\]{}`]+""")
-private val PATH_RE = Regex("""(?<![\w/~.\-:])(?:~|\.{1,2})?(?:/[\w.@+%~,\-]+)+/?(?::\d+)?""")

@@ -156,6 +156,7 @@ fun FloatingTerminal(sessionId: String?) {
             isFocusableInTouchMode = false
             detectLinks = false
             reshapesGrid = false
+            maxFps = settings.maxFps
             // The size the session is already drawn at. What reaches the eye is
             // that times the scale the fit works out, so dropping it here would
             // only be taken back by a larger scale.

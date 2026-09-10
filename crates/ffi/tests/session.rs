@@ -9,6 +9,8 @@ struct Listener {
     states: Mutex<Vec<SessionState>>,
     progress: Mutex<Vec<String>>,
     images: AtomicUsize,
+    /// (elapsed, exit status) for each long command the core reported.
+    commands: Mutex<Vec<(u64, Option<i32>)>>,
 }
 impl Listener {
     fn new() -> Arc<Self> {
@@ -17,12 +19,16 @@ impl Listener {
             states: Mutex::new(vec![]),
             progress: Mutex::new(vec![]),
             images: AtomicUsize::new(0),
+            commands: Mutex::new(vec![]),
         })
     }
 }
 impl SessionListener for Listener {
     fn on_damage(&self) {
         self.damage.fetch_add(1, Ordering::Relaxed);
+    }
+    fn on_command_finished(&self, elapsed_millis: u64, exit_status: Option<i32>) {
+        self.commands.lock().unwrap().push((elapsed_millis, exit_status));
     }
     fn on_state(&self, state: SessionState) {
         self.states.lock().unwrap().push(state);
@@ -97,6 +103,53 @@ fn wait_for(session: &Session, needle: &str) -> String {
         assert!(start.elapsed() < Duration::from_secs(10), "timed out waiting for {needle:?}; screen:\n{text}");
         std::thread::sleep(Duration::from_millis(30));
     }
+}
+
+/// A recording still sees the stream, and stops seeing it when it ends.
+///
+/// `feed` skips the whole look when nothing is listening, so a tap that arms
+/// without saying so would go quiet rather than fail loudly.
+#[test]
+fn a_capture_started_late_still_sees_the_output() {
+    struct Collect(Mutex<Vec<u8>>);
+    impl OutputSink for Collect {
+        fn on_output(&self, bytes: Vec<u8>) {
+            self.0.lock().unwrap().extend_from_slice(&bytes);
+        }
+    }
+    let listener = Listener::new();
+    let backend = Backend::Local {
+        config: LocalShellConfig {
+            program: "/bin/sh".into(),
+            args: vec![],
+            env: vec![EnvVar { name: "PATH".into(), value: "/usr/bin:/bin".into() }, EnvVar { name: "PS1".into(), value: "$ ".into() }],
+            cwd: None,
+        },
+    };
+    let session = Session::new(backend, 40, 10, 1000, listener.clone(), Arc::new(Accept), Arc::new(NoQuestions), Options::default());
+    session.start();
+    session.send_text("echo before-capture
+".into());
+    wait_for(&session, "before-capture");
+
+    // Armed only now: the session has already been running with no taps at all.
+    let sink = Arc::new(Collect(Mutex::new(Vec::new())));
+    session.capture_output(sink.clone());
+    session.send_text("echo after-capture
+".into());
+    wait_for(&session, "after-capture");
+    let seen = String::from_utf8_lossy(&sink.0.lock().unwrap()).to_string();
+    assert!(seen.contains("after-capture"), "capture saw nothing; got {seen:?}");
+
+    session.stop_output_capture();
+    sink.0.lock().unwrap().clear();
+    session.send_text("echo after-stop
+".into());
+    wait_for(&session, "after-stop");
+    assert!(
+        !String::from_utf8_lossy(&sink.0.lock().unwrap()).contains("after-stop"),
+        "capture kept going after it was stopped",
+    );
 }
 
 #[test]
@@ -186,6 +239,7 @@ fn a_resize_while_the_host_key_is_being_checked_reaches_the_pty() {
     let listener = Listener::new();
     let backend = Backend::Ssh {
         config: SshConfig {
+            label: String::new(),
             host: "127.0.0.1".into(),
             port: port.parse().unwrap(),
             username: std::env::var("USER").unwrap(),
@@ -229,6 +283,7 @@ fn ssh_session_roundtrip() {
     let listener = Listener::new();
     let backend = Backend::Ssh {
         config: SshConfig {
+            label: String::new(),
             host: "127.0.0.1".into(),
             port: port.parse().unwrap(),
             username: std::env::var("USER").unwrap(),
@@ -328,6 +383,7 @@ fn ssh_via_jump_host_with_pre_command() {
     let listener = Listener::new();
     let backend = Backend::Ssh {
         config: SshConfig {
+            label: String::new(),
             host: "127.0.0.1".into(),
             port,
             username: user.clone(),
@@ -394,6 +450,7 @@ fn ssh_via_jump_host_unreachable_target_times_out() {
     let listener = Listener::new();
     let backend = Backend::Ssh {
         config: SshConfig {
+            label: String::new(),
             host: "127.0.0.1".into(),
             port: 1, // nothing listens here
             username: user.clone(),
@@ -483,6 +540,7 @@ fn ssh_session_through_wireguard_tunnel() {
     let listener = Listener::new();
     let backend = Backend::Ssh {
         config: SshConfig {
+            label: String::new(),
             host: "10.77.0.1".into(),
             port: 22,
             username: std::env::var("USER").unwrap(),
@@ -530,6 +588,7 @@ fn agent_forwarding_lists_our_key() {
     let listener = Listener::new();
     let backend = Backend::Ssh {
         config: SshConfig {
+            label: String::new(),
             host: "127.0.0.1".into(),
             port: port.parse().unwrap(),
             username: std::env::var("USER").unwrap(),
@@ -771,6 +830,7 @@ fn mosh_session_bootstraps_over_ssh_and_runs_over_udp() {
         Backend::Mosh {
             config: MoshConfig {
                 ssh: SshConfig {
+                    label: String::new(),
                     host: "127.0.0.1".into(),
                     port: port.parse().unwrap(),
                     username: std::env::var("USER").unwrap(),
@@ -834,6 +894,7 @@ fn mosh_refuses_tailscale_with_a_clear_reason() {
         Backend::Mosh {
             config: MoshConfig {
                 ssh: SshConfig {
+                    label: String::new(),
                     host: "host.example".into(),
                     port: 22,
                     username: "nobody".into(),
@@ -960,6 +1021,7 @@ fn mosh_session_through_a_wireguard_tunnel() {
         Backend::Mosh {
             config: MoshConfig {
                 ssh: SshConfig {
+                    label: String::new(),
                     host: "10.77.0.1".into(),
                     port: 22,
                     username: std::env::var("USER").unwrap(),
@@ -1026,6 +1088,7 @@ fn predictive_echo_shows_a_keystroke_before_the_server_does() {
         Backend::Mosh {
             config: MoshConfig {
                 ssh: SshConfig {
+                    label: String::new(),
                     host: "127.0.0.1".into(),
                     port: port.parse().unwrap(),
                     username: std::env::var("USER").unwrap(),
@@ -1093,6 +1156,7 @@ fn prediction_is_off_for_an_ordinary_ssh_session() {
     let session = Session::new(
         Backend::Ssh {
             config: SshConfig {
+                label: String::new(),
                 host: "127.0.0.1".into(),
                 port: port.parse().unwrap(),
                 username: std::env::var("USER").unwrap(),
@@ -1149,6 +1213,7 @@ fn mosh_session_through_a_jump_host_relay() {
         Backend::Mosh {
             config: MoshConfig {
                 ssh: SshConfig {
+                    label: String::new(),
                     host: "127.0.0.1".into(),
                     port,
                     username: user.clone(),
@@ -1353,6 +1418,7 @@ fn mosh_session_through_a_socks5_udp_proxy() {
         Backend::Mosh {
             config: MoshConfig {
                 ssh: SshConfig {
+                    label: String::new(),
                     host: "127.0.0.1".into(),
                     port: port.parse().unwrap(),
                     username: std::env::var("USER").unwrap(),
@@ -1459,6 +1525,7 @@ fn mosh_session_through_tailscales_own_socks5_server() {
         Backend::Mosh {
             config: MoshConfig {
                 ssh: SshConfig {
+                    label: String::new(),
                     host: "127.0.0.1".into(),
                     port: port.parse().unwrap(),
                     username: std::env::var("USER").unwrap(),
