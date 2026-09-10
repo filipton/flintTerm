@@ -2,7 +2,6 @@ package dev.flint.term.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.padding
@@ -14,6 +13,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.KeyboardTab
 import androidx.compose.material.icons.rounded.Movie
+import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -79,23 +79,37 @@ fun TerminalSettings(nav: NavController) {
                     valueRange = 1000f..50000f,
                 )
                 Text("Applies to new sessions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Redraw limit", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    Text("${settings.maxFps} per second", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+            }
+            RowDivider()
+            GroupRow(
+                title = "Redraw limit",
+                subtitle = "Saves battery under heavy output; off means as smooth as the screen allows",
+                icon = Icons.Rounded.Speed,
+                iconTint = MaterialTheme.colorScheme.primary,
+                checked = settings.maxFps > 0,
+                onCheckedChange = { v -> app.store.updateSettings { it.copy(maxFps = if (v) 30 else 0) } },
+            )
+            if (settings.maxFps > 0) {
+                Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("At most", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Text("${settings.maxFps} per second", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    }
+                    AppSlider(
+                        value = settings.maxFps.toFloat(),
+                        onValueChange = { v -> app.store.updateSettings { it.copy(maxFps = (v / 15).roundToInt().coerceAtLeast(1) * 15) } },
+                        valueRange = 15f..120f,
+                    )
+                    Text(
+                        "Off, a terminal repaints whenever something on it changes, up to the screen's own " +
+                            "refresh rate — nothing redraws while the screen is still. A limit only bites " +
+                            "when output is pouring in faster than that: a flood costs about a fifth less " +
+                            "battery at 30 than uncapped, on output scrolling past far too fast to read " +
+                            "either way. It makes no difference to anything slower, down to a shell.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                AppSlider(
-                    value = settings.maxFps.toFloat(),
-                    onValueChange = { v -> app.store.updateSettings { it.copy(maxFps = (v / 15).roundToInt().coerceAtLeast(1) * 15) } },
-                    valueRange = 15f..120f,
-                )
-                Text(
-                    "How often a terminal repaints while something on it is changing. Higher is smoother " +
-                        "and costs battery: every redraw repacks and repaints the whole grid, so 120 costs " +
-                        "four times what 30 does. Above 30 a terminal does not look any different.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
             RowDivider()
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {

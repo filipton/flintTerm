@@ -186,6 +186,7 @@ object PaletteCatalog {
         setting("Hold Ctrl for chords", "A long press on Ctrl opens the chords sheet; a tap is still the modifier", Routes.SETTINGS_KEYBOARD),
         setting("Swipe between sessions", "Drag sideways in the terminal to move along the tab strip", Routes.SETTINGS_KEYBOARD),
         setting("Scrollback", "How many lines a session keeps behind the screen", Routes.SETTINGS_TERMINAL),
+        setting("Redraw limit", "Caps repaints under heavy output to save battery", Routes.SETTINGS_TERMINAL),
         setting("Inline images", "Pictures drawn in the terminal by chafa, timg or kitty's icat", Routes.SETTINGS_TERMINAL),
         setting("Predictive echo", "Mosh can draw a keystroke before the server confirms it", Routes.SETTINGS_TERMINAL),
         setting("Complete from history", "The rest of a command you have run here, in gray after the cursor", Routes.SETTINGS_TERMINAL),

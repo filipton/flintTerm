@@ -638,6 +638,8 @@ struct Inner {
     /// Set while the app wants to be told about long commands; see
     /// [`crate::command_watch`] for why the watching happens on this side.
     command_watch: Mutex<Option<crate::command_watch::CommandWatch>>,
+    /// The user's colour rules, and what they last found on each row.
+    highlight: Mutex<crate::highlight::Highlighter>,
     /// Links found on the visible grid, kept against the rows they came from.
     link_cache: Mutex<crate::links::LinkCache>,
     /// Endpoint for `Backend::External`; unused by the other backends.
@@ -797,6 +799,7 @@ impl Session {
                 watch: Mutex::new(Vec::new()),
                 watch_line: Mutex::new(WatchLine::default()),
                 command_watch: Mutex::new(None),
+                highlight: Mutex::new(Default::default()),
                 link_cache: Mutex::new(Default::default()),
                 external: Arc::new(ExternalPipe::new()),
                 used_tunnel: Mutex::new(None),
@@ -1257,6 +1260,39 @@ impl Session {
             Some((row, col)) => emu.row_text(row).chars().take(col as usize).collect(),
             None => String::new(),
         }
+    }
+
+    /// Replace the colour rules, and say which patterns were refused.
+    ///
+    /// A rule that is switched off is still compiled: a broken pattern has to
+    /// be visible in the editor whether or not it is in use.
+    pub fn set_highlight_rules(&self, rules: Vec<crate::highlight::HighlightRule>) -> Vec<crate::highlight::HighlightError> {
+        self.inner.highlight.lock().set_rules(&rules)
+    }
+
+    /// Whether a pattern would be accepted, and why not when it would not.
+    pub fn highlight_error(&self, pattern: String) -> Option<String> {
+        if pattern.is_empty() {
+            return None;
+        }
+        crate::highlight::compile(&pattern).err()
+    }
+
+    /// What the colour rules claim on the visible grid.
+    ///
+    /// Asked for once a frame alongside [`Self::visible_links`], and cached
+    /// against the rows the same way, so a still screen runs no patterns.
+    pub fn visible_highlights(&self) -> Vec<crate::highlight::HighlightSpan> {
+        let mut hl = self.inner.highlight.lock();
+        if hl.is_empty() {
+            return Vec::new();
+        }
+        let (_, rows) = *self.inner.size.lock();
+        let texts: Vec<String> = {
+            let emu = self.inner.emu.lock();
+            (0..rows).map(|r| emu.row_text(r)).collect()
+        };
+        hl.scan(&texts)
     }
 
     /// Tappable URLs and paths on the visible grid.

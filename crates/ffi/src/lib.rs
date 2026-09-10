@@ -9,6 +9,7 @@
 uniffi::setup_scaffolding!();
 
 mod command_watch;
+mod highlight;
 mod links;
 mod emulator;
 mod external;

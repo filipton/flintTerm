@@ -83,8 +83,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private val onImages: () -> Unit = { imagesActive = true; requestFrame() }
 
     /**
-     * The most frames a second this view will draw; 0 for as many as the
-     * display will take. See [dev.flint.term.data.Settings.maxFps].
+     * The most frames a second this view will draw; 0, the default, for as many
+     * as the display will take. See [dev.flint.term.data.Settings.maxFps].
      */
     var maxFps: Int = 30
 
@@ -107,7 +107,10 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             postInvalidateOnAnimation()
             return
         }
-        val interval = 1000L / cap
+        // Compared a few ms early on purpose. A frame can only land on a vsync, and 1000/30 is 33ms
+        // against a 33.33ms one, so measuring the interval exactly means missing it about as often
+        // as not — and a miss costs a whole frame period, which is how a cap of 30 drew 20.
+        val interval = 1000L / cap - VSYNC_SLACK_MS
         val now = android.os.SystemClock.uptimeMillis()
         val since = now - lastFrameAt
         if (since >= interval) {
@@ -126,6 +129,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             sink.primary = value?.let(::SessionTarget)
             value?.addDamageListener(onDamage)
             value?.addImagesListener(onImages)
+            applyHighlights()
             snapshot = null
             dropBitmaps()
             imagesActive = false
@@ -201,40 +205,38 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      */
     private fun scanRows(sr: Int) {
         links.clear()
-        val hl = highlighter
-        if (!detectLinks && hl == null) return
         val c = core ?: return
         val sc = snapCols
-        // Links are found in the core, against rows it already holds, and come
-        // back once for the whole screen rather than a string per row.
+        // Both of these are found in the core, against rows it already holds,
+        // and come back once for the whole screen rather than a string per row.
         if (detectLinks) {
             runCatching { c.visibleLinks() }.getOrNull()?.forEach {
                 links += LinkSpan(it.row.toInt(), it.start.toInt(), it.end.toInt(), Link(it.text, it.isUrl))
             }
         }
-        if (hl == null) return
-        if (highlightColors.size != sc * sr) {
-            highlightColors = IntArray(sc * sr)
-            highlightRowText = arrayOfNulls(sr)
-        } else if (highlightRowText.size != sr) {
-            highlightRowText = arrayOfNulls(sr)
+        if (highlightRules.isEmpty()) {
+            highlighted = false
+            return
         }
-        for (r in 0 until sr) {
-            // Only the user's own colour rules still need the text over here,
-            // and they are off until somebody writes one.
-            val text = try { c.rowText(r.toUShort()) } catch (e: Exception) { return }
-            if (highlightRowText[r] != text) {
-                highlightRowText[r] = text
-                highlightColors.fill(0, r * sc, (r + 1) * sc)
-                hl.fill(text, highlightColors, r * sc, sc)
-            }
+        if (highlightColors.size != sc * sr) highlightColors = IntArray(sc * sr)
+        java.util.Arrays.fill(highlightColors, 0)
+        val spans = runCatching { c.visibleHighlights() }.getOrNull().orEmpty()
+        for (sp in spans) {
+            val row = sp.row.toInt()
+            if (row !in 0 until sr) continue
+            val from = sp.start.toInt().coerceIn(0, sc)
+            val to = sp.end.toInt().coerceIn(0, sc)
+            val base = row * sc
+            // First rule to claim a cell keeps it, as the rules are in order.
+            for (i in from until to) if (highlightColors[base + i] == 0) highlightColors[base + i] = sp.color
         }
+        highlighted = spans.isNotEmpty()
     }
 
     private fun linkAt(col: Int, row: Int): Link? = links.firstOrNull { it.row == row && col >= it.start && col < it.end }?.link
 
     /** The keyword rules in force, or null when highlighting is off. */
-    private var highlighter: HighlightMatcher? = null
+    private var highlightRules: List<HighlightRule> = emptyList()
 
     /**
      * One ARGB color per cell of the viewport, zero where no rule claimed the
@@ -243,16 +245,26 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      */
     private var highlightColors = IntArray(0)
 
-    /** The text each row was last matched against; the cache key, as with links. */
-    private var highlightRowText = arrayOfNulls<String>(0)
+    /** Whether the last scan found anything to colour. */
+    private var highlighted = false
 
     /** Keyword highlighting; an empty list turns it off and costs nothing to draw. */
     fun setHighlights(rules: List<HighlightRule>) {
-        val next = if (rules.isEmpty()) null else HighlightMatcher(rules).takeIf { !it.isEmpty }
-        highlighter = next
-        // Every cached row was matched against the old rules.
-        highlightRowText.fill(null)
+        highlightRules = rules
+        applyHighlights()
         invalidate()
+    }
+
+    /** Hand the rules to the core, which is what matches them. */
+    private fun applyHighlights() {
+        val c = core ?: return
+        runCatching {
+            c.setHighlightRules(
+                highlightRules.map {
+                    dev.flint.term.core.HighlightRule(it.id, it.pattern, it.color, it.wholeLine, it.enabled)
+                },
+            )
+        }
     }
 
     private val modifierState = ModifierState()
@@ -790,7 +802,10 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        lastFrameAt = android.os.SystemClock.uptimeMillis()
+        // drawingTime, not uptimeMillis: onDraw runs a few ms after the vsync it belongs to, and
+        // measuring the gap from here pushed every capped frame past the next vsync and onto the
+        // one after, so a cap of 30 drew 20.
+        lastFrameAt = drawingTime
         frameWaiting.set(false)
         val s = session ?: return
         pullSnapshot()
@@ -815,7 +830,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // Links and keyword colors, before anything is painted: the text pass
         // needs the colors, and the underlines are drawn from the same spans.
         scanRows(sr)
-        val highlighted = highlighter != null && highlightColors.size == sc * sr
 
         // Pass 1: backgrounds.
         for (r in 0 until sr) {
@@ -1107,7 +1121,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // One glyph is the whole condition now: which font drew it no longer
         // matters, because the batch it joins is keyed on that font.
         val ref = if (shaped != null && shaped.glyphCount() == 1) {
-            GlyphRef(shaped.getFont(0), shaped.getGlyphId(0))
+            GlyphRef(table.canonical(shaped.getFont(0)), shaped.getGlyphId(0))
         } else {
             null
         }
@@ -1138,19 +1152,28 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      * thousands of times a frame, which cost more than the batching saved.
      */
     private fun batchInto(font: android.graphics.fonts.Font, id: Int, x: Float, textY: Float) {
+        val color = textPaint.color
         var b = lastBatch
-        if (b == null || textPaint.color != lastBatchColor || lastBatchFont !== font) {
-            b = batches.getOrPut(BatchKey(textPaint.color, font)) { GlyphBatch(font) }
+        if (b == null || b.color != color || b.font !== font) {
+            b = null
+            for (i in batches.indices) {
+                val candidate = batches[i]
+                if (candidate.color == color && candidate.font === font) {
+                    b = candidate
+                    break
+                }
+            }
+            if (b == null) {
+                b = GlyphBatch(color, font)
+                batches.add(b)
+            }
             lastBatch = b
-            lastBatchColor = textPaint.color
-            lastBatchFont = font
         }
         b.add(id, x, textY)
     }
 
+    /** The batch the previous glyph went in; a run's worth land in the same one. */
     private var lastBatch: GlyphBatch? = null
-    private var lastBatchColor = 0
-    private var lastBatchFont: android.graphics.fonts.Font? = null
 
     /** The table last asked for, for the same reason. */
     private var lastTable: GlyphTable? = null
@@ -1173,14 +1196,14 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     /** Put down everything the text pass gathered: one call per colour and face. */
     private fun flushBatches(canvas: Canvas) {
         if (!batching) return
-        for ((key, batch) in batches) {
+        for (i in batches.indices) {
+            val batch = batches[i]
             if (batch.n == 0) continue
-            textPaint.color = key.color
-            canvas.drawGlyphs(batch.ids, 0, batch.pos, 0, batch.n, key.font, textPaint)
+            textPaint.color = batch.color
+            canvas.drawGlyphs(batch.ids, 0, batch.pos, 0, batch.n, batch.font, textPaint)
             batch.n = 0
         }
         lastBatch = null
-        lastBatchFont = null
     }
 
     /**
@@ -1195,15 +1218,37 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      */
     private class GlyphTable(val font: android.graphics.fonts.Font, val ids: IntArray) {
         /**
+         * Every distinct font these glyphs come out of, one instance each.
+         *
+         * The platform hands back a fresh wrapper from every shaping call, so
+         * two glyphs out of the same fallback font arrive as unequal objects
+         * that are equal by value. Comparing them by value meant hashing a Font
+         * to find the batch a glyph belongs in, which is not cheap and happened
+         * for every run on the screen. Kept once here, identity is enough.
+         */
+        val fonts = ArrayList<android.graphics.fonts.Font>(4)
+
+        /**
          * Characters outside ASCII, each with the font it actually came out of.
          *
-         * The font matters: a box corner comes from the terminal font, but the
-         * braille a CPU graph is drawn with, or an emoji, is usually somebody
-         * else's, and glyph numbers only mean anything within one font. Keeping
-         * the font alongside the glyph is what lets those be gathered too
-         * instead of falling back to a call each.
+         * A box corner comes from the terminal font, but the braille a CPU
+         * graph is drawn with is usually somebody else's, and glyph numbers
+         * only mean anything within one font.
          */
         val extra = HashMap<Int, GlyphRef?>()
+
+        init {
+            // The face ASCII comes out of is the first one everything else is
+            // compared against, so a fallback that turns out to be the same
+            // font shares its batch rather than opening another.
+            fonts.add(font)
+        }
+
+        fun canonical(f: android.graphics.fonts.Font): android.graphics.fonts.Font {
+            for (known in fonts) if (known == f) return known
+            fonts.add(f)
+            return f
+        }
     }
 
     /** One glyph, and the font it is numbered in. */
@@ -1226,7 +1271,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      * and the glyphs of one colour never overlap so the order they go down in
      * does not matter.
      */
-    private class GlyphBatch(val font: android.graphics.fonts.Font) {
+    private class GlyphBatch(val color: Int, val font: android.graphics.fonts.Font) {
         var ids = IntArray(256)
         var pos = FloatArray(512)
         var n = 0
@@ -1245,14 +1290,15 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     /**
      * What one call can draw: everything of one colour out of one font.
      *
-     * The font is part of the key by identity rather than by a packed hash.
-     * Glyph numbers only mean anything inside the font they came from, so two
-     * fonts landing in the same batch draws one of them with the other's
-     * numbering — which looks like the right text in the wrong alphabet.
+     * A list rather than a map. A screen holds a handful of these, and walking
+     * a handful comparing an int and a reference is cheaper than hashing a Font
+     * to find one — which is what the map was doing for every run drawn.
+     *
+     * Glyph numbers only mean anything inside the font they came from, so a
+     * batch is per font as well as per colour: two fonts sharing one draws the
+     * right text in the wrong alphabet.
      */
-    private data class BatchKey(val color: Int, val font: android.graphics.fonts.Font)
-
-    private val batches = HashMap<BatchKey, GlyphBatch>()
+    private val batches = ArrayList<GlyphBatch>(16)
     private var batching = false
 
     /**
@@ -2188,6 +2234,9 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
         /** Half a blink, the rate xterm has used since forever. */
         private const val BLINK_MS = 530L
+
+        /** How early [requestFrame] may let a capped frame through, to catch the vsync it wants. */
+        private const val VSYNC_SLACK_MS = 4L
 
         /**
          * How long a new size has to hold before the grid is reshaped to it.

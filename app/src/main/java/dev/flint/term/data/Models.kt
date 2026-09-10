@@ -724,7 +724,15 @@ data class Settings(
     val customSchemes: List<TermScheme> = emptyList(),
     val scrollback: Int = 10_000,
     val vibrateOnBell: Boolean = true,
-    val keepScreenOn: Boolean = true,
+    /**
+     * Hold the screen awake while a terminal is on screen.
+     *
+     * Off by default: the display is the most expensive thing on the device by
+     * a wide margin, and a session that is only being watched now and then does
+     * not need it. Anyone who does want it — a build to keep an eye on, a log
+     * on a desk — turns it on and is told in the same breath what it costs.
+     */
+    val keepScreenOn: Boolean = false,
     val keepaliveSeconds: Int = 30,
     val appTheme: AppTheme = AppTheme.DARK,
     /** Use the wallpaper-derived Material You palette instead of the built-in one. */
@@ -934,7 +942,7 @@ data class Settings(
      * paints it. Thirty is past the point where a terminal looks any smoother
      * and costs a quarter of what 120 does.
      */
-    val maxFps: Int = 30,
+    val maxFps: Int = 0,
     val highlightEnabled: Boolean = false,
     val highlightRules: List<HighlightRule> = emptyList(),
     /** Which inline-image protocols sessions answer to. */

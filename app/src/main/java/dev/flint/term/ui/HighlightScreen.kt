@@ -53,7 +53,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import dev.flint.term.App
 import dev.flint.term.data.HighlightRule
-import dev.flint.term.terminal.HighlightMatcher
 
 /**
  * The rules that recolor what the terminal draws, in the order they are tried.
@@ -70,7 +69,9 @@ fun HighlightScreen(nav: NavController) {
     val rules = settings.highlightRules
     var editing by remember { mutableStateOf<HighlightRule?>(null) }
     // Errors are worked out once for the list; the rows only read them.
-    val errors = remember(rules) { HighlightMatcher(rules).errors }
+    val errors = remember(rules) {
+        dev.flint.term.core.highlightErrors(rules.map { it.toCore() }).associate { it.id to it.reason }
+    }
 
     fun write(list: List<HighlightRule>) = app.store.updateSettings { it.copy(highlightRules = list) }
 
@@ -113,7 +114,7 @@ fun HighlightScreen(nav: NavController) {
                         Icons.Rounded.FormatColorText, "No rules yet",
                         "A rule paints what its pattern matches on screen. The presets are the three every log has: errors in red, warnings in yellow, ok in green.",
                         "Add the presets",
-                    ) { write(HighlightMatcher.presets()) }
+                    ) { write(dev.flint.term.core.highlightPresets().map { HighlightRule(pattern = it.pattern, color = it.color) }) }
                 }
             } else {
                 item {
@@ -152,7 +153,11 @@ fun HighlightScreen(nav: NavController) {
                             "Tried from the top; the first rule to claim a piece of a line keeps it.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        val missing = remember(rules) { HighlightMatcher.presets().filter { p -> rules.none { it.pattern == p.pattern } } }
+                        val missing = remember(rules) {
+                            dev.flint.term.core.highlightPresets()
+                                .filter { p -> rules.none { it.pattern == p.pattern } }
+                                .map { HighlightRule(pattern = it.pattern, color = it.color) }
+                        }
                         if (missing.isNotEmpty()) {
                             TextButton(onClick = { write(rules + missing) }) { Text("Add the presets") }
                         }
@@ -198,13 +203,13 @@ fun HighlightRuleEditor(
     var testLine by remember { mutableStateOf("sshd[42]: error: connection reset, warning: retrying — ok") }
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isNew = initial.pattern.isBlank()
-    val error = remember(pattern) { HighlightMatcher.error(pattern) }
+    val error = remember(pattern) { dev.flint.term.core.highlightError(pattern) }
     val preview = remember(pattern, color, wholeLine, testLine, error) {
-        val matcher = HighlightMatcher(listOf(HighlightRule(pattern = pattern, color = color, wholeLine = wholeLine)))
+        val rule = HighlightRule(pattern = pattern, color = color, wholeLine = wholeLine).toCore()
         buildAnnotatedString {
             append(testLine)
-            matcher.spans(testLine).forEach { s ->
-                addStyle(SpanStyle(color = Color(s.color)), s.start.coerceIn(0, testLine.length), s.end.coerceIn(0, testLine.length))
+            dev.flint.term.core.highlightPreview(listOf(rule), testLine).forEach { s ->
+                addStyle(SpanStyle(color = Color(s.color)), s.start.toInt().coerceIn(0, testLine.length), s.end.toInt().coerceIn(0, testLine.length))
             }
         }
     }
@@ -266,3 +271,7 @@ fun HighlightRuleEditor(
         }
     }
 }
+
+/** A rule in the shape the core matches it in. */
+private fun HighlightRule.toCore() =
+    dev.flint.term.core.HighlightRule(id, pattern, color, wholeLine, enabled)
