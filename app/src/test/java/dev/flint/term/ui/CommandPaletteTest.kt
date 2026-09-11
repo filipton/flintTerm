@@ -60,11 +60,33 @@ class CommandPaletteTest {
 
     @Test
     fun `a subsequence may run from the title into the description`() {
-        val real = PaletteCatalog.settings()
+        val entries = listOf(setting("Nerd Font glyphs", "Draw prompt and file icons from the bundled symbols font"))
         assertTrue(
             "nrdglf should still find the Nerd Font row",
-            titles(PaletteSearch.rank(real, "nrdglf")).contains("Nerd Font glyphs"),
+            titles(PaletteSearch.rank(entries, "nrdglf")).contains("Nerd Font glyphs"),
         )
+    }
+
+    @Test
+    fun `every catalog entry carries its text as resources and somewhere to go`() {
+        // The titles themselves live in strings.xml now, so what can be checked
+        // here is that no entry was left half converted: one without a resource
+        // would search as an empty string and match everything.
+        val real = PaletteCatalog.settings() + PaletteCatalog.actions()
+        assertTrue("the catalog should not be empty", real.size > 20)
+        for (e in real) {
+            assertTrue("an entry has no title resource: $e", e.titleRes != 0)
+            assertTrue("an entry has no subtitle resource: $e", e.subtitleRes != 0)
+            assertTrue("an entry has nowhere to go: $e", e.route.isNotBlank())
+        }
+    }
+
+    @Test
+    fun `resolving fills the text a search matches on`() {
+        val entry = PaletteCatalog.settings().first()
+        val resolved = entry.resolved { id -> if (id == entry.titleRes) "Scrollback" else "how much it keeps" }
+        assertEquals("Scrollback", resolved.title)
+        assertEquals("how much it keeps", resolved.subtitle)
     }
 
     @Test
@@ -114,9 +136,34 @@ class CommandPaletteTest {
         assertTrue(sections.first().second.first().score >= sections.last().second.first().score)
     }
 
+
+    /**
+     * The real text of every string resource, by id.
+     *
+     * The catalog holds resource ids now, and a unit test has no resources. But
+     * `R.string`'s fields carry the ids and `strings.xml` is a file in the repo,
+     * so putting the two together gives the same text the app would show — and
+     * makes this a check that the resources exist at all.
+     */
+    private val realStrings: Map<Int, String> by lazy {
+        val ids = dev.flint.term.R.string::class.java.fields.associate { it.name to it.getInt(null) }
+        val xml = java.io.File("src/main/res/values/strings.xml").readText()
+        val text = Regex("<string name=\"([^\"]+)\">(.*?)</string>", RegexOption.DOT_MATCHES_ALL)
+            .findAll(xml)
+            .associate { m ->
+                m.groupValues[1] to m.groupValues[2]
+                    .replace("\\'", "'").replace("\\\"", "\"")
+                    .replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+            }
+        ids.mapNotNull { (name, id) -> text[name]?.let { id to it } }.toMap()
+    }
+
+    /** The shipped settings index, with its text filled in. */
+    private fun realCatalog() = PaletteCatalog.settings().map { e -> e.resolved { realStrings[it] ?: "" } }
+
     @Test
     fun `the shipped settings index is reachable by the words on the row`() {
-        val real = PaletteCatalog.settings()
+        val real = realCatalog()
         assertEquals("Data saver", titles(PaletteSearch.rank(real, "data sav")).first())
         assertEquals("Scrollback", titles(PaletteSearch.rank(real, "scroll")).first())
         assertTrue(titles(PaletteSearch.rank(real, "wallpaper")).contains("Material You colors"))
@@ -124,6 +171,6 @@ class CommandPaletteTest {
 
     @Test
     fun `a query nothing answers comes back empty rather than with everything`() {
-        assertTrue(PaletteSearch.rank(PaletteCatalog.settings(), "zzqq").isEmpty())
+        assertTrue(PaletteSearch.rank(realCatalog(), "zzqq").isEmpty())
     }
 }

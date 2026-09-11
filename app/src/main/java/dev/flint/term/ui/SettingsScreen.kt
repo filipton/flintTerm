@@ -21,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,8 +66,10 @@ fun SettingsScreen(nav: NavController) {
 
             SearchField(query, { query = it }, stringResource(R.string.settingsscreen_search_settings), Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
 
-            val hits = remember(query) {
-                if (query.isBlank()) emptyList() else PaletteSearch.rank(PaletteCatalog.settings(), query, limit = 30)
+            val context = LocalContext.current
+            val catalog = remember(context) { PaletteCatalog.settings().map { it.resolved(context::getString) } }
+            val hits = remember(query, catalog) {
+                if (query.isBlank()) emptyList() else PaletteSearch.rank(catalog, query, limit = 30)
             }
             if (query.isBlank()) {
                 Group(modifier = Modifier.padding(top = 6.dp)) {
@@ -90,8 +93,7 @@ fun SettingsScreen(nav: NavController) {
                 )
             } else {
                 // Where a match lives is as useful as the match: the row on the
-                // right says which section opens, since the search cannot scroll
-                // to the row itself.
+                // right says which section the row is in.
                 Group(modifier = Modifier.padding(top = 6.dp)) {
                     hits.forEachIndexed { i, hit ->
                         if (i > 0) RowDivider()
@@ -102,7 +104,12 @@ fun SettingsScreen(nav: NavController) {
                             subtitle = hit.entry.subtitle,
                             icon = home.icon,
                             iconTint = home.tint,
-                            onClick = { nav.navigate(hit.entry.route) },
+                            onClick = {
+                                // The section opens scrolled to this row rather than
+                                // at the top, which is the whole point of finding it.
+                                SettingsFocus.want(hit.entry.title)
+                                nav.navigate(hit.entry.route)
+                            },
                             trailing = {
                                 Text(home.title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             },

@@ -31,8 +31,10 @@ object CommandHistory {
         for (start in starts) {
             val candidate = text.substring(start).trimStart()
             if (candidate.length < 2 || isPromptDecoration(candidate)) continue
-            val lower = candidate.lowercase()
-            if (history.any { it.lowercase().startsWith(lower) }) return candidate
+            // startsWith(ignoreCase) rather than lowercasing: this runs on a
+            // tick while somebody is typing, and lowercasing the whole history
+            // for every candidate was thousands of throwaway strings a second.
+            if (history.any { it.startsWith(candidate, ignoreCase = true) }) return candidate
         }
         // A line that ends in a space has nothing typed since the last word —
         // most often a prompt with the cursor sitting after it.

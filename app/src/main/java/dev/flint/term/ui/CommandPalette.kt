@@ -114,7 +114,9 @@ fun CommandPalette(nav: NavController) {
     var query by remember { mutableStateOf("") }
     val focus = remember { FocusRequester() }
 
-    val entries = remember(hosts, snippets) {
+    val context = LocalContext.current
+    val resolve: (Int) -> String = remember(context) { { id -> context.getString(id) } }
+    val entries = remember(hosts, snippets, resolve) {
         val recent = hosts
             .map { app.store.effective(it) }
             .sortedWith(compareByDescending<Host> { it.lastConnected }.thenBy { it.displayName.lowercase() })
@@ -125,7 +127,7 @@ fun CommandPalette(nav: NavController) {
         val typeable = snippets
             .filter { it.placeholders.isEmpty() }
             .map { PaletteEntry(it.name.ifBlank { it.command }, it.command, PaletteKind.SNIPPET, id = it.id) }
-        recent + typeable + PaletteCatalog.settings() + PaletteCatalog.actions()
+        recent + typeable + (PaletteCatalog.settings() + PaletteCatalog.actions()).map { it.resolved(resolve) }
     }
     val sections = remember(entries, query) { PaletteSearch.sections(PaletteSearch.rank(entries, query)) }
 

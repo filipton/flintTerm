@@ -4,7 +4,6 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -44,21 +43,27 @@ class NetworkMonitor(context: Context) {
     init {
         refresh()
         runCatching {
-            cm?.registerNetworkCallback(
-                NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(),
-                object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) = refresh()
-                    override fun onLost(network: Network) = refresh()
-                    override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = refresh()
-                },
-            )
+            // The default network only. Asking for every network with INTERNET
+            // meant Wi-Fi, cellular and any VPN all reported separately, and
+            // every one of those wake-ups ended in the same read of whichever
+            // network is actually active — so the rest were woken for nothing.
+            cm?.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) = refresh()
+                override fun onLost(network: Network) = refresh()
+                override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = refresh(caps)
+            })
         }
     }
 
-    /** Re-read the current network. Cheap; called from the callback. */
-    fun refresh() {
+    /**
+     * Re-read the current network.
+     *
+     * [known] is the capabilities the callback was just handed, which saves
+     * asking the system for them again over Binder on every change.
+     */
+    fun refresh(known: NetworkCapabilities? = null) {
         val active = cm?.activeNetwork
-        val caps = active?.let { runCatching { cm.getNetworkCapabilities(it) }.getOrNull() }
+        val caps = known ?: active?.let { runCatching { cm.getNetworkCapabilities(it) }.getOrNull() }
         val online = caps?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
             caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
         // `NOT_METERED` is the authoritative answer; the transport is a fallback

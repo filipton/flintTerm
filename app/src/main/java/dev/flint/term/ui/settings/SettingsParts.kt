@@ -8,6 +8,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -28,17 +33,29 @@ fun SettingsSection(
     subtitle: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Taken once, on the way in: the row that matches scrolls itself into view
+    // and lights up, and going back to this screen later leaves it alone.
+    val focus = remember { dev.flint.term.ui.SettingsFocus.take() }
+    DisposableEffect(Unit) { onDispose { dev.flint.term.ui.SettingsFocus.clear() } }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = { AppHeader(title = title, subtitle = subtitle, onBack = { nav.popBackStack() }) },
     ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .verticalScroll(rememberScreenScroll("settings/$title"))
-                .padding(bottom = 40.dp),
-            content = content,
-        )
+        val scroll = rememberScreenScroll("settings/$title")
+        val column = remember(scroll) { dev.flint.term.ui.SettingsScroll(scroll) }
+        CompositionLocalProvider(
+            dev.flint.term.ui.LocalSettingsFocus provides focus,
+            dev.flint.term.ui.LocalSettingsScroll provides column,
+        ) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .onGloballyPositioned { column.topInWindow = it.positionInWindow().y }
+                    .verticalScroll(scroll)
+                    .padding(bottom = 40.dp),
+                content = content,
+            )
+        }
     }
 }

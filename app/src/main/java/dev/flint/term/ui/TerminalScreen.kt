@@ -122,6 +122,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import dev.flint.term.App
@@ -246,8 +247,16 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     // No event says "the user typed a character" — the emulator only knows the
     // screen changed — so the line is read on a slow tick, and only while there
     // is history to match it against.
-    LaunchedEffect(sessionId, hostHistory.isEmpty(), settings.completeFromHistory) {
-        if (hostHistory.isEmpty() || !settings.completeFromHistory) return@LaunchedEffect
+    // Only while the terminal is actually in front of somebody. The suggestion
+    // is drawn under the cursor, so off screen this loop was reading the grid
+    // across the bridge two and a half times a second for nobody to see.
+    var suggesting by remember { mutableStateOf(true) }
+    LifecycleResumeEffect(Unit) {
+        suggesting = true
+        onPauseOrDispose { suggesting = false }
+    }
+    LaunchedEffect(sessionId, hostHistory.isEmpty(), settings.completeFromHistory, suggesting) {
+        if (hostHistory.isEmpty() || !settings.completeFromHistory || !suggesting) return@LaunchedEffect
         while (true) {
             kotlinx.coroutines.delay(400)
             // The line the cursor is on is a command at a shell prompt and

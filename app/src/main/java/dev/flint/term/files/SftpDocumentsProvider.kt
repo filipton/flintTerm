@@ -47,21 +47,33 @@ class SftpDocumentsProvider : DocumentsProvider() {
 
     private val connections = HashMap<String, Connection>()
     private val reaper = Handler(HandlerThread("sftp-provider").apply { start() }.looper)
+    /** Set while [reap] is scheduled, so it is armed once rather than per connection. */
+    private var reaping = false
+
     private val reap = object : Runnable {
         override fun run() {
             val now = System.currentTimeMillis()
-            synchronized(connections) {
+            val more = synchronized(connections) {
                 val dead = connections.filterValues { now - it.lastUsed > IDLE_MS || !it.alive }
                 dead.forEach { (id, c) -> c.close(); connections.remove(id) }
+                connections.isNotEmpty()
             }
-            reaper.postDelayed(this, REAP_EVERY_MS)
+            // Nothing left to reap: stop waking up twice a minute until the next
+            // connection arms it again. A ContentProvider is created with the
+            // process, so this used to tick for the life of the app even when
+            // nothing had ever opened a file.
+            if (more) reaper.postDelayed(this, REAP_EVERY_MS) else reaping = false
         }
     }
 
-    override fun onCreate(): Boolean {
+    /** Start the reaper if it is not already running. Call while holding [connections]. */
+    private fun armReaper() {
+        if (reaping) return
+        reaping = true
         reaper.postDelayed(reap, REAP_EVERY_MS)
-        return true
     }
+
+    override fun onCreate(): Boolean = true
 
     override fun shutdown() {
         reaper.removeCallbacksAndMessages(null)
@@ -250,7 +262,7 @@ class SftpDocumentsProvider : DocumentsProvider() {
                 } catch (e: Exception) {
                     throw FileNotFoundException(e.message ?: "cannot connect to ${host.displayName}")
                 }
-                Connection(session, sftp).also { connections[hostId] = it }
+                Connection(session, sftp).also { connections[hostId] = it; armReaper() }
             }
         }
         connection.lastUsed = System.currentTimeMillis()

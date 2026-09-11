@@ -110,6 +110,9 @@ class SshVpnService : VpnService() {
         return START_NOT_STICKY
     }
 
+    /** The summary last put on the notification, so an unchanged one is not re-posted. */
+    private var shownSummary: String? = null
+
     /** Keep the notification honest about what is going through, and notice a dropped session. */
     private suspend fun watch(session: TerminalSession, label: String, generation: Int) {
         while (generation == this.generation) {
@@ -122,7 +125,14 @@ class SshVpnService : VpnService() {
                 return
             }
             _state.value = _state.value.copy(stats = stats)
-            promote(notification(label, summary(stats)))
+            // Re-posting is a binder round trip and a SystemUI relayout, so it
+            // only happens when the line actually reads differently. With the
+            // screen off nobody is reading it at all.
+            val line = summary(stats)
+            if (line != shownSummary && dev.flint.term.App.inForeground) {
+                shownSummary = line
+                promote(notification(label, line))
+            }
         }
     }
 

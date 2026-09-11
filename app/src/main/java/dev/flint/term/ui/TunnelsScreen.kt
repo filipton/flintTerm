@@ -108,7 +108,15 @@ fun TunnelsScreen(nav: NavController) {
     }
 
     // Live stats while the screen is open.
-    LaunchedEffect(Unit) {
+    var watching by remember { mutableStateOf(true) }
+    androidx.lifecycle.compose.LifecycleResumeEffect(Unit) {
+        watching = true
+        onPauseOrDispose { watching = false }
+    }
+    LaunchedEffect(watching) {
+        // Backgrounded, these numbers are for nobody: this used to keep
+        // crossing the bridge per tunnel every two seconds regardless.
+        if (!watching) return@LaunchedEffect
         while (true) {
             withContext(Dispatchers.IO) { app.tunnels.refreshStats() }
             delay(2000)

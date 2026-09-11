@@ -1,5 +1,12 @@
 package dev.flint.term.ui
 
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.animateColorAsState
 import dev.flint.term.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.RepeatMode
@@ -240,9 +247,39 @@ fun GroupRow(
 ) {
     val toggle = if (checked != null && onCheckedChange != null) ({ onCheckedChange(!checked) }) else null
     val click = (onClick ?: toggle)?.takeIf { enabled }
+    // A row a search sent us to says so for a moment: it scrolls itself into
+    // view and holds a tint long enough to be seen, then goes back to normal.
+    val sought = LocalSettingsFocus.current == title
+    val column = LocalSettingsScroll.current
+    var lit by remember(title) { mutableStateOf(false) }
+    var whereItIs by remember(title) { mutableStateOf(-1f) }
+    if (sought && column != null && whereItIs >= 0f) {
+        LaunchedEffect(title, whereItIs) {
+            lit = true
+            // Not quite to the top: a row with the header right above it reads
+            // as the top of the page rather than as the thing that was found.
+            column.scroll.animateScrollTo((whereItIs - 140f).coerceAtLeast(0f).toInt())
+            kotlinx.coroutines.delay(2200)
+            lit = false
+        }
+    }
+    val litColor by animateColorAsState(
+        if (lit) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else Color.Transparent,
+        label = "settings-focus",
+    )
     Row(
         (if (click != null) Modifier.clickable(onClick = click) else Modifier)
             .fillMaxWidth()
+            .then(
+                if (sought && column != null) {
+                    Modifier.onGloballyPositioned {
+                        if (whereItIs < 0f) whereItIs = it.positionInWindow().y - column.topInWindow + column.scroll.value
+                    }
+                } else {
+                    Modifier
+                },
+            )
+            .background(litColor)
             .defaultMinSize(minHeight = 50.dp)
             .alpha(if (enabled) 1f else 0.38f)
             .padding(horizontal = 16.dp, vertical = 9.dp),

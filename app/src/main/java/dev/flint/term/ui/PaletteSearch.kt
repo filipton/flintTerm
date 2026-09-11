@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+
 /**
  * What the command palette searches over, and how it decides what comes first.
  *
@@ -26,7 +28,22 @@ data class PaletteEntry(
     val kind: PaletteKind = PaletteKind.ACTION,
     val route: String = "",
     val id: String = "",
-)
+    /**
+     * The text this entry shows, for the ones that come from the catalog rather
+     * than from a host or a snippet.
+     *
+     * Held as resource ids and resolved by whoever draws the list, so a search
+     * matches what the screen actually says in the language it is set to, and
+     * the row it leads to can be found by the same name.
+     */
+    val titleRes: Int = 0,
+    val subtitleRes: Int = 0,
+) {
+    /** The same entry with its text filled in. */
+    fun resolved(res: (Int) -> String): PaletteEntry =
+        if (titleRes == 0) this
+        else copy(title = res(titleRes), subtitle = if (subtitleRes == 0) subtitle else res(subtitleRes))
+}
 
 /**
  * An entry the query found, with the characters that found it.
@@ -162,84 +179,84 @@ object PaletteCatalog {
 
     /** Every row in every settings section, each jumping to the section holding it. */
     fun settings(): List<PaletteEntry> = listOf(
-        setting("App theme", "Light, dark, or whatever the system is doing", Routes.SETTINGS_APPEARANCE),
-        setting("Material You colors", "Tint the app with your wallpaper palette", Routes.SETTINGS_APPEARANCE),
-        setting("Font size", "How big the terminal draws. Pinching changes it on the fly", Routes.SETTINGS_APPEARANCE),
-        setting("Font", "The monospaced family the terminal draws with, imported ones included", Routes.SETTINGS_APPEARANCE),
-        setting("Ligatures", "Join => -> != into single glyphs", Routes.SETTINGS_APPEARANCE),
-        setting("Nerd Font glyphs", "Draw prompt and file icons from the bundled symbols font", Routes.SETTINGS_APPEARANCE),
-        setting("Color scheme", "The terminal palette. Hosts and groups can override it", Routes.SETTINGS_APPEARANCE),
-        setting("Bold text is bright", "Draw bold text in the brighter colors, the way xterm does", Routes.SETTINGS_APPEARANCE),
-        setting("Cursor shape", "Block, bar or underline", Routes.SETTINGS_APPEARANCE),
-        setting("Cursor blink", "Pauses while you type and while the terminal is off screen", Routes.SETTINGS_APPEARANCE),
-        setting("Highlighting", "Keyword rules that recolor lines as they are drawn", Routes.HIGHLIGHTS),
-        setting("Extra keys", "The bar above the keyboard: which keys, in which order", Routes.EXTRA_KEYS),
-        setting("Chords", "The tmux, Ctrl and agent keys on the sheet you get by holding Ctrl", Routes.CHORDS),
-        setting("Keyboard protocol", "Lets a program see the difference between Ctrl+[ and Escape, and see Shift+Enter at all", Routes.SETTINGS_KEYBOARD),
-        setting("Type with the app's keyboard", "A plain layout with Ctrl on the bottom row, drawn in the app", Routes.SETTINGS_KEYBOARD),
-        setting("Ctrl keys always send control bytes", "Ctrl+C still interrupts a program that has taken the keyboard over", Routes.SETTINGS_KEYBOARD),
-        setting("Keep the compose line open", "The ✎ field and what was being written in it survive leaving the session", Routes.SETTINGS_KEYBOARD),
-        setting("Caps Lock acts as", "Escape, Ctrl, or Caps Lock", Routes.SETTINGS_KEYBOARD),
-        setting("Double tap locks a modifier", "Tap Ctrl twice and it stays down until you tap it again", Routes.SETTINGS_KEYBOARD),
-        setting("Double tap sends Tab", "The key a phone keyboard hides, two taps away", Routes.SETTINGS_KEYBOARD),
-        setting("Two-finger drag sends arrows", "Slide two fingers to walk the cursor. Pinch still zooms", Routes.SETTINGS_KEYBOARD),
-        setting("Hold Ctrl for chords", "A long press on Ctrl opens the chords sheet. A tap is still the modifier", Routes.SETTINGS_KEYBOARD),
-        setting("Swipe between sessions", "Drag sideways in the terminal to move along the tab strip", Routes.SETTINGS_KEYBOARD),
-        setting("Scrollback", "How many lines a session keeps behind the screen", Routes.SETTINGS_TERMINAL),
-        setting("Redraw limit", "Caps repaints under heavy output to save battery", Routes.SETTINGS_TERMINAL),
-        setting("Inline images", "Pictures drawn in the terminal by chafa, timg or kitty's icat", Routes.SETTINGS_TERMINAL),
-        setting("Predictive echo", "Mosh can draw a keystroke before the server confirms it", Routes.SETTINGS_TERMINAL),
-        setting("Complete from history", "The rest of a command you have run here, in gray after the cursor", Routes.SETTINGS_TERMINAL),
-        setting("Tab takes the suggestion", "Only while one is showing. Otherwise Tab is the shell's own completion", Routes.SETTINGS_TERMINAL),
-        setting("Session recordings", "Record every session, and in which format", Routes.SETTINGS_TERMINAL),
-        setting("Session tabs", "The strip of names under the terminal's bar", Routes.SETTINGS_SESSIONS),
-        setting("Reopen sessions", "After the app is killed, what was open is dialled again", Routes.SETTINGS_SESSIONS),
-        setting("Keep floating when you leave", "Switching apps leaves the terminal in a small window", Routes.SETTINGS_SESSIONS),
-        setting("tmux controls", "The chords sheet, the window list, and the sideways swipe", Routes.SETTINGS_SESSIONS),
-        setting("Keep screen on", "While a terminal is open", Routes.SETTINGS_SESSIONS),
-        setting("Notify on bell", "When the app is in the background", Routes.SETTINGS_SESSIONS),
-        setting("Vibrate on bell", "A buzz to go with it", Routes.SETTINGS_SESSIONS),
-        setting("Long command finished", "A notification when a command over 30 seconds ends in the background", Routes.SETTINGS_SESSIONS),
-        setting("Let programs raise a notification", "A script on the server can ask for one with an escape sequence", Routes.SETTINGS_SESSIONS),
-        setting("Keepalive", "How often an idle session pokes the server", Routes.SETTINGS_CONNECTIONS),
-        setting("Data saver", "Holds transfers for Wi-Fi and spaces out keepalives", Routes.SETTINGS_CONNECTIONS),
-        setting("Ask before agent signing", "A forwarded key asks before it signs", Routes.SETTINGS_CONNECTIONS),
-        setting("Find hosts on this network", "Servers that announce SSH on this network appear under Nearby", Routes.SETTINGS_CONNECTIONS),
-        setting("Show the server's message", "What a server prints before login", Routes.SETTINGS_CONNECTIONS),
-        setting("Learn the host's shell history", "Read its history so it completes what you type", Routes.SETTINGS_CONNECTIONS),
-        setting("Resolver", "Which DNS a tunnelled name is asked of", Routes.SETTINGS_CONNECTIONS),
-        setting("Open a text file with", "The built-in editor, or an app on the phone", Routes.SETTINGS_FILES),
-        setting("Keep a .bak", "Copy the file on the host before saving over it", Routes.SETTINGS_FILES),
-        setting("Show hidden files", "Dotfiles in the SFTP browser", Routes.SETTINGS_FILES),
-        setting("Where files dropped on the terminal go", "The folder an upload lands in", Routes.SETTINGS_FILES),
-        setting("Back up to a file", "Hosts, keys, snippets and settings, sealed with a passphrase", Routes.SETTINGS_BACKUP),
-        setting("Restore from a file", "Adds what the file has. Nothing here is deleted", Routes.SETTINGS_BACKUP),
-        setting("App lock", "Fingerprint, face or screen lock before hosts and keys open", Routes.SETTINGS_SECURITY),
-        setting("Lock again after", "How long a trip to another app may last", Routes.SETTINGS_SECURITY),
-        setting("Let other apps drive sessions", "Tasker, Automate and adb can connect, run a command or disconnect", Routes.SETTINGS_AUTOMATION),
-        setting("Recent calls from other apps", "The last ten, with the app that made them", Routes.SETTINGS_AUTOMATION),
-        setting("About", "Version, licenses, and what the core is built from", Routes.SETTINGS_ABOUT),
+        setting(R.string.appearancesettings_app_theme, R.string.palette_light_dark_or_whatever_the_system_is_doing, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.appearancesettings_material_you_colors, R.string.appearancesettings_tint_the_app_with_your_wallpaper_palette, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.appearancesettings_font_size, R.string.palette_how_big_the_terminal_draws_pinching_changes, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.appearancesettings_font, R.string.palette_the_monospaced_family_the_terminal_draws_wit, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.appearancesettings_ligatures, R.string.palette_join_into_single_glyphs, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.appearancesettings_nerd_font_glyphs, R.string.appearancesettings_draw_prompt_and_file_icons_from_the_bundled_symb, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.appearancesettings_color_scheme, R.string.palette_the_terminal_palette_hosts_and_groups_can_ov, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.appearancesettings_bold_text_is_bright, R.string.appearancesettings_draw_bold_text_in_the_brighter_colors_the_way_xt, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.palette_cursor_shape, R.string.palette_block_bar_or_underline, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.palette_cursor_blink, R.string.appearancesettings_pauses_while_you_type_and_while_the_terminal_is, Routes.SETTINGS_APPEARANCE),
+        setting(R.string.appearancesettings_highlighting, R.string.palette_keyword_rules_that_recolor_lines_as_they_are, Routes.HIGHLIGHTS),
+        setting(R.string.extrakeysscreen_extra_keys, R.string.palette_the_bar_above_the_keyboard_which_keys_in_whi, Routes.EXTRA_KEYS),
+        setting(R.string.chordsscreen_chords, R.string.keyboardsettings_the_tmux_ctrl_and_agent_keys_on_the_sheet_you_ge, Routes.CHORDS),
+        setting(R.string.hosteditscreen_keyboard_protocol, R.string.palette_lets_a_program_see_the_difference_between_ct, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_type_with_the_app_s_keyboard, R.string.palette_a_plain_layout_with_ctrl_on_the_bottom_row_d, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_ctrl_keys_always_send_control_bytes, R.string.palette_ctrl_c_still_interrupts_a_program_that_has_t, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_keep_the_compose_line_open, R.string.palette_the_field_and_what_was_being_written_in_it_s, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_caps_lock_acts_as, R.string.palette_escape_ctrl_or_caps_lock, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_double_tap_locks_a_modifier, R.string.palette_tap_ctrl_twice_and_it_stays_down_until_you_t, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_double_tap_sends_tab, R.string.palette_the_key_a_phone_keyboard_hides_two_taps_away, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_two_finger_drag_sends_arrows, R.string.keyboardsettings_slide_two_fingers_to_walk_the_cursor_pinch_still, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_hold_ctrl_for_chords, R.string.palette_a_long_press_on_ctrl_opens_the_chords_sheet, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.keyboardsettings_swipe_between_sessions, R.string.keyboardsettings_drag_sideways_in_the_terminal_to_move_along_the, Routes.SETTINGS_KEYBOARD),
+        setting(R.string.terminalsettings_scrollback, R.string.palette_how_many_lines_a_session_keeps_behind_the_sc, Routes.SETTINGS_TERMINAL),
+        setting(R.string.terminalsettings_redraw_limit, R.string.palette_caps_repaints_under_heavy_output_to_save_bat, Routes.SETTINGS_TERMINAL),
+        setting(R.string.hosteditscreen_inline_images, R.string.terminalsettings_pictures_drawn_in_the_terminal_by_chafa_timg_or, Routes.SETTINGS_TERMINAL),
+        setting(R.string.terminalsettings_predictive_echo, R.string.palette_mosh_can_draw_a_keystroke_before_the_server, Routes.SETTINGS_TERMINAL),
+        setting(R.string.terminalsettings_complete_from_history, R.string.palette_the_rest_of_a_command_you_have_run_here_in_g, Routes.SETTINGS_TERMINAL),
+        setting(R.string.terminalsettings_tab_takes_the_suggestion, R.string.terminalsettings_only_while_one_is_showing_otherwise_tab_is_the_s, Routes.SETTINGS_TERMINAL),
+        setting(R.string.terminalsettings_session_recordings, R.string.palette_record_every_session_and_in_which_format, Routes.SETTINGS_TERMINAL),
+        setting(R.string.sessionssettings_session_tabs, R.string.palette_the_strip_of_names_under_the_terminal_s_bar, Routes.SETTINGS_SESSIONS),
+        setting(R.string.sessionssettings_reopen_sessions, R.string.palette_after_the_app_is_killed_what_was_open_is_dia, Routes.SETTINGS_SESSIONS),
+        setting(R.string.sessionssettings_keep_floating_when_you_leave, R.string.palette_switching_apps_leaves_the_terminal_in_a_smal, Routes.SETTINGS_SESSIONS),
+        setting(R.string.hosteditscreen_tmux_controls, R.string.palette_the_chords_sheet_the_window_list_and_the_sid, Routes.SETTINGS_SESSIONS),
+        setting(R.string.sessionssettings_keep_screen_on, R.string.palette_while_a_terminal_is_open, Routes.SETTINGS_SESSIONS),
+        setting(R.string.sessionssettings_notify_on_bell, R.string.sessionssettings_when_the_app_is_in_the_background, Routes.SETTINGS_SESSIONS),
+        setting(R.string.sessionssettings_vibrate_on_bell, R.string.palette_a_buzz_to_go_with_it, Routes.SETTINGS_SESSIONS),
+        setting(R.string.sessionssettings_long_command_finished, R.string.palette_a_notification_when_a_command_over_30_second, Routes.SETTINGS_SESSIONS),
+        setting(R.string.sessionssettings_let_programs_raise_a_notification, R.string.palette_a_script_on_the_server_can_ask_for_one_with, Routes.SETTINGS_SESSIONS),
+        setting(R.string.connectionssettings_keepalive, R.string.palette_how_often_an_idle_session_pokes_the_server, Routes.SETTINGS_CONNECTIONS),
+        setting(R.string.connectionssettings_data_saver, R.string.palette_holds_transfers_for_wi_fi_and_spaces_out_kee, Routes.SETTINGS_CONNECTIONS),
+        setting(R.string.connectionssettings_ask_before_agent_signing, R.string.palette_a_forwarded_key_asks_before_it_signs, Routes.SETTINGS_CONNECTIONS),
+        setting(R.string.connectionssettings_find_hosts_on_this_network, R.string.connectionssettings_servers_that_announce_ssh_on_this_network_appear, Routes.SETTINGS_CONNECTIONS),
+        setting(R.string.connectionssettings_show_the_server_s_message, R.string.palette_what_a_server_prints_before_login, Routes.SETTINGS_CONNECTIONS),
+        setting(R.string.connectionssettings_learn_the_host_s_shell_history, R.string.palette_read_its_history_so_it_completes_what_you_ty, Routes.SETTINGS_CONNECTIONS),
+        setting(R.string.palette_resolver, R.string.palette_which_dns_a_tunnelled_name_is_asked_of, Routes.SETTINGS_CONNECTIONS),
+        setting(R.string.filessettings_open_a_text_file_with, R.string.palette_the_built_in_editor_or_an_app_on_the_phone, Routes.SETTINGS_FILES),
+        setting(R.string.filessettings_keep_a_bak, R.string.filessettings_copy_the_file_on_the_host_before_saving_over_it, Routes.SETTINGS_FILES),
+        setting(R.string.filessettings_show_hidden_files, R.string.filessettings_dotfiles_in_the_sftp_browser, Routes.SETTINGS_FILES),
+        setting(R.string.filessettings_where_files_dropped_on_the_terminal_go, R.string.palette_the_folder_an_upload_lands_in, Routes.SETTINGS_FILES),
+        setting(R.string.backupdialogs_back_up_to_a_file, R.string.palette_hosts_keys_snippets_and_settings_sealed_with, Routes.SETTINGS_BACKUP),
+        setting(R.string.backupsettings_restore_from_a_file, R.string.backupsettings_adds_what_the_file_has_nothing_here_is_deleted, Routes.SETTINGS_BACKUP),
+        setting(R.string.securitysettings_app_lock, R.string.securitysettings_fingerprint_face_or_screen_lock_before_hosts_and, Routes.SETTINGS_SECURITY),
+        setting(R.string.securitysettings_lock_again_after, R.string.palette_how_long_a_trip_to_another_app_may_last, Routes.SETTINGS_SECURITY),
+        setting(R.string.automationsettings_let_other_apps_drive_sessions, R.string.palette_tasker_automate_and_adb_can_connect_run_a_co, Routes.SETTINGS_AUTOMATION),
+        setting(R.string.palette_recent_calls_from_other_apps, R.string.palette_the_last_ten_with_the_app_that_made_them, Routes.SETTINGS_AUTOMATION),
+        setting(R.string.palette_about, R.string.palette_version_licenses_and_what_the_core_is_built, Routes.SETTINGS_ABOUT),
     )
 
     /** The things the app does that are not a setting. */
     fun actions(): List<PaletteEntry> = listOf(
-        action("New host", "Add a server", Routes.hostEdit("new")),
-        action("Keys", "SSH keys on this phone: generate, import, replace", Routes.KEYS),
-        action("Accounts", "A login several hosts share", Routes.ACCOUNTS),
-        action("Groups", "Folders that hand their hosts a jump host, a VPN, a proxy, an account", Routes.GROUPS),
-        action("Snippets", "Commands worth keeping, typed into a session", Routes.SNIPPETS),
-        action("VPNs and proxies", "WireGuard tunnels, Tailscale accounts and saved proxies", Routes.TUNNELS),
-        action("Known hosts", "The host keys this phone has trusted", Routes.KNOWN_HOSTS),
-        action("Transfers", "Files on their way to or from a host", Routes.TRANSFERS),
-        action("Recordings", "Play back a recording, read a log, share or delete one", Routes.RECORDINGS),
-        action("Run on many hosts", "One command across several servers, each answer beside its host", Routes.BROADCAST),
-        action("Color scheme", "Preview every scheme as a real session", Routes.THEME),
-        action("Settings", "The index of all of it", Routes.SETTINGS),
+        action(R.string.hostsscreen_new_host, R.string.palette_add_a_server, Routes.hostEdit("new")),
+        action(R.string.keysscreen_keys, R.string.palette_ssh_keys_on_this_phone_generate_import_repla, Routes.KEYS),
+        action(R.string.accountsscreen_accounts, R.string.palette_a_login_several_hosts_share, Routes.ACCOUNTS),
+        action(R.string.groupsscreen_groups, R.string.palette_folders_that_hand_their_hosts_a_jump_host_a, Routes.GROUPS),
+        action(R.string.snippetsheet_snippets, R.string.palette_commands_worth_keeping_typed_into_a_session, Routes.SNIPPETS),
+        action(R.string.hostsscreen_vpns_and_proxies, R.string.palette_wireguard_tunnels_tailscale_accounts_and_sav, Routes.TUNNELS),
+        action(R.string.palette_known_hosts, R.string.palette_the_host_keys_this_phone_has_trusted, Routes.KNOWN_HOSTS),
+        action(R.string.hostsscreen_transfers, R.string.hostsscreen_files_on_their_way_to_or_from_a_host, Routes.TRANSFERS),
+        action(R.string.recordingsscreen_recordings, R.string.terminalsettings_play_back_a_recording_read_a_log_share_or_delete, Routes.RECORDINGS),
+        action(R.string.broadcastscreen_run_on_many_hosts, R.string.hostsscreen_one_command_across_several_servers_each_answer_b, Routes.BROADCAST),
+        action(R.string.appearancesettings_color_scheme, R.string.palette_preview_every_scheme_as_a_real_session, Routes.THEME),
+        action(R.string.settingsscreen_settings, R.string.palette_the_index_of_all_of_it, Routes.SETTINGS),
     )
 
-    private fun setting(title: String, subtitle: String, route: String) =
-        PaletteEntry(title, subtitle, PaletteKind.SETTING, route)
+    private fun setting(title: Int, subtitle: Int, route: String) =
+        PaletteEntry("", "", PaletteKind.SETTING, route, titleRes = title, subtitleRes = subtitle)
 
-    private fun action(title: String, subtitle: String, route: String) =
-        PaletteEntry(title, subtitle, PaletteKind.ACTION, route)
+    private fun action(title: Int, subtitle: Int, route: String) =
+        PaletteEntry("", "", PaletteKind.ACTION, route, titleRes = title, subtitleRes = subtitle)
 }

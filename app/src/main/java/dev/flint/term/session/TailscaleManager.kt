@@ -81,17 +81,50 @@ class TailscaleManager(private val context: Context, private val store: Store) {
                     override fun onLinkPropertiesChanged(network: Network, lp: android.net.LinkProperties) = pushInterfaces()
                 })
             }
-        }
-        // Nothing is started here: a profile means "may be used", not "keep a
-        // node up". Cheap poll; the screens show live state and sessions wait
-        // for "running".
-        scope.launch {
-            while (true) {
-                refresh()
-                val busy = _statuses.value.values.any { it.state == "starting" || it.state == "needs-login" }
-                delay(if (busy) 1500 else 5000)
+            // Nothing is started here: a profile means "may be used", not "keep
+            // a node up". The poll only has to be quick while something is
+            // actually happening, so an idle phone with every node stopped asks
+            // once a minute instead of twelve times, and a device that cannot
+            // run Tailscale at all never asks.
+            scope.launch {
+                while (true) {
+                    val watched = watchers.get() > 0
+                    val live = _statuses.value.values.any { it.state != "stopped" }
+                    if (watched || live) refresh()
+                    val busy = _statuses.value.values.any { it.state == "starting" || it.state == "needs-login" }
+                    val wait = when {
+                        busy -> 1_500L
+                        watched -> 5_000L
+                        live -> 15_000L
+                        else -> 60_000L
+                    }
+                    // Anything that starts a node pokes this, so waiting a
+                    // minute never delays a connection.
+                    withTimeoutOrNull(wait) { wake.receive() }
+                }
             }
         }
+    }
+
+    /** Screens showing live node state, so the poll knows to keep up. */
+    private val watchers = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /** Wakes the status poll when something has just changed. */
+    private val wake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+    /** Called by a screen that is showing node state, and again when it goes. */
+    fun watch() {
+        watchers.incrementAndGet()
+        wake.trySend(Unit)
+    }
+
+    fun unwatch() {
+        watchers.decrementAndGet()
+    }
+
+    /** Ask the status poll to look again now. */
+    fun poke() {
+        wake.trySend(Unit)
     }
 
     fun status(id: String): TailscaleStatus =
@@ -191,6 +224,7 @@ class TailscaleManager(private val context: Context, private val store: Store) {
                 .onFailure { Log.w("Tailscale", "configure ${p.name}: ${it.message}") }
             runCatching { tailscaleUp(id) }.onFailure { Log.w("Tailscale", "up ${p.name}: ${it.message}") }
             refresh()
+            poke()
         }
     }
 

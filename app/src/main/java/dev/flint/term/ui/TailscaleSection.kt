@@ -93,6 +93,12 @@ fun TailscaleSection(onOpen: (TailscaleProfile) -> Unit) {
     val ts = app.tailscale
     val profiles by app.store.tailscaleProfiles.collectAsStateWithLifecycle()
     val statuses by ts.statuses.collectAsStateWithLifecycle()
+    // While this is on screen the status poll keeps up. Off screen it slows
+    // right down, which is most of what it used to cost.
+    androidx.compose.runtime.DisposableEffect(ts) {
+        ts.watch()
+        onDispose { ts.unwatch() }
+    }
     val hosts by app.store.hosts.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var testing by remember { mutableStateOf<String?>(null) }

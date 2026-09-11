@@ -54,6 +54,17 @@ class TransferService : Service() {
         return START_NOT_STICKY
     }
 
+    /**
+     * Android 15 and later give a `dataSync` service six hours in any day, and
+     * then call this. There are only seconds to stand down before the system
+     * takes it as a crash, so the transfers are stopped and the service goes.
+     */
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        val manager = (application as App).transfers
+        manager.transfers.value.filter { it.isActive }.forEach { manager.cancel(it.id) }
+        stopSelf()
+    }
+
     private fun render(all: List<Transfer>) {
         val active = all.filter { it.isActive }
 

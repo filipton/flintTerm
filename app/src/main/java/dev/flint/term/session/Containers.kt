@@ -471,6 +471,14 @@ object ContainerLogs {
             var shown = emptyList<String>()
             try {
                 while (isActive && !tab.destroyed && sessions.get(tab.id) != null) {
+                    // Backgrounded, this was opening an exec channel to the host
+                    // every two seconds to fetch a log nobody was reading, which
+                    // on cellular means the radio never settles. Wait it out
+                    // instead, and pick up where it left off on the way back.
+                    if (!dev.flint.term.App.inForeground) {
+                        delay(FOLLOW_MILLIS)
+                        continue
+                    }
                     val read = runCatching { exec.run(command) }
                     val text = read.getOrElse {
                         tab.write(it.message ?: "the log stopped")
