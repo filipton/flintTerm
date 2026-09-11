@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -217,8 +219,8 @@ fun WorkspaceTabs(
                     manyHosts -> "$name · $dir"
                     else -> dir
                 }
-                is Pane.Files -> if (manyHosts) "Files · $name" else "Files"
-                is Pane.Server -> if (manyHosts) "Server · $name" else "Server"
+                is Pane.Files -> if (manyHosts) stringResource(R.string.workspace_files, name) else "Files"
+                is Pane.Server -> if (manyHosts) stringResource(R.string.workspace_server, name) else "Server"
             }
             val glyph = paneIcon(pane)
             // Which tabs the keys are going to, while typing is broadcast: the
@@ -258,7 +260,7 @@ fun WorkspaceTabs(
                 if (both) {
                     Spacer(Modifier.width(5.dp))
                     Text(
-                        "both",
+                        stringResource(R.string.workspace_both),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier
@@ -269,7 +271,7 @@ fun WorkspaceTabs(
                 }
                 if (selected) {
                     IconButton(onClick = { onClose(pane) }, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Rounded.Close, "Close $label", Modifier.size(13.dp), tint = onChromeMuted)
+                        Icon(Icons.Rounded.Close, stringResource(R.string.workspace_close, label), Modifier.size(13.dp), tint = onChromeMuted)
                     }
                 }
             }
@@ -452,10 +454,10 @@ fun PaneBeside(
                 modifier = Modifier.weight(1f),
             )
             IconButton(onClick = onSwap, modifier = Modifier.size(24.dp)) {
-                Icon(Icons.Rounded.SwapHoriz, "Work in this pane", Modifier.size(14.dp), tint = chrome.muted)
+                Icon(Icons.Rounded.SwapHoriz, stringResource(R.string.workspace_work_in_this_pane), Modifier.size(14.dp), tint = chrome.muted)
             }
             IconButton(onClick = { Workspace.closeBeside() }, modifier = Modifier.size(24.dp)) {
-                Icon(Icons.Rounded.Close, "Close this pane", Modifier.size(13.dp), tint = chrome.muted)
+                Icon(Icons.Rounded.Close, stringResource(R.string.workspace_close_this_pane), Modifier.size(13.dp), tint = chrome.muted)
             }
         }
         when (pane) {

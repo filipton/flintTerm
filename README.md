@@ -117,6 +117,7 @@ is covered in [docs/terminal-backend.md](docs/terminal-backend.md).
 - [Features in full](docs/features.md)
 - [Backup and automation](docs/automation.md), driving a session from Tasker, a script or adb
 - [Building, testing, releasing](docs/building.md)
+- [Translating flintTerm](docs/translating.md), and how to send a language in
 - [The terminal backend](docs/terminal-backend.md)
 - [Changelog](CHANGELOG.md)
 

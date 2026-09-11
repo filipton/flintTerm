@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -67,12 +69,12 @@ fun AccountsScreen(nav: NavController) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(title = "Accounts", onBack = { nav.popBackStack() }) },
+        topBar = { AppHeader(title = stringResource(R.string.accountsscreen_accounts), onBack = { nav.popBackStack() }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { editing = Account() },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("Add") },
+                text = { Text(stringResource(R.string.accountsscreen_add)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -84,9 +86,9 @@ fun AccountsScreen(nav: NavController) {
                 item {
                     EmptyState(
                         Icons.Rounded.Person,
-                        "No accounts yet",
-                        "An account is a username and a key or password that hosts can share. Add one, then pick it in a host instead of typing the login again.",
-                        actionLabel = "Add an account",
+                        stringResource(R.string.accountsscreen_no_accounts_yet),
+                        stringResource(R.string.accountsscreen_an_account_is_a_username_and_a_key_or_password_t),
+                        actionLabel = stringResource(R.string.accountsscreen_add_an_account),
                         onAction = { editing = Account() },
                     )
                 }
@@ -103,8 +105,8 @@ fun AccountsScreen(nav: NavController) {
                             Text(
                                 when (used) {
                                     0 -> "unused"
-                                    1 -> "1 host"
-                                    else -> "$used hosts"
+                                    1 -> stringResource(R.string.accountsscreen_1_host)
+                                    else -> stringResource(R.string.accountsscreen_hosts, used)
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -131,11 +133,11 @@ fun AccountsScreen(nav: NavController) {
 private fun accountSummary(a: Account, app: App): String {
     val identities by app.store.identities.collectAsStateWithLifecycle()
     val how = when (a.authType) {
-        AuthType.KEY -> identities.firstOrNull { it.id == a.identityId }?.name?.ifBlank { "key" } ?: "no key chosen"
-        AuthType.PASSWORD -> if (a.password.isEmpty()) "password asked for" else "password"
-        AuthType.NONE -> "no authentication"
+        AuthType.KEY -> identities.firstOrNull { it.id == a.identityId }?.name?.ifBlank { "key" } ?: stringResource(R.string.accountsscreen_no_key_chosen)
+        AuthType.PASSWORD -> if (a.password.isEmpty()) stringResource(R.string.accountsscreen_password_asked_for) else "password"
+        AuthType.NONE -> stringResource(R.string.accountsscreen_no_authentication)
     }
-    return listOf(a.username.ifBlank { "no username" }, how).joinToString("  ·  ")
+    return listOf(a.username.ifBlank { stringResource(R.string.accountsscreen_no_username) }, how).joinToString("  ·  ")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -154,20 +156,20 @@ fun AccountSheet(
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(if (onDelete == null) "New account" else "Edit account", style = MaterialTheme.typography.titleLarge)
-            Field(draft.name, { draft = draft.copy(name = it) }, "Name", placeholder = "Deploy user")
+            Text(if (onDelete == null) stringResource(R.string.accountsscreen_new_account) else stringResource(R.string.accountsscreen_edit_account), style = MaterialTheme.typography.titleLarge)
+            Field(draft.name, { draft = draft.copy(name = it) }, "Name", placeholder = stringResource(R.string.accountsscreen_deploy_user))
             Field(
-                draft.username, { draft = draft.copy(username = it) }, "Username", mono = true, placeholder = "root",
+                draft.username, { draft = draft.copy(username = it) }, "Username", mono = true, placeholder = stringResource(R.string.accountsscreen_root),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                 autofill = ContentType.Username,
             )
-            Segmented(listOf("Password", "SSH key", "None"), draft.authType.ordinal) {
+            Segmented(listOf("Password", stringResource(R.string.accountsscreen_ssh_key), "None"), draft.authType.ordinal) {
                 draft = draft.copy(authType = AuthType.entries[it])
             }
             if (draft.authType == AuthType.KEY) {
                 if (identities.isEmpty()) {
                     Text(
-                        "No keys yet. Generate or import one on the SSH keys screen.",
+                        stringResource(R.string.accountsscreen_no_keys_yet_generate_or_import_one_on_the_ssh_ke),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
@@ -186,13 +188,13 @@ fun AccountSheet(
             if (draft.authType != AuthType.NONE) {
                 Field(
                     draft.password, { draft = draft.copy(password = it) },
-                    if (draft.authType == AuthType.KEY) "Password fallback (optional)" else "Password",
+                    if (draft.authType == AuthType.KEY) stringResource(R.string.accountsscreen_password_fallback_optional) else "Password",
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     autofill = ContentType.Password,
                     trailing = {
                         IconButton(onClick = { showPassword = !showPassword }) {
-                            Icon(if (showPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, "Toggle visibility")
+                            Icon(if (showPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, stringResource(R.string.accountsscreen_toggle_visibility))
                         }
                     },
                 )
@@ -202,21 +204,21 @@ fun AccountSheet(
                 if (onDelete != null) {
                     TextButton(onClick = onDelete) {
                         Icon(Icons.Rounded.Delete, null)
-                        Text(" Delete")
+                        Text(stringResource(R.string.accountsscreen_delete))
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("Cancel") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.accountsscreen_cancel)) }
                 Button(
                     onClick = { onSave(draft.copy(name = draft.name.trim(), username = draft.username.trim())) },
                     enabled = draft.username.isNotBlank() || draft.name.isNotBlank(),
-                ) { Text("Save") }
+                ) { Text(stringResource(R.string.accountsscreen_save)) }
             }
             // Deleting an account should not quietly log a host out, so what
             // happens instead is said before it is pressed.
             if (onDelete != null) {
                 Text(
-                    "Deleting puts this login back into each host that used it, so nothing stops working.",
+                    stringResource(R.string.accountsscreen_deleting_puts_this_login_back_into_each_host_tha),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

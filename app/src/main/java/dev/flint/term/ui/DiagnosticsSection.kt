@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -72,10 +74,10 @@ fun DiagnosticsSection(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text("Check what is reachable", style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.diagnosticssection_check_what_is_reachable), style = MaterialTheme.typography.titleSmall)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Field(
-                target, { target = it }, "Address or name", Modifier.weight(1f), mono = true,
+                target, { target = it }, stringResource(R.string.diagnosticssection_address_or_name), Modifier.weight(1f), mono = true,
                 placeholder = "10.0.0.5",
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             )
@@ -90,26 +92,26 @@ fun DiagnosticsSection(
                     enabled = !busy && target.isNotBlank(),
                     onClick = { run { onPing(target.trim()) } },
                     modifier = Modifier.weight(1f),
-                ) { Text("Ping") }
+                ) { Text(stringResource(R.string.diagnosticssection_ping)) }
             }
             OutlinedButton(
                 enabled = !busy && target.isNotBlank() && port.toIntOrNull() != null,
                 onClick = { run { onPort(target.trim(), port.toInt()) } },
                 modifier = Modifier.weight(1f),
-            ) { Text("Port") }
+            ) { Text(stringResource(R.string.diagnosticssection_port)) }
             if (onResolve != null) {
                 OutlinedButton(
                     enabled = !busy && target.isNotBlank(),
                     onClick = { run { onResolve(target.trim()) } },
                     modifier = Modifier.weight(1f),
-                ) { Text("Resolve") }
+                ) { Text(stringResource(R.string.diagnosticssection_resolve)) }
             }
         }
         if (busy) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Checking…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.diagnosticssection_checking), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         // Newest first, a few kept: enough to compare "before" with "after".
@@ -136,9 +138,9 @@ fun DiagnosticsSection(
         }
         Text(
             if (canPing) {
-                "Sent inside the tunnel, not from the phone's ordinary network. A ping from anywhere else would not go through it."
+                stringResource(R.string.diagnosticssection_sent_inside_the_tunnel_not_from_the_phone_s_ordi)
             } else {
-                "Dialled through the node, so it answers for the tailnet rather than for this phone's network."
+                stringResource(R.string.diagnosticssection_dialled_through_the_node_so_it_answers_for_the_t)
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

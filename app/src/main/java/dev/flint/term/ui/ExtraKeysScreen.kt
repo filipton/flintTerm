@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -207,7 +209,7 @@ private fun KeyRow(
                     .then(if (dimmed) Modifier else Modifier.clickable { onAdd() })
                     .padding(horizontal = 10.dp),
                 contentAlignment = Alignment.Center,
-            ) { Icon(Icons.Rounded.Add, "Add key", tint = MaterialTheme.colorScheme.primary) }
+            ) { Icon(Icons.Rounded.Add, stringResource(R.string.extrakeysscreen_add_key), tint = MaterialTheme.colorScheme.primary) }
         }
     }
 }
@@ -234,10 +236,10 @@ fun ExtraKeysScreen(nav: NavController) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Extra keys", onBack = { nav.popBackStack() },
+                title = stringResource(R.string.extrakeysscreen_extra_keys), onBack = { nav.popBackStack() },
                 actions = {
                     IconButton(onClick = { app.store.updateSettings { it.copy(extraKeysRow1 = null, extraKeysRow2 = null) }; selected = null }) {
-                        Icon(Icons.Rounded.RestartAlt, "Reset to defaults")
+                        Icon(Icons.Rounded.RestartAlt, stringResource(R.string.extrakeysscreen_reset_to_defaults))
                     }
                 },
             )
@@ -245,13 +247,13 @@ fun ExtraKeysScreen(nav: NavController) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("extrakeys")).padding(bottom = 40.dp)) {
             Text(
-                "This is the bar above the keyboard. The first row shares the width, the second one scrolls. Hold a key to drag it somewhere else, or tap it to move it to the other row or take it out.",
+                stringResource(R.string.extrakeysscreen_this_is_the_bar_above_the_keyboard_the_first_row),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
             )
             rows().forEachIndexed { r, tokens ->
                 val hidden = r == 1 && settings.extraKeysRows < 2
-                Group(if (r == 0) "Row 1, fixed" else "Row 2, scrolls") {
+                Group(if (r == 0) stringResource(R.string.extrakeysscreen_row_1_fixed) else stringResource(R.string.extrakeysscreen_row_2_scrolls)) {
                     KeyRow(
                         tokens = tokens,
                         grouped = settings.groupArrowKeys,
@@ -267,7 +269,7 @@ fun ExtraKeysScreen(nav: NavController) {
                         // a list of unrelated preferences at the foot of the page.
                         GroupRow(
                             title = if (hidden) "Hidden" else "Shown",
-                            subtitle = if (hidden) "Turned off, and kept as it is" else "On screen under the first row",
+                            subtitle = if (hidden) stringResource(R.string.extrakeysscreen_turned_off_and_kept_as_it_is) else stringResource(R.string.extrakeysscreen_on_screen_under_the_first_row),
                             icon = Icons.Rounded.Keyboard,
                             iconTint = MaterialTheme.colorScheme.secondary,
                             checked = !hidden,
@@ -284,7 +286,7 @@ fun ExtraKeysScreen(nav: NavController) {
                                 update(r, tokens.filterIndexed { i, _ -> i != sel.second })
                                 if (other == 1) save(row1.filterIndexed { i, _ -> i != sel.second }, row2 + tokens[sel.second]) else save(row1 + tokens[sel.second], row2.filterIndexed { i, _ -> i != sel.second })
                                 selected = null
-                            }) { Icon(Icons.Rounded.Keyboard, "Move to the other row") }
+                            }) { Icon(Icons.Rounded.Keyboard, stringResource(R.string.extrakeysscreen_move_to_the_other_row)) }
                             IconButton(onClick = { update(r, tokens.filterIndexed { i, _ -> i != sel.second }); selected = null }) {
                                 Icon(Icons.Rounded.Delete, "Remove", tint = MaterialTheme.colorScheme.error)
                             }
@@ -297,8 +299,8 @@ fun ExtraKeysScreen(nav: NavController) {
             // rearranging is what the two groups above are for.
             Group("Arranging") {
                 GroupRow(
-                    title = "Move the arrows together",
-                    subtitle = "They are one control drawn as four caps, so dragging one drags all four",
+                    title = stringResource(R.string.extrakeysscreen_move_the_arrows_together),
+                    subtitle = stringResource(R.string.extrakeysscreen_they_are_one_control_drawn_as_four_caps_so_dragg),
                     icon = Icons.Rounded.OpenWith,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     checked = settings.groupArrowKeys,
@@ -306,8 +308,8 @@ fun ExtraKeysScreen(nav: NavController) {
                 )
                 RowDivider()
                 GroupRow(
-                    title = "Show the bar at all",
-                    subtitle = if (settings.extraKeysRows == 0) "Off, the terminal has the whole screen" else "The bar sits above the keyboard",
+                    title = stringResource(R.string.extrakeysscreen_show_the_bar_at_all),
+                    subtitle = if (settings.extraKeysRows == 0) stringResource(R.string.extrakeysscreen_off_the_terminal_has_the_whole_screen) else stringResource(R.string.extrakeysscreen_the_bar_sits_above_the_keyboard),
                     icon = Icons.Rounded.Keyboard,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     checked = settings.extraKeysRows > 0,
@@ -328,33 +330,33 @@ fun ExtraKeysScreen(nav: NavController) {
 
             Group("Behaviour") {
                 GroupRow(
-                    title = "Hide with a hardware keyboard", subtitle = "Free the space when a physical keyboard is connected",
+                    title = stringResource(R.string.extrakeysscreen_hide_with_a_hardware_keyboard), subtitle = stringResource(R.string.extrakeysscreen_free_the_space_when_a_physical_keyboard_is_conne),
                     icon = Icons.Rounded.Keyboard, iconTint = MaterialTheme.colorScheme.secondary,
                     checked = settings.hideExtraKeysWithHardwareKeyboard, onCheckedChange = { v -> app.store.updateSettings { it.copy(hideExtraKeysWithHardwareKeyboard = v) } },
                 )
             }
 
-            Group("Volume buttons") {
+            Group(stringResource(R.string.extrakeysscreen_volume_buttons)) {
                 fun describe(t: String, mode: VolumeModifierMode): String {
                     if (t == "NONE" || t.isBlank()) return "Nothing (volume as usual)"
                     val d = ExtraKeys.resolve(t)
-                    val name = if (d.label == t && ExtraKeys.catalog.none { it.token == t }) "Types \"$t\"" else (ExtraKeys.catalog.firstOrNull { it.token == t }?.token?.lowercase()?.replaceFirstChar { c -> c.uppercase() } ?: d.label)
+                    val name = if (d.label == t && ExtraKeys.catalog.none { it.token == t }) "Types \"${t}\"" else (ExtraKeys.catalog.firstOrNull { it.token == t }?.token?.lowercase()?.replaceFirstChar { c -> c.uppercase() } ?: d.label)
                     return if (d.action is ExtraKeys.Action.Modifier) "$name  ·  ${mode.label.lowercase()}" else name
                 }
                 GroupRow(
-                    title = "Volume down", subtitle = describe(settings.volumeDownAction, settings.volumeDownMode),
+                    title = stringResource(R.string.extrakeysscreen_volume_down), subtitle = describe(settings.volumeDownAction, settings.volumeDownMode),
                     icon = Icons.Rounded.VolumeUp, iconTint = MaterialTheme.colorScheme.secondary,
                     onClick = { picking = 0 },
                 )
                 RowDivider()
                 GroupRow(
-                    title = "Volume up", subtitle = describe(settings.volumeUpAction, settings.volumeUpMode),
+                    title = stringResource(R.string.extrakeysscreen_volume_up), subtitle = describe(settings.volumeUpAction, settings.volumeUpMode),
                     icon = Icons.Rounded.VolumeUp, iconTint = MaterialTheme.colorScheme.secondary,
                     onClick = { picking = 1 },
                 )
                 RowDivider()
                 Text(
-                    "Bound buttons no longer change the volume while a terminal is open. The vibration or ringer volume can still be changed from the notification shade.",
+                    stringResource(R.string.extrakeysscreen_bound_buttons_no_longer_change_the_volume_while),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp),
                 )
             }
@@ -365,7 +367,7 @@ fun ExtraKeysScreen(nav: NavController) {
         val current = if (which == 0) settings.volumeDownAction else settings.volumeUpAction
         val currentMode = if (which == 0) settings.volumeDownMode else settings.volumeUpMode
         KeyPickerSheet(
-            title = if (which == 0) "Volume down does…" else "Volume up does…",
+            title = if (which == 0) stringResource(R.string.extrakeysscreen_volume_down_does) else stringResource(R.string.extrakeysscreen_volume_up_does),
             selected = setOf(current),
             allowNone = true,
             modifierMode = currentMode,
@@ -377,7 +379,7 @@ fun ExtraKeysScreen(nav: NavController) {
 
     adding?.let { r ->
         KeyPickerSheet(
-            title = if (r == 0) "Add to row 1" else "Add to row 2",
+            title = if (r == 0) stringResource(R.string.extrakeysscreen_add_to_row_1) else stringResource(R.string.extrakeysscreen_add_to_row_2),
             selected = rows()[r].toSet(),
             allowNone = false,
             onPick = { token -> val cur = rows()[r]; update(r, if (token in cur) cur - token else cur + token) },
@@ -388,10 +390,10 @@ fun ExtraKeysScreen(nav: NavController) {
     preset?.let { p ->
         AlertDialog(
             onDismissRequest = { preset = null },
-            title = { Text("Replace both rows?") },
+            title = { Text(stringResource(R.string.extrakeysscreen_replace_both_rows)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("The ${p.name} preset takes over both rows. Whatever is arranged there now is lost.", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.extrakeysscreen_the_preset_takes_over_both_rows_whatever_is_arra, p.name), style = MaterialTheme.typography.bodyMedium)
                     // Reading the caps first is the difference between choosing
                     // a preset and gambling with the bar already built.
                     listOf(p.row1, p.row2).forEach { row ->
@@ -408,9 +410,9 @@ fun ExtraKeysScreen(nav: NavController) {
                     app.store.updateSettings { it.copy(extraKeysRow1 = p.row1, extraKeysRow2 = p.row2, extraKeysRows = p.rows) }
                     selected = null
                     preset = null
-                }) { Text("Replace") }
+                }) { Text(stringResource(R.string.extrakeysscreen_replace)) }
             },
-            dismissButton = { TextButton(onClick = { preset = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { preset = null }) { Text(stringResource(R.string.extrakeysscreen_cancel)) } },
         )
     }
 }
@@ -458,11 +460,11 @@ fun KeyPickerSheet(
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = onDismiss) { Text("Done") }
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.extrakeysscreen_done)) }
             }
             if (allowNone) {
                 Spacer(Modifier.height(6.dp))
-                FilterChip(selected = "NONE" in selected, onClick = { onPick("NONE") }, label = { Text("Nothing, normal volume button") })
+                FilterChip(selected = "NONE" in selected, onClick = { onPick("NONE") }, label = { Text(stringResource(R.string.extrakeysscreen_nothing_normal_volume_button)) })
             }
             section("Modifiers") { chips(listOf("CTRL", "ALT", "SHIFT")) }
             if (modifierMode != null && onModifierMode != null && selected.any { byToken[it]?.action is ExtraKeys.Action.Modifier }) {
@@ -473,15 +475,15 @@ fun KeyPickerSheet(
             section("Navigation") { chips(listOf("UP", "DOWN", "LEFT", "RIGHT", "NAV", "HOME", "END", "PGUP", "PGDN")) }
             section("Editing") { chips(listOf("ESC", "TAB", "STAB", "ENTER", "BKSP", "DEL", "INS")) }
             section("Actions") { chips(listOf("SNIPPETS", "SEARCH", "KEYBOARD", "PASTE", "FILE", "COMPOSE")) }
-            section("Function keys") {
+            section(stringResource(R.string.extrakeysscreen_function_keys)) {
                 if (showFn) chips((1..12).map { "F$it" })
-                else TextButton(onClick = { showFn = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text("Show F1 – F12") }
+                else TextButton(onClick = { showFn = true }, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) { Text(stringResource(R.string.extrakeysscreen_show_f1_f12)) }
             }
-            section("Custom text") {
+            section(stringResource(R.string.extrakeysscreen_custom_text)) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     if (customSelected.isNotEmpty()) chips(customSelected)
                     androidx.compose.material3.OutlinedButton(onClick = { customOpen = true }) {
-                        Icon(Icons.Rounded.Add, null, Modifier.width(18.dp)); Spacer(Modifier.width(6.dp)); Text("Type text to insert…")
+                        Icon(Icons.Rounded.Add, null, Modifier.width(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.extrakeysscreen_type_text_to_insert))
                     }
                 }
             }
@@ -491,15 +493,15 @@ fun KeyPickerSheet(
     if (customOpen) {
         AlertDialog(
             onDismissRequest = { customOpen = false },
-            title = { Text("Custom text") },
+            title = { Text(stringResource(R.string.extrakeysscreen_custom_text)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Inserted exactly as typed, e.g. \"sudo \" or \"| grep \".", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.extrakeysscreen_inserted_exactly_as_typed_e_g_sudo_or_grep), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Field(custom, { custom = it }, "Text", mono = true)
                 }
             },
-            confirmButton = { FilledTonalButton(enabled = custom.isNotEmpty(), onClick = { onPick(custom); custom = ""; customOpen = false }) { Text("Use") } },
-            dismissButton = { TextButton(onClick = { customOpen = false }) { Text("Cancel") } },
+            confirmButton = { FilledTonalButton(enabled = custom.isNotEmpty(), onClick = { onPick(custom); custom = ""; customOpen = false }) { Text(stringResource(R.string.extrakeysscreen_use)) } },
+            dismissButton = { TextButton(onClick = { customOpen = false }) { Text(stringResource(R.string.extrakeysscreen_cancel)) } },
         )
     }
 }

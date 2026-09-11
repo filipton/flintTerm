@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
@@ -63,11 +65,11 @@ private fun statusLine(p: TailscaleProfile, st: TailscaleStatus): Pair<String, a
     st.state == "running" -> ("Connected" + (st.selfName?.let { "  ·  ${it.substringBefore('.')}" } ?: "") +
         (st.ips.firstOrNull()?.let { "  ·  $it" } ?: "")) to Status.online
     st.state == "starting" -> "Starting…" to Status.busy
-    st.state == "needs-login" -> "Waiting for login" to Status.busy
-    st.state == "error" -> "Error: ${st.error ?: "unknown"}" to MaterialTheme.colorScheme.error
+    st.state == "needs-login" -> stringResource(R.string.tailscalesection_waiting_for_login) to Status.busy
+    st.state == "error" -> stringResource(R.string.tailscalesection_error, st.error ?: "unknown") to MaterialTheme.colorScheme.error
     // Idle is the normal resting state: the node comes up when a host needs it.
-    p.joined -> "Idle, starts when a host needs it" to MaterialTheme.colorScheme.onSurfaceVariant
-    else -> "Not joined to a tailnet yet" to Status.busy
+    p.joined -> stringResource(R.string.tailscalesection_idle_starts_when_a_host_needs_it) to MaterialTheme.colorScheme.onSurfaceVariant
+    else -> stringResource(R.string.tailscalesection_not_joined_to_a_tailnet_yet) to Status.busy
 }
 
 /** The outcome of a "Test" press, under the row it belongs to. */
@@ -100,7 +102,7 @@ fun TailscaleSection(onOpen: (TailscaleProfile) -> Unit) {
     if (!ts.available) {
         Group {
             GroupRow(
-                title = if (ts.supportedHere) "Not included in this build" else "Not available on this Android version",
+                title = if (ts.supportedHere) stringResource(R.string.tailscalesection_not_included_in_this_build) else stringResource(R.string.tailscalesection_not_available_on_this_android_version),
                 subtitle = ts.unavailableReason ?: "",
                 icon = Icons.Rounded.Hub, iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -109,8 +111,8 @@ fun TailscaleSection(onOpen: (TailscaleProfile) -> Unit) {
     }
     if (profiles.isEmpty()) {
         EmptyState(
-            Icons.Rounded.Hub, "No Tailscale accounts yet",
-            "Add one and this app becomes a machine on your tailnet. Hosts can then be reached by MagicDNS name, with no system VPN. You can add several accounts, and each is its own machine.",
+            Icons.Rounded.Hub, stringResource(R.string.tailscalesection_no_tailscale_accounts_yet),
+            stringResource(R.string.tailscalesection_add_one_and_this_app_becomes_a_machine_on_your_t),
         )
         return
     }
@@ -128,7 +130,7 @@ fun TailscaleSection(onOpen: (TailscaleProfile) -> Unit) {
                 trailing = {
                     when {
                         testing == p.id -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        !p.joined -> TextButton(onClick = { onOpen(p) }) { Text("Join") }
+                        !p.joined -> TextButton(onClick = { onOpen(p) }) { Text(stringResource(R.string.tailscalesection_join)) }
                         // Nodes come up on their own, so the useful question here
                         // is "does this account work?", not "start it now".
                         else -> TextButton(
@@ -142,7 +144,7 @@ fun TailscaleSection(onOpen: (TailscaleProfile) -> Unit) {
                                     testing = null
                                 }
                             },
-                        ) { Text("Test") }
+                        ) { Text(stringResource(R.string.tailscalesection_test)) }
                     }
                 },
             )
@@ -151,7 +153,7 @@ fun TailscaleSection(onOpen: (TailscaleProfile) -> Unit) {
         }
     }
     Text(
-        "A node starts by itself when a host that uses it connects, and stops once nothing needs it.",
+        stringResource(R.string.tailscalesection_a_node_starts_by_itself_when_a_host_that_uses_it),
         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
     )
@@ -196,7 +198,7 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
 
             if (!p.joined) {
                 Text(
-                    "This account is not on a tailnet yet. Log in with your browser, or paste a pre-auth key. Either way it only has to happen once.",
+                    stringResource(R.string.tailscalesection_this_account_is_not_on_a_tailnet_yet_log_in_with),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -211,31 +213,31 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
                     when {
                         url != null -> {
                             Icon(Icons.Rounded.OpenInNew, null, Modifier.width(18.dp))
-                            Spacer(Modifier.width(8.dp)); Text("Log in to Tailscale")
+                            Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.tailscalesection_log_in_to_tailscale))
                         }
                         st.state == "starting" -> {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
-                            Spacer(Modifier.width(8.dp)); Text("Getting a login link…")
+                            Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.tailscalesection_getting_a_login_link))
                         }
-                        else -> Text("Log in with a browser")
+                        else -> Text(stringResource(R.string.tailscalesection_log_in_with_a_browser))
                     }
                 }
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     HorizontalDivider(Modifier.weight(1f))
-                    Text("  or paste an auth key  ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.tailscalesection_or_paste_an_auth_key), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     HorizontalDivider(Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(10.dp))
                 Field(
-                    authKey, { authKey = it }, "Auth key",
-                    placeholder = "tskey-auth-…",
+                    authKey, { authKey = it }, stringResource(R.string.tailscalesection_auth_key),
+                    placeholder = stringResource(R.string.tailscalesection_tskey_auth),
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     hint = if (p.authKey.isNotBlank()) {
-                        "A key is stored but has not joined a tailnet. Pasting another one replaces it and starts over."
+                        stringResource(R.string.tailscalesection_a_key_is_stored_but_has_not_joined_a_tailnet_pas)
                     } else {
-                        "Joins without a browser. A single-use or ephemeral key is the safe kind to paste."
+                        stringResource(R.string.tailscalesection_joins_without_a_browser_a_single_use_or_ephemera)
                     },
                 )
                 Spacer(Modifier.height(10.dp))
@@ -243,21 +245,21 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
                     enabled = authKey.trim().isNotBlank(),
                     onClick = { ts.joinWithKey(p.id, authKey.trim()); authKey = "" },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Join with this key") }
+                ) { Text(stringResource(R.string.tailscalesection_join_with_this_key)) }
                 Spacer(Modifier.height(16.dp))
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (st.state == "running") {
-                        OutlinedButton(onClick = { ts.down(p.id) }, Modifier.weight(1f)) { Text("Disconnect") }
+                        OutlinedButton(onClick = { ts.down(p.id) }, Modifier.weight(1f)) { Text(stringResource(R.string.tailscalesection_disconnect)) }
                     } else {
-                        Button(onClick = { ts.upByHand(p.id) }, Modifier.weight(1f)) { Text("Connect") }
+                        Button(onClick = { ts.upByHand(p.id) }, Modifier.weight(1f)) { Text(stringResource(R.string.tailscalesection_connect)) }
                     }
-                    OutlinedButton(onClick = { showSettings = !showSettings }, Modifier.weight(1f)) { Text("Settings") }
+                    OutlinedButton(onClick = { showSettings = !showSettings }, Modifier.weight(1f)) { Text(stringResource(R.string.tailscalesection_settings)) }
                 }
                 if (st.state != "running") {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Connecting is only needed to browse the tailnet from here. A host that uses this account brings the node up on its own.",
+                        stringResource(R.string.tailscalesection_connecting_is_only_needed_to_browse_the_tailnet),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -266,9 +268,9 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
 
             if (showSettings || !p.joined) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Field(name, { name = it }, "Name", placeholder = "Work tailnet", hint = "Shown when picking a VPN for a host.")
-                    Field(hostname, { hostname = it }, "Machine name (optional)", placeholder = "flintterm-phone", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false))
-                    Field(controlUrl, { controlUrl = it }, "Control server (optional, for Headscale)", placeholder = "https://headscale.example.com", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+                    Field(name, { name = it }, "Name", placeholder = stringResource(R.string.tailscalesection_work_tailnet), hint = stringResource(R.string.tailscalesection_shown_when_picking_a_vpn_for_a_host))
+                    Field(hostname, { hostname = it }, "Machine name (optional)", placeholder = stringResource(R.string.tailscalesection_flintterm_phone), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false))
+                    Field(controlUrl, { controlUrl = it }, "Control server (optional, for Headscale)", placeholder = stringResource(R.string.tailscalesection_https_headscale_example_com), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
                     Button(
                         onClick = {
                             val changed = hostname.trim() != p.hostname || controlUrl.trim() != p.controlUrl
@@ -277,13 +279,13 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
                             if (changed && st.state != "stopped") ts.restart(p.id)
                         },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("Apply") }
+                    ) { Text(stringResource(R.string.tailscalesection_apply)) }
                 }
                 Spacer(Modifier.height(16.dp))
             }
 
             if (st.state == "running" && st.peers.isNotEmpty()) {
-                GroupLabel("Devices on this tailnet")
+                GroupLabel(stringResource(R.string.tailscalesection_devices_on_this_tailnet))
                 Group {
                     st.peers.take(30).forEachIndexed { i, peer ->
                         GroupRow(
@@ -307,7 +309,7 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
                                     app.store.upsertHost(h)
                                     onDismiss()
                                     nav.navigate(Routes.hostEdit(h.id))
-                                }) { Icon(Icons.Rounded.Add, null, Modifier.width(16.dp)); Spacer(Modifier.width(4.dp)); Text("Host") }
+                                }) { Icon(Icons.Rounded.Add, null, Modifier.width(16.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.tailscalesection_host)) }
                             },
                         )
                         if (i < st.peers.take(30).lastIndex) RowDivider()
@@ -330,16 +332,16 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
                 TextButton(onClick = { confirmLeave = true }, Modifier.fillMaxWidth()) {
                     Icon(Icons.Rounded.Logout, null, Modifier.width(18.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
-                    Text("Leave tailnet", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.tailscalesection_leave_tailnet), color = MaterialTheme.colorScheme.error)
                 }
             }
             TextButton(onClick = { confirmDelete = true }, Modifier.fillMaxWidth()) {
                 Icon(Icons.Rounded.Delete, null, Modifier.width(18.dp), tint = MaterialTheme.colorScheme.error)
                 Spacer(Modifier.width(8.dp))
-                Text("Delete this account", color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.tailscalesection_delete_this_account), color = MaterialTheme.colorScheme.error)
             }
             Text(
-                "Traffic stays inside this app: a host set to this account is dialled through its node, which starts for that connection and stops once nothing needs it.",
+                stringResource(R.string.tailscalesection_traffic_stays_inside_this_app_a_host_set_to_this),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
             )
@@ -349,20 +351,20 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
     if (confirmLeave) {
         AlertDialog(
             onDismissRequest = { confirmLeave = false },
-            title = { Text("Leave the tailnet?") },
-            text = { Text("This device is removed from the tailnet and the stored auth key is deleted. Hosts using this account stop working until it joins again.") },
-            confirmButton = { Button(onClick = { ts.logout(p.id); confirmLeave = false }) { Text("Leave") } },
-            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Cancel") } },
+            title = { Text(stringResource(R.string.tailscalesection_leave_the_tailnet)) },
+            text = { Text(stringResource(R.string.tailscalesection_this_device_is_removed_from_the_tailnet_and_the)) },
+            confirmButton = { Button(onClick = { ts.logout(p.id); confirmLeave = false }) { Text(stringResource(R.string.tailscalesection_leave)) } },
+            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text(stringResource(R.string.tailscalesection_cancel)) } },
         )
     }
     if (confirmDelete) {
         val users = app.store.hosts.value.count { it.tailscaleId == p.id }
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text("Delete this account?") },
+            title = { Text(stringResource(R.string.tailscalesection_delete_this_account_2)) },
             text = {
                 Text(
-                    "The node leaves the tailnet and its identity is deleted from this device." +
+                    stringResource(R.string.tailscalesection_the_node_leaves_the_tailnet_and_its_identity_is) +
                         if (users > 0) " $users host${if (users > 1) "s" else ""} set to it will fall back to a direct connection." else "",
                 )
             },
@@ -372,9 +374,9 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
                     app.store.deleteTailscaleProfile(p.id)
                     confirmDelete = false
                     onDismiss()
-                }) { Text("Delete") }
+                }) { Text(stringResource(R.string.tailscalesection_delete)) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.tailscalesection_cancel)) } },
         )
     }
 }

@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.material.icons.Icons
@@ -41,50 +43,50 @@ fun AboutSettings(nav: NavController) {
     SettingsSection(nav, "About") {
         Group {
             GroupRow(
-                title = "flintTerm ${BuildConfig.VERSION_NAME}",
+                title = stringResource(R.string.aboutsettings_flintterm, BuildConfig.VERSION_NAME),
                 subtitle = facts.build,
                 icon = Icons.Rounded.Info, iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                 onClick = { clipboard.setText(AnnotatedString(facts.report())) },
-                trailing = { Text("Copy", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) },
+                trailing = { Text(stringResource(R.string.aboutsettings_copy), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) },
             )
         }
 
-        Group("Under the hood") {
+        Group(stringResource(R.string.aboutsettings_under_the_hood)) {
             GroupRow(
-                title = "Terminal",
+                title = stringResource(R.string.aboutsettings_terminal),
                 subtitle = facts.terminal,
                 icon = Icons.Rounded.Terminal, iconTint = MaterialTheme.colorScheme.secondary,
             )
             RowDivider()
             GroupRow(
-                title = "SSH and SFTP",
+                title = stringResource(R.string.aboutsettings_ssh_and_sftp),
                 subtitle = facts.ssh,
                 icon = Icons.Rounded.Key, iconTint = MaterialTheme.colorScheme.primary,
             )
             RowDivider()
             GroupRow(
-                title = "Mosh, WireGuard and Tailscale",
+                title = stringResource(R.string.aboutsettings_mosh_wireguard_and_tailscale),
                 subtitle = facts.transports,
                 icon = Icons.Rounded.VpnLock, iconTint = MaterialTheme.colorScheme.tertiary,
             )
             RowDivider()
             GroupRow(
-                title = "Keys and passwords",
+                title = stringResource(R.string.aboutsettings_keys_and_passwords),
                 subtitle = facts.keystore,
                 icon = Icons.Rounded.Lock, iconTint = MaterialTheme.colorScheme.error,
             )
             RowDivider()
             GroupRow(
-                title = "Bridge",
+                title = stringResource(R.string.aboutsettings_bridge),
                 subtitle = facts.bridge,
                 icon = Icons.Rounded.Hub, iconTint = MaterialTheme.colorScheme.secondary,
             )
         }
 
-        Group("Open source") {
+        Group(stringResource(R.string.aboutsettings_open_source)) {
             GroupRow(
-                title = "Licenses",
-                subtitle = "The libraries this app is made of, and their terms",
+                title = stringResource(R.string.aboutsettings_licenses),
+                subtitle = stringResource(R.string.aboutsettings_the_libraries_this_app_is_made_of_and_their_term),
                 icon = Icons.Rounded.Article, iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { nav.navigate(Routes.LICENSES) },
             )

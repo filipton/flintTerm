@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.os.Build
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
@@ -31,24 +33,24 @@ fun AutomationSettings(nav: NavController) {
     SettingsSection(nav, "Automation") {
         Group("Automation") {
             GroupRow(
-                title = "Let other apps drive sessions",
-                subtitle = "Tasker, Automate, adb and shortcuts can connect, run a command or disconnect",
+                title = stringResource(R.string.automationsettings_let_other_apps_drive_sessions),
+                subtitle = stringResource(R.string.automationsettings_tasker_automate_adb_and_shortcuts_can_connect_ru),
                 icon = Icons.Rounded.Bolt, iconTint = MaterialTheme.colorScheme.error,
                 checked = settings.automation, onCheckedChange = { v -> app.store.updateSettings { it.copy(automation = v) } },
             )
             if (settings.automation) {
                 Text(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        "An app that Android can name is refused until you allow it here. Not every caller can be " +
-                            "named. adb and some system senders arrive without a name, and those get through " +
-                            "while this is on. Anything that gets through can reach every saved host with the " +
-                            "keys kept here, so leave it off unless you are using it."
+                        stringResource(R.string.automationsettings_an_app_that_android_can_name_is_refused_until_yo) +
+                            stringResource(R.string.automationsettings_named_adb_and_some_system_senders_arrive_without) +
+                            stringResource(R.string.automationsettings_while_this_is_on_anything_that_gets_through_can) +
+                            stringResource(R.string.automationsettings_keys_kept_here_so_leave_it_off_unless_you_are_us)
                     } else {
                         // Below Android 14 the platform will not say which
                         // app sent a broadcast, so there is nobody to allow
                         // or refuse and the switch is the whole gate.
-                        "This version of Android does not say which app sent a call. While this is on, anything on " +
-                            "the phone can use it, and reach every saved host with the keys kept here."
+                        stringResource(R.string.automationsettings_this_version_of_android_does_not_say_which_app_s) +
+                            stringResource(R.string.automationsettings_the_phone_can_use_it_and_reach_every_saved_host)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -58,20 +60,20 @@ fun AutomationSettings(nav: NavController) {
                     RowDivider()
                     GroupRow(
                         title = pkg,
-                        subtitle = "Allowed",
+                        subtitle = stringResource(R.string.automationsettings_allowed),
                         icon = Icons.Rounded.Bolt, iconTint = MaterialTheme.colorScheme.primary,
                         trailing = {
                             TextButton(onClick = {
                                 app.store.updateSettings { it.copy(automationAllowed = it.automationAllowed - pkg) }
-                            }) { Text("Withdraw") }
+                            }) { Text(stringResource(R.string.automationsettings_withdraw)) }
                         },
                     )
                 }
                 RowDivider()
                 if (settings.automationLog.isEmpty()) {
                     GroupRow(
-                        title = "Nothing has called yet",
-                        subtitle = "The last ten calls appear here, with the app that made them",
+                        title = stringResource(R.string.automationsettings_nothing_has_called_yet),
+                        subtitle = stringResource(R.string.automationsettings_the_last_ten_calls_appear_here_with_the_app_that),
                         icon = Icons.Rounded.History, iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {
@@ -80,7 +82,7 @@ fun AutomationSettings(nav: NavController) {
                         GroupRow(
                             title = call.what,
                             subtitle = listOfNotNull(
-                                call.caller.ifBlank { "an app that did not identify itself" },
+                                call.caller.ifBlank { stringResource(R.string.automationsettings_an_app_that_did_not_identify_itself) },
                                 relativeTime(call.at),
                                 call.result.ifBlank { null },
                             ).joinToString("  ·  "),
@@ -92,13 +94,13 @@ fun AutomationSettings(nav: NavController) {
                             trailing = if (!unknown) null else ({
                                 TextButton(onClick = {
                                     app.store.updateSettings { it.copy(automationAllowed = it.automationAllowed + call.caller) }
-                                }) { Text("Allow") }
+                                }) { Text(stringResource(R.string.automationsettings_allow)) }
                             }),
                         )
                         RowDivider()
                     }
                     GroupRow(
-                        title = "Forget these calls",
+                        title = stringResource(R.string.automationsettings_forget_these_calls),
                         icon = Icons.Rounded.Delete, iconTint = MaterialTheme.colorScheme.error,
                         onClick = { app.store.updateSettings { it.copy(automationLog = emptyList()) } },
                     )

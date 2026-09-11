@@ -1,5 +1,6 @@
 package dev.flint.term.transfer
 
+import dev.flint.term.R
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -89,7 +90,7 @@ object ExternalEdit {
                 lastModified = modified
                 transfers.uploadLocalFile(session, local, remote)
                 android.os.Handler(context.mainLooper).post {
-                    Toast.makeText(context, "Saving $name back to ${session.label}…", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.externaledit_saving_back_to, name, session.label), Toast.LENGTH_SHORT).show()
                 }
             }
         }

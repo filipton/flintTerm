@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -62,18 +64,18 @@ fun TransfersScreen(nav: NavController) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Transfers",
+                title = stringResource(R.string.transfersscreen_transfers),
                 subtitle = summary(active),
                 onBack = { nav.popBackStack() },
                 actions = {
-                    if (finished.isNotEmpty()) TextButton(onClick = { app.transfers.clearFinished() }) { Text("Clear") }
+                    if (finished.isNotEmpty()) TextButton(onClick = { app.transfers.clearFinished() }) { Text(stringResource(R.string.transfersscreen_clear)) }
                 },
             )
         },
     ) { padding ->
         if (transfers.isEmpty()) {
             Column(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState(Icons.Rounded.Download, "Nothing yet", "Downloads, uploads and host-to-host copies show up here with speed, ETA and a way to stop them.")
+                EmptyState(Icons.Rounded.Download, stringResource(R.string.transfersscreen_nothing_yet), stringResource(R.string.transfersscreen_downloads_uploads_and_host_to_host_copies_show_u))
             }
             return@Scaffold
         }
@@ -82,7 +84,7 @@ fun TransfersScreen(nav: NavController) {
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
             if (active.isNotEmpty()) {
-                item { GroupLabel("In progress") }
+                item { GroupLabel(stringResource(R.string.transfersscreen_in_progress)) }
                 items(active, key = { it.id }) { t ->
                     TransferRow(t, onCancel = { app.transfers.cancel(t.id) })
                 }
@@ -127,7 +129,7 @@ private fun TransferRow(t: Transfer, onCancel: (() -> Unit)?) {
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
-                if (t.filesTotal > 1) "${t.name}  (${t.filesDone}/${t.filesTotal} files)" else t.name,
+                if (t.filesTotal > 1) stringResource(R.string.transfersscreen_files, t.name, t.filesDone, t.filesTotal) else t.name,
                 style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
             Text(

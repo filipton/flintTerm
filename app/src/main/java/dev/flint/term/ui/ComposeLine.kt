@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -146,7 +148,7 @@ fun ComposeLine(
         verticalAlignment = Alignment.Bottom,
     ) {
         IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-            Icon(Icons.Rounded.Close, "Close the compose line", Modifier.size(17.dp), tint = onChrome.copy(alpha = 0.6f))
+            Icon(Icons.Rounded.Close, stringResource(R.string.composeline_close_the_compose_line), Modifier.size(17.dp), tint = onChrome.copy(alpha = 0.6f))
         }
         Box(
             Modifier
@@ -158,7 +160,7 @@ fun ComposeLine(
         ) {
             if (state.text.isEmpty()) {
                 Text(
-                    "Write a line",
+                    stringResource(R.string.composeline_write_a_line),
                     style = MaterialTheme.typography.bodyMedium,
                     color = onChrome.copy(alpha = 0.45f),
                 )
@@ -197,7 +199,7 @@ fun ComposeLine(
         IconButton(onClick = ::recall, enabled = state.history.isNotEmpty(), modifier = Modifier.size(36.dp)) {
             Icon(
                 Icons.Rounded.KeyboardArrowUp,
-                "Previous line",
+                stringResource(R.string.composeline_previous_line),
                 Modifier.size(20.dp),
                 tint = onChrome.copy(alpha = if (state.history.isEmpty()) 0.25f else 0.7f),
             )
@@ -220,7 +222,7 @@ fun ComposeLine(
         ) {
             Icon(
                 Icons.AutoMirrored.Rounded.Send,
-                "Send, or hold to send without Enter",
+                stringResource(R.string.composeline_send_or_hold_to_send_without_enter),
                 Modifier.size(17.dp),
                 tint = if (state.text.isBlank()) onChrome.copy(alpha = 0.4f) else MaterialTheme.colorScheme.onPrimary,
             )

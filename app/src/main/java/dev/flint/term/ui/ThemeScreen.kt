@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -94,11 +96,11 @@ fun ThemeScreen(nav: NavController, groupId: String? = null) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Color scheme",
-                subtitle = group?.let { "For every host in ${it.label}" } ?: "Used by hosts that have not picked one",
+                title = stringResource(R.string.themescreen_color_scheme),
+                subtitle = group?.let { stringResource(R.string.themescreen_for_every_host_in, it.label) } ?: stringResource(R.string.themescreen_used_by_hosts_that_have_not_picked_one),
                 onBack = { nav.popBackStack() },
                 actions = {
-                    IconButton(onClick = { importing = true }) { Icon(Icons.Rounded.FileDownload, "Import a scheme") }
+                    IconButton(onClick = { importing = true }) { Icon(Icons.Rounded.FileDownload, stringResource(R.string.themescreen_import_a_scheme)) }
                 },
             )
         },
@@ -106,7 +108,7 @@ fun ThemeScreen(nav: NavController, groupId: String? = null) {
         if (groupId != null && group == null) {
             // Deleted from under us while this screen was open.
             Column(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState(Icons.Rounded.Palette, "Gone", "This group no longer exists.")
+                EmptyState(Icons.Rounded.Palette, "Gone", stringResource(R.string.themescreen_this_group_no_longer_exists))
             }
             return@Scaffold
         }
@@ -134,14 +136,14 @@ fun ThemeScreen(nav: NavController, groupId: String? = null) {
         ActionSheet(
             onDismiss = { menuFor = null },
             title = scheme.name,
-            subtitle = "Custom scheme",
+            subtitle = stringResource(R.string.themescreen_custom_scheme),
             actions = listOf(
-                SheetAction("Rename", Icons.Rounded.Edit) { menuFor = null; renaming = scheme },
-                SheetAction("Share", Icons.Rounded.Share, subtitle = "As a Ghostty theme file") {
+                SheetAction(stringResource(R.string.themescreen_rename), Icons.Rounded.Edit) { menuFor = null; renaming = scheme },
+                SheetAction(stringResource(R.string.themescreen_share), Icons.Rounded.Share, subtitle = stringResource(R.string.themescreen_as_a_ghostty_theme_file)) {
                     menuFor = null
                     shareScheme(context, scheme)
                 },
-                SheetAction("Delete", Icons.Rounded.Delete, danger = true) {
+                SheetAction(stringResource(R.string.themescreen_delete), Icons.Rounded.Delete, danger = true) {
                     menuFor = null
                     app.store.updateSettings { s ->
                         s.copy(
@@ -161,7 +163,7 @@ fun ThemeScreen(nav: NavController, groupId: String? = null) {
         var name by remember(scheme.id) { mutableStateOf(scheme.name) }
         AlertDialog(
             onDismissRequest = { renaming = null },
-            title = { Text("Rename") },
+            title = { Text(stringResource(R.string.themescreen_rename)) },
             text = { Field(name, { name = it }, "Name") },
             confirmButton = {
                 TextButton(
@@ -172,9 +174,9 @@ fun ThemeScreen(nav: NavController, groupId: String? = null) {
                         }
                         renaming = null
                     },
-                ) { Text("Rename") }
+                ) { Text(stringResource(R.string.themescreen_rename)) }
             },
-            dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { renaming = null }) { Text(stringResource(R.string.themescreen_cancel)) } },
         )
     }
 }
@@ -236,12 +238,12 @@ fun ThemePicker(
             if (fallback != null && query.isBlank()) {
                 item(key = "fallback") {
                     val scheme = Schemes.resolve(fallback)
-                    ThemeCard(scheme, "App default", scheme.name, selected == null) { onSelect(null) }
+                    ThemeCard(scheme, stringResource(R.string.themescreen_app_default), scheme.name, selected == null) { onSelect(null) }
                 }
             }
             if (sections.isEmpty()) {
                 item(key = "none") {
-                    EmptyState(Icons.Rounded.Search, "No scheme called \"${query.trim()}\"", "Names are all there is to search. Try a shorter one.")
+                    EmptyState(Icons.Rounded.Search, stringResource(R.string.themescreen_no_scheme_called, query.trim()), stringResource(R.string.themescreen_names_are_all_there_is_to_search_try_a_shorter_o))
                 }
             }
             sections.forEach { section ->
@@ -258,8 +260,8 @@ fun ThemePicker(
                     item(key = "import") {
                         Group {
                             GroupRow(
-                                title = "Import a scheme",
-                                subtitle = "From a Ghostty, Alacritty, Windows Terminal, iTerm2 or Xresources file, or pasted text",
+                                title = stringResource(R.string.themescreen_import_a_scheme),
+                                subtitle = stringResource(R.string.themescreen_from_a_ghostty_alacritty_windows_terminal_iterm2),
                                 icon = Icons.Rounded.Add,
                                 onClick = onImport,
                             )

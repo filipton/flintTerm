@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -65,10 +67,10 @@ fun ChordsScreen(nav: NavController) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Chords", onBack = { nav.popBackStack() },
+                title = stringResource(R.string.chordsscreen_chords), onBack = { nav.popBackStack() },
                 actions = {
                     if (settings.chords.isNotEmpty()) {
-                        IconButton(onClick = { save(emptyList()) }) { Icon(Icons.Rounded.RestartAlt, "Reset to the built-in chords") }
+                        IconButton(onClick = { save(emptyList()) }) { Icon(Icons.Rounded.RestartAlt, stringResource(R.string.chordsscreen_reset_to_the_built_in_chords)) }
                     }
                 },
             )
@@ -77,7 +79,7 @@ fun ChordsScreen(nav: NavController) {
             ExtendedFloatingActionButton(
                 onClick = { editing = Chord() },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("New chord") },
+                text = { Text(stringResource(R.string.chordsscreen_new_chord)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -87,8 +89,8 @@ fun ChordsScreen(nav: NavController) {
         LazyColumn(state = rememberScreenListState("chords"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 110.dp)) {
             item {
                 Text(
-                    "Hold the Ctrl key above the keyboard to open these. Keys are written the way tmux and Emacs " +
-                        "write them: “C-b c”, “M-x”, “S-Tab”. The word “prefix” stands for the host's tmux prefix.",
+                    stringResource(R.string.chordsscreen_hold_the_ctrl_key_above_the_keyboard_to_open_the) +
+                        stringResource(R.string.chordsscreen_write_them_c_b_c_m_x_s_tab_the_word_prefix_stand),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -143,17 +145,17 @@ private fun ChordEditor(initial: Chord, onDismiss: () -> Unit, onSave: (Chord) -
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(if (isNew) "New chord" else "Edit chord", style = MaterialTheme.typography.titleLarge)
-            Field(label, { label = it }, "Label", placeholder = "New window", keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
-            Field(keys, { keys = it }, "Keys", mono = true, placeholder = "prefix c", keyboardOptions = KeyboardOptions(autoCorrectEnabled = false))
+            Text(if (isNew) stringResource(R.string.chordsscreen_new_chord) else stringResource(R.string.chordsscreen_edit_chord), style = MaterialTheme.typography.titleLarge)
+            Field(label, { label = it }, "Label", placeholder = stringResource(R.string.chordsscreen_new_window), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
+            Field(keys, { keys = it }, "Keys", mono = true, placeholder = stringResource(R.string.chordsscreen_prefix_c), keyboardOptions = KeyboardOptions(autoCorrectEnabled = false))
             // Said before the chord is saved, because a chord that sends
             // nothing looks exactly like one that works until it is tapped.
             val presses = ChordParser.parse(keys)
             Text(
                 when {
-                    keys.isBlank() -> "One or more keys, separated by spaces."
-                    presses == null -> "Not a chord: check the modifier and the key name."
-                    else -> "Sends ${presses.size} key press${if (presses.size == 1) "" else "es"}."
+                    keys.isBlank() -> stringResource(R.string.chordsscreen_one_or_more_keys_separated_by_spaces)
+                    presses == null -> stringResource(R.string.chordsscreen_not_a_chord_check_the_modifier_and_the_key_name)
+                    else -> stringResource(R.string.chordsscreen_sends_key_press, presses.size, if (presses.size == 1) "" else "es")
                 },
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -162,12 +164,12 @@ private fun ChordEditor(initial: Chord, onDismiss: () -> Unit, onSave: (Chord) -
                 Button(
                     onClick = { onSave(initial.copy(label = label.trim(), keys = keys.trim(), tab = tab)) },
                     enabled = presses != null,
-                ) { Text("Save") }
+                ) { Text(stringResource(R.string.chordsscreen_save)) }
                 if (!isNew) {
                     TextButton(onClick = onDelete) {
                         Icon(Icons.Rounded.Delete, null, Modifier.width(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Delete")
+                        Text(stringResource(R.string.chordsscreen_delete))
                     }
                 }
             }

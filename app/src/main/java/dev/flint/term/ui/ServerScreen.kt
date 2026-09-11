@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -157,12 +159,12 @@ fun ServerPane(nav: NavController, session: TerminalSession, modifier: Modifier 
     ) {
         when {
             reading != null -> Vitals(reading, error)
-            !connected -> Waiting("Waiting for the connection")
+            !connected -> Waiting(stringResource(R.string.serverscreen_waiting_for_the_connection))
             error != null -> Column {
                 Spacer(Modifier.height(24.dp))
-                EmptyState(Icons.Rounded.Speed, "Nothing came back", error!!)
+                EmptyState(Icons.Rounded.Speed, stringResource(R.string.serverscreen_nothing_came_back), error!!)
             }
-            else -> Waiting("Reading the machine")
+            else -> Waiting(stringResource(R.string.serverscreen_reading_the_machine))
         }
         // Only where a runtime answered. A machine with neither docker nor
         // podman is not told what it does not have, which is why the section
@@ -208,9 +210,9 @@ private fun ContainersSection(
     var confirming by remember { mutableStateOf<Container?>(null) }
 
     if (groups.isEmpty()) {
-        Group(title = "Containers") {
+        Group(title = stringResource(R.string.serverscreen_containers)) {
             Text(
-                "No containers",
+                stringResource(R.string.serverscreen_no_containers),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
@@ -218,7 +220,7 @@ private fun ContainersSection(
         }
     }
     groups.forEach { group ->
-        Group(title = group.project ?: if (groups.size > 1) "Other containers" else "Containers") {
+        Group(title = group.project ?: if (groups.size > 1) stringResource(R.string.serverscreen_other_containers) else "Containers") {
             group.containers.forEach { container ->
                 ContainerRow(container) { chosen = container }
             }
@@ -239,7 +241,7 @@ private fun ContainersSection(
             title = container.name,
             subtitle = listOf(container.image, container.status).filter { it.isNotEmpty() }.joinToString(" · "),
             actions = listOf(
-                SheetAction("Logs", Icons.AutoMirrored.Rounded.Subject) {
+                SheetAction(stringResource(R.string.serverscreen_logs), Icons.AutoMirrored.Rounded.Subject) {
                     chosen = null
                     onLogs(container)
                 },
@@ -255,12 +257,12 @@ private fun ContainersSection(
     confirming?.let { container ->
         AlertDialog(
             onDismissRequest = { confirming = null },
-            title = { Text("Stop ${container.name}?") },
-            text = { Text("It stays down until something starts it again.") },
+            title = { Text(stringResource(R.string.serverscreen_stop_fmt, container.name)) },
+            text = { Text(stringResource(R.string.serverscreen_it_stays_down_until_something_starts_it_again)) },
             confirmButton = {
-                Button(onClick = { confirming = null; onAction(ContainerAction.STOP, container) }) { Text("Stop") }
+                Button(onClick = { confirming = null; onAction(ContainerAction.STOP, container) }) { Text(stringResource(R.string.serverscreen_stop)) }
             },
-            dismissButton = { TextButton(onClick = { confirming = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirming = null }) { Text(stringResource(R.string.serverscreen_cancel)) } },
         )
     }
 }
@@ -370,7 +372,7 @@ private fun Vitals(s: ServerStatus, error: String?) {
     }
 
     s.memory?.let { memory ->
-        Group(title = "Memory") {
+        Group(title = stringResource(R.string.serverscreen_memory)) {
             Reading(
                 "Used",
                 "${humanBytes(memory.usedBytes)} of ${humanBytes(memory.totalBytes)}",
@@ -384,19 +386,19 @@ private fun Vitals(s: ServerStatus, error: String?) {
     }
 
     if (s.disks.isNotEmpty()) {
-        Group(title = "Disks") {
+        Group(title = stringResource(R.string.serverscreen_disks)) {
             s.disks.forEach { disk -> DiskRow(disk) }
         }
     }
 
     s.busiestInterface?.let { net ->
-        Group(title = "Network") {
+        Group(title = stringResource(R.string.serverscreen_network)) {
             Reading(net.name, "↓ ${humanBytes(net.rxPerSecond)}/s   ↑ ${humanBytes(net.txPerSecond)}/s")
         }
     }
 
     if (s.processes.isNotEmpty()) {
-        Group(title = "Top processes") {
+        Group(title = stringResource(R.string.serverscreen_top_processes)) {
             s.processes.forEach { p ->
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),

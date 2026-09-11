@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -331,10 +333,10 @@ fun StatusDot(state: SessionState, size: Int = 9) {
         is SessionState.Connecting -> Status.busy
         is SessionState.Disconnected -> Status.offline
     }
-    val pulse = rememberInfiniteTransition(label = "pulse")
+    val pulse = rememberInfiniteTransition(label = stringResource(R.string.components_pulse))
     val alpha by pulse.animateFloat(
         initialValue = 1f, targetValue = 0.25f,
-        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = "alpha",
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = stringResource(R.string.components_alpha),
     )
     Box(
         Modifier

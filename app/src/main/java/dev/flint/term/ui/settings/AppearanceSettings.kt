@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -74,26 +76,26 @@ fun AppearanceSettings(nav: NavController) {
     val pickFont = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val id = TermFonts.import(context, uri)
-        if (id == null) Toast.makeText(context, "That is not a TTF/OTF font", Toast.LENGTH_SHORT).show()
+        if (id == null) Toast.makeText(context, context.getString(R.string.appearancesettings_that_is_not_a_ttf_otf_font), Toast.LENGTH_SHORT).show()
         else { app.store.updateSettings { it.copy(fontFamily = id) }; fontsVersion++ }
     }
     if (fontSheet) {
         val families = remember(fontsVersion) { TermFonts.all(context) }
         ActionSheet(
             onDismiss = { fontSheet = false },
-            title = "Terminal font",
+            title = stringResource(R.string.appearancesettings_terminal_font),
             actions = families.map { f ->
                 SheetAction(
                     f.label + if (f.id == settings.fontFamily) "  ✓" else "",
                     if (f.custom) Icons.Rounded.FontDownload else Icons.Rounded.TextFields,
                     subtitle = when {
                         f.custom -> "Imported"
-                        f.ligatures -> "Ligatures available"
+                        f.ligatures -> stringResource(R.string.appearancesettings_ligatures_available)
                         else -> null
                     },
                 ) { app.store.updateSettings { it.copy(fontFamily = f.id) }; fontSheet = false }
-            } + SheetAction("Import font file…", Icons.Rounded.Add, subtitle = "Any monospaced TTF or OTF") { pickFont.launch(arrayOf("font/*", "application/octet-stream", "*/*")) } +
-                families.filter { it.custom }.map { f -> SheetAction("Remove ${f.label}", Icons.Rounded.Delete, danger = true) {
+            } + SheetAction(stringResource(R.string.appearancesettings_import_font_file), Icons.Rounded.Add, subtitle = stringResource(R.string.appearancesettings_any_monospaced_ttf_or_otf)) { pickFont.launch(arrayOf("font/*", "application/octet-stream", "*/*")) } +
+                families.filter { it.custom }.map { f -> SheetAction(stringResource(R.string.appearancesettings_remove, f.label), Icons.Rounded.Delete, danger = true) {
                     TermFonts.delete(context, f.id); fontsVersion++
                     if (settings.fontFamily == f.id) app.store.updateSettings { it.copy(fontFamily = TermFonts.DEFAULT) }
                 } },
@@ -106,7 +108,7 @@ fun AppearanceSettings(nav: NavController) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconTile(Icons.Rounded.WbSunny, MaterialTheme.colorScheme.tertiary)
                     Spacer(Modifier.width(14.dp))
-                    Text("App theme", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.appearancesettings_app_theme), style = MaterialTheme.typography.bodyLarge)
                 }
                 Segmented(AppTheme.entries.map { it.label }, settings.appTheme.ordinal) { i ->
                     app.store.updateSettings { it.copy(appTheme = AppTheme.entries[i]) }
@@ -115,8 +117,8 @@ fun AppearanceSettings(nav: NavController) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 RowDivider()
                 GroupRow(
-                    title = "Material You colors",
-                    subtitle = "Tint the app with your wallpaper palette",
+                    title = stringResource(R.string.appearancesettings_material_you_colors),
+                    subtitle = stringResource(R.string.appearancesettings_tint_the_app_with_your_wallpaper_palette),
                     icon = Icons.Rounded.Palette,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     checked = settings.dynamicColor, onCheckedChange = { v -> app.store.updateSettings { it.copy(dynamicColor = v) } },
@@ -127,7 +129,7 @@ fun AppearanceSettings(nav: NavController) {
         Group("Text") {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Font size", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.appearancesettings_font_size), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     Text("${settings.fontSizeSp.roundToInt()} sp", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
                 AppSlider(
@@ -138,37 +140,37 @@ fun AppearanceSettings(nav: NavController) {
                 Box(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(12.dp),
                 ) {
-                    Text("~ $ ls -la  # preview 0123", style = CodeStyle.copy(fontSize = settings.fontSizeSp.sp))
+                    Text(stringResource(R.string.appearancesettings_ls_la_preview_0123), style = CodeStyle.copy(fontSize = settings.fontSizeSp.sp))
                 }
-                Text("Pinch in the terminal to change it on the fly.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                Text(stringResource(R.string.appearancesettings_pinch_in_the_terminal_to_change_it_on_the_fly), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
             }
             RowDivider()
             val family = TermFonts.family(context, settings.fontFamily)
             GroupRow(
-                title = "Font", subtitle = family.label + if (family.custom) "  ·  imported" else "",
+                title = stringResource(R.string.appearancesettings_font), subtitle = family.label + if (family.custom) "  ·  imported" else "",
                 icon = Icons.Rounded.TextFields, iconTint = MaterialTheme.colorScheme.secondary,
                 onClick = { fontSheet = true },
             )
             RowDivider()
             GroupRow(
-                title = "Ligatures", subtitle = if (family.ligatures) "Join => -> != into single glyphs" else "${family.label} has no ligatures",
+                title = stringResource(R.string.appearancesettings_ligatures), subtitle = if (family.ligatures) "Join => -> != into single glyphs" else "${family.label} has no ligatures",
                 icon = Icons.Rounded.Link, iconTint = MaterialTheme.colorScheme.secondary,
                 trailing = { AppSwitch(settings.ligatures && family.ligatures, { v -> app.store.updateSettings { it.copy(ligatures = v) } }, enabled = family.ligatures) },
                 enabled = family.ligatures,
             )
             RowDivider()
             GroupRow(
-                title = "Nerd Font glyphs",
-                subtitle = "Draw prompt and file icons from the bundled symbols font",
+                title = stringResource(R.string.appearancesettings_nerd_font_glyphs),
+                subtitle = stringResource(R.string.appearancesettings_draw_prompt_and_file_icons_from_the_bundled_symb),
                 icon = Icons.Rounded.EmojiSymbols, iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.nerdGlyphs, onCheckedChange = { v -> app.store.updateSettings { it.copy(nerdGlyphs = v) } },
             )
         }
 
-        Group("Terminal colors") {
+        Group(stringResource(R.string.appearancesettings_terminal_colors)) {
             GroupRow(
-                title = "Color scheme",
-                subtitle = "${Schemes.nameOf(settings.theme)}  ·  hosts and groups can override it",
+                title = stringResource(R.string.appearancesettings_color_scheme),
+                subtitle = stringResource(R.string.appearancesettings_hosts_and_groups_can_override_it, Schemes.nameOf(settings.theme)),
                 icon = Icons.Rounded.Palette,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 onClick = { nav.navigate(Routes.THEME) },
@@ -176,8 +178,8 @@ fun AppearanceSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Bold text is bright",
-                subtitle = "Draw bold text in the brighter colors, the way xterm does",
+                title = stringResource(R.string.appearancesettings_bold_text_is_bright),
+                subtitle = stringResource(R.string.appearancesettings_draw_bold_text_in_the_brighter_colors_the_way_xt),
                 icon = Icons.Rounded.FormatBold,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.boldIsBright, onCheckedChange = { v -> app.store.updateSettings { it.copy(boldIsBright = v) } },
@@ -189,20 +191,20 @@ fun AppearanceSettings(nav: NavController) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconTile(Icons.Rounded.Edit, MaterialTheme.colorScheme.secondary)
                     Spacer(Modifier.width(14.dp))
-                    Text("Shape", style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.appearancesettings_shape), style = MaterialTheme.typography.bodyLarge)
                 }
                 Segmented(CursorStyle.entries.map { it.label }, settings.cursorStyle.ordinal) { i ->
                     app.store.updateSettings { it.copy(cursorStyle = CursorStyle.entries[i]) }
                 }
                 Text(
-                    "A program that picks its own shape keeps it, so vim's insert-mode bar still works.",
+                    stringResource(R.string.appearancesettings_a_program_that_picks_its_own_shape_keeps_it_so_v),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             RowDivider()
             GroupRow(
-                title = "Blink",
-                subtitle = "Pauses while you type and while the terminal is off screen",
+                title = stringResource(R.string.appearancesettings_blink),
+                subtitle = stringResource(R.string.appearancesettings_pauses_while_you_type_and_while_the_terminal_is),
                 icon = Icons.Rounded.Bolt,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.cursorBlink, onCheckedChange = { v -> app.store.updateSettings { it.copy(cursorBlink = v) } },
@@ -211,11 +213,11 @@ fun AppearanceSettings(nav: NavController) {
 
         Group("Highlighting") {
             GroupRow(
-                title = "Highlighting",
+                title = stringResource(R.string.appearancesettings_highlighting),
                 subtitle = when {
-                    !settings.highlightEnabled -> "Off  ·  recolor errors, warnings and the rest"
-                    settings.highlightRules.isEmpty() -> "On, but there are no rules yet"
-                    else -> "On  ·  ${settings.highlightRules.count { it.enabled }} rules"
+                    !settings.highlightEnabled -> stringResource(R.string.appearancesettings_off_recolor_errors_warnings_and_the_rest)
+                    settings.highlightRules.isEmpty() -> stringResource(R.string.appearancesettings_on_but_there_are_no_rules_yet)
+                    else -> stringResource(R.string.appearancesettings_on_rules, settings.highlightRules.count { it.enabled })
                 },
                 icon = Icons.Rounded.FormatColorText,
                 iconTint = MaterialTheme.colorScheme.secondary,

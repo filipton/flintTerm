@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -48,32 +50,32 @@ fun KeyboardSettings(nav: NavController) {
         return
     }
 
-    SettingsSection(nav, "Keyboard & input") {
+    SettingsSection(nav, stringResource(R.string.keyboardsettings_keyboard_input)) {
         Group("Keys") {
             GroupRow(
-                title = "Extra keys",
-                subtitle = "The bar above the keyboard, and what the volume keys do",
+                title = stringResource(R.string.keyboardsettings_extra_keys),
+                subtitle = stringResource(R.string.keyboardsettings_the_bar_above_the_keyboard_and_what_the_volume_k),
                 icon = Icons.Rounded.Keyboard,
                 onClick = { nav.navigate(Routes.EXTRA_KEYS) },
             )
             RowDivider()
             GroupRow(
-                title = "Chords",
-                subtitle = "The tmux, Ctrl and agent keys on the sheet you get by holding Ctrl",
+                title = stringResource(R.string.keyboardsettings_chords),
+                subtitle = stringResource(R.string.keyboardsettings_the_tmux_ctrl_and_agent_keys_on_the_sheet_you_ge),
                 icon = Icons.Rounded.Bolt,
                 onClick = { nav.navigate(Routes.CHORDS) },
             )
             RowDivider()
             GroupRow(
-                title = "Shortcuts",
-                subtitle = "What Ctrl+Shift+C and the other app shortcuts do",
+                title = stringResource(R.string.keyboardsettings_shortcuts),
+                subtitle = stringResource(R.string.keyboardsettings_what_ctrl_shift_c_and_the_other_app_shortcuts_do),
                 icon = Icons.Rounded.KeyboardCommandKey,
                 onClick = { shortcuts = true },
             )
             RowDivider()
             GroupRow(
-                title = "Keyboard protocol",
-                subtitle = "Lets a program see the difference between Ctrl+[ and Escape, and see Shift+Enter",
+                title = stringResource(R.string.keyboardsettings_keyboard_protocol),
+                subtitle = stringResource(R.string.keyboardsettings_lets_a_program_see_the_difference_between_ctrl_a),
                 icon = Icons.Rounded.Terminal,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.keyboardProtocol,
@@ -81,8 +83,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Send Ctrl+[, Ctrl+I and Ctrl+M as their own keys",
-                subtitle = "Normally these three send the same bytes as Escape, Tab and Enter. On, they are sent as separate keys, so a tmux binding on Ctrl+[ works. The Escape, Tab and Enter keys do not change.",
+                title = stringResource(R.string.keyboardsettings_send_ctrl_ctrl_i_and_ctrl_m_as_their_own_keys),
+                subtitle = stringResource(R.string.keyboardsettings_normally_these_three_send_the_same_bytes_as_esca),
                 icon = Icons.Rounded.Terminal,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.fixtermsCtrlKeys,
@@ -91,8 +93,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Type with the app's keyboard",
-                subtitle = "A simple keyboard drawn by the app, with Ctrl and Alt on the bottom row. It has no dictionary, no autocorrect and no swiping. Use it if you mainly need a Ctrl key.",
+                title = stringResource(R.string.keyboardsettings_type_with_the_app_s_keyboard),
+                subtitle = stringResource(R.string.keyboardsettings_a_simple_keyboard_drawn_by_the_app_with_ctrl_and),
                 icon = Icons.Rounded.Keyboard,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.builtInKeyboard,
@@ -100,8 +102,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Offer to paste what you copied",
-                subtitle = "A strip above the keys, for about a minute after you copy something in another app. Only the clipboard's description is read, never its contents.",
+                title = stringResource(R.string.keyboardsettings_offer_to_paste_what_you_copied),
+                subtitle = stringResource(R.string.keyboardsettings_a_strip_above_the_keys_for_about_a_minute_after),
                 icon = Icons.Rounded.ContentPaste,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.clipboardSuggestion,
@@ -109,8 +111,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Ctrl keys always send control bytes",
-                subtitle = "Ctrl+C from the key bar or the menu sends the byte itself, so it still stops a program that has taken over the keyboard. Tab, Enter, Backspace and Escape never change.",
+                title = stringResource(R.string.keyboardsettings_ctrl_keys_always_send_control_bytes),
+                subtitle = stringResource(R.string.keyboardsettings_ctrl_c_from_the_key_bar_or_the_menu_sends_the_by),
                 icon = Icons.Rounded.Bolt,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.rawControlKeys,
@@ -118,8 +120,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Keep the compose line open",
-                subtitle = "The ✎ field and what you typed in it stay when you leave the session",
+                title = stringResource(R.string.keyboardsettings_keep_the_compose_line_open),
+                subtitle = stringResource(R.string.keyboardsettings_the_field_and_what_you_typed_in_it_stay_when_you),
                 icon = Icons.Rounded.EditNote,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.composeRemembersState,
@@ -127,14 +129,14 @@ fun KeyboardSettings(nav: NavController) {
             )
         }
 
-        Group("Hardware keyboard") {
+        Group(stringResource(R.string.keyboardsettings_hardware_keyboard)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Caps Lock acts as", style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.keyboardsettings_caps_lock_acts_as), style = MaterialTheme.typography.bodyLarge)
                 Segmented(CapsLockAction.entries.map { it.label }, settings.capsLockAs.ordinal) { i ->
                     app.store.updateSettings { it.copy(capsLockAs = CapsLockAction.entries[i]) }
                 }
                 Text(
-                    "Escape sends it on the way down. Control is held for as long as the key is.",
+                    stringResource(R.string.keyboardsettings_escape_sends_it_on_the_way_down_control_is_held),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -142,8 +144,8 @@ fun KeyboardSettings(nav: NavController) {
 
         Group("Gestures") {
             GroupRow(
-                title = "Double tap locks a modifier",
-                subtitle = "Tap Ctrl twice quickly and it stays down until you tap it again",
+                title = stringResource(R.string.keyboardsettings_double_tap_locks_a_modifier),
+                subtitle = stringResource(R.string.keyboardsettings_tap_ctrl_twice_quickly_and_it_stays_down_until_y),
                 icon = Icons.Rounded.KeyboardCapslock,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.doubleTapLocksModifier,
@@ -151,8 +153,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Double tap sends Tab",
-                subtitle = "Phone keyboards have no Tab key, so two taps send it. This works inside programs that read the mouse too.",
+                title = stringResource(R.string.keyboardsettings_double_tap_sends_tab),
+                subtitle = stringResource(R.string.keyboardsettings_phone_keyboards_have_no_tab_key_so_two_taps_send),
                 icon = Icons.Rounded.TouchApp,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.doubleTapSendsTab,
@@ -160,8 +162,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Two-finger drag sends arrows",
-                subtitle = "Slide two fingers to walk the cursor. Pinch still zooms",
+                title = stringResource(R.string.keyboardsettings_two_finger_drag_sends_arrows),
+                subtitle = stringResource(R.string.keyboardsettings_slide_two_fingers_to_walk_the_cursor_pinch_still),
                 icon = Icons.Rounded.Swipe,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.twoFingerDragArrows,
@@ -169,8 +171,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Hold Ctrl for chords",
-                subtitle = "A long press on Ctrl opens the chords sheet",
+                title = stringResource(R.string.keyboardsettings_hold_ctrl_for_chords),
+                subtitle = stringResource(R.string.keyboardsettings_a_long_press_on_ctrl_opens_the_chords_sheet),
                 icon = Icons.Rounded.Bolt,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.ctrlLongPressOpensChords,
@@ -178,8 +180,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Swipe between sessions",
-                subtitle = "Drag sideways in the terminal to move along the tab strip",
+                title = stringResource(R.string.keyboardsettings_swipe_between_sessions),
+                subtitle = stringResource(R.string.keyboardsettings_drag_sideways_in_the_terminal_to_move_along_the),
                 icon = Icons.Rounded.SwipeLeft,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.swipeBetweenSessions,

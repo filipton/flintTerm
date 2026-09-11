@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.content.pm.PackageManager
 import android.hardware.usb.UsbManager
@@ -511,17 +513,17 @@ class MainActivity : FragmentActivity() {
 private fun AgentSigningDialog(asking: dev.flint.term.session.AgentGate.Asking) {
     AlertDialog(
         onDismissRequest = { asking.deny() },
-        title = { Text("Sign for ${asking.hostLabel}?") },
+        title = { Text(stringResource(R.string.mainactivity_sign_for, asking.hostLabel)) },
         text = {
             Column {
-                Text("Something on ${asking.hostLabel} is asking to sign with a key kept on this phone. It can do that for as long as you stay connected.")
+                Text(stringResource(R.string.mainactivity_something_on_is_asking_to_sign_with_a_key_kept_o, asking.hostLabel))
                 Spacer(Modifier.height(12.dp))
                 Text(asking.keyName, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 CodeBox(asking.fingerprint)
             }
         },
-        confirmButton = { Button(onClick = { asking.allow() }) { Text("Sign once") } },
-        dismissButton = { TextButton(onClick = { asking.deny() }) { Text("Refuse") } },
+        confirmButton = { Button(onClick = { asking.allow() }) { Text(stringResource(R.string.mainactivity_sign_once)) } },
+        dismissButton = { TextButton(onClick = { asking.deny() }) { Text(stringResource(R.string.mainactivity_refuse)) } },
     )
 }
 
@@ -539,7 +541,7 @@ private fun SecurityKeyDialog(showing: SecurityKeyGate.Showing) {
         title = { Text(showing.title) },
         text = { Text(showing.body) },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = { showing.prompt.cancel() }) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = { showing.prompt.cancel() }) { Text(stringResource(R.string.mainactivity_cancel)) } },
     )
 }
 
@@ -572,7 +574,7 @@ private fun SecurityKeyPinDialog(showing: SecurityKeyGate.Showing, request: Secu
         text = {
             Column {
                 Text(
-                    request.tokenName?.let { "Enter the PIN for $it" } ?: "Enter the security key's PIN",
+                    request.tokenName?.let { stringResource(R.string.mainactivity_enter_the_pin_for, it) } ?: stringResource(R.string.mainactivity_enter_the_security_key_s_pin),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 // The token is held open while this is typed, so over NFC the key
@@ -580,7 +582,7 @@ private fun SecurityKeyPinDialog(showing: SecurityKeyGate.Showing, request: Secu
                 if (showing.prompt.transport == KeyTransport.NFC) {
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        "Keep the key against the phone while you type.",
+                        stringResource(R.string.mainactivity_keep_the_key_against_the_phone_while_you_type),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -593,12 +595,12 @@ private fun SecurityKeyPinDialog(showing: SecurityKeyGate.Showing, request: Secu
                     modifier = Modifier.focusRequester(focus),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
                     error = request.problem,
-                    hint = "At least ${PinEntry.MINIMUM} digits. Getting it wrong too often locks the key.",
+                    hint = stringResource(R.string.mainactivity_at_least_digits_getting_it_wrong_too_often_locks, PinEntry.MINIMUM),
                 )
             }
         },
-        confirmButton = { Button(enabled = ready, onClick = send) { Text("Unlock") } },
-        dismissButton = { TextButton(onClick = { request.cancel() }) { Text("Cancel") } },
+        confirmButton = { Button(enabled = ready, onClick = send) { Text(stringResource(R.string.mainactivity_unlock)) } },
+        dismissButton = { TextButton(onClick = { request.cancel() }) { Text(stringResource(R.string.mainactivity_cancel)) } },
     )
 }
 
@@ -657,7 +659,7 @@ private fun AuthPromptDialog(prompt: AuthPrompt) {
     val send = { prompt.answer(answers.map { it.value }) }
     AlertDialog(
         onDismissRequest = { prompt.cancel() },
-        title = { Text(prompt.name.ifBlank { "The server is asking" }) },
+        title = { Text(prompt.name.ifBlank { stringResource(R.string.mainactivity_the_server_is_asking) }) },
         text = {
             Column {
                 val instruction = prompt.instruction.trim()
@@ -683,8 +685,8 @@ private fun AuthPromptDialog(prompt: AuthPrompt) {
                 }
             }
         },
-        confirmButton = { Button(onClick = { send() }) { Text("Send") } },
-        dismissButton = { TextButton(onClick = { prompt.cancel() }) { Text("Cancel") } },
+        confirmButton = { Button(onClick = { send() }) { Text(stringResource(R.string.mainactivity_send)) } },
+        dismissButton = { TextButton(onClick = { prompt.cancel() }) { Text(stringResource(R.string.mainactivity_cancel)) } },
     )
 }
 
@@ -693,21 +695,21 @@ private fun HostKeyDialog(prompt: HostKeyPrompt) {
     val changed = prompt.previousFingerprint != null
     AlertDialog(
         onDismissRequest = { prompt.decision.complete(false) },
-        title = { Text(if (changed) "Host key changed" else "New host") },
+        title = { Text(if (changed) stringResource(R.string.mainactivity_host_key_changed) else stringResource(R.string.mainactivity_new_host)) },
         text = {
             Column {
                 if (changed) {
                     Text(
-                        "The key for ${prompt.key.host}:${prompt.key.port} is different from the one you trusted before. " +
-                            "That happens after a reinstall, or when someone is intercepting the connection.",
+                        stringResource(R.string.mainactivity_the_key_for_is_different_from_the_one_you_truste, prompt.key.host, prompt.key.port) +
+                            stringResource(R.string.mainactivity_that_happens_after_a_reinstall_or_when_someone_i),
                         color = MaterialTheme.colorScheme.error,
                     )
                     Spacer(Modifier.height(12.dp))
-                    Text("Previously", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.mainactivity_previously), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     CodeBox(prompt.previousFingerprint ?: "")
                     Spacer(Modifier.height(10.dp))
                 } else {
-                    Text("First connection to ${prompt.key.host}:${prompt.key.port}. Compare the fingerprint with the server before trusting it.")
+                    Text(stringResource(R.string.mainactivity_first_connection_to_compare_the_fingerprint_with, prompt.key.host, prompt.key.port))
                     Spacer(Modifier.height(12.dp))
                 }
                 Text(prompt.key.keyType, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -718,9 +720,9 @@ private fun HostKeyDialog(prompt: HostKeyPrompt) {
             Button(
                 onClick = { prompt.decision.complete(true) },
                 colors = if (changed) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError) else ButtonDefaults.buttonColors(),
-            ) { Text(if (changed) "Trust new key" else "Trust") }
+            ) { Text(if (changed) stringResource(R.string.mainactivity_trust_new_key) else "Trust") }
         },
-        dismissButton = { TextButton(onClick = { prompt.decision.complete(false) }) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = { prompt.decision.complete(false) }) { Text(stringResource(R.string.mainactivity_cancel)) } },
     )
 }
 

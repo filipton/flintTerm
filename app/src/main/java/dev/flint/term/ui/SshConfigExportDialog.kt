@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -67,7 +69,7 @@ fun SshConfigExportDialog(onDismiss: () -> Unit) {
     var confirming by remember { mutableStateOf(false) }
 
     fun done(ok: Boolean, what: String) {
-        Toast.makeText(context, if (ok) "Exported $what" else "Could not write the export", Toast.LENGTH_LONG).show()
+        Toast.makeText(context, if (ok) context.getString(R.string.sshconfigexportdialog_exported, what) else "Could not write the export", Toast.LENGTH_LONG).show()
         onDismiss()
     }
 
@@ -95,48 +97,48 @@ fun SshConfigExportDialog(onDismiss: () -> Unit) {
                 }
                 all
             }
-            done(ok, "$written ${if (written == 1) "host" else "hosts"} and ${keys.size} ${if (keys.size == 1) "key" else "keys"}")
+            done(ok, "${written} ${if (written == 1) "host" else "hosts"} and ${keys.size} ${if (keys.size == 1) "key" else "keys"}")
         }
     }
 
     if (confirming) {
         AlertDialog(
             onDismissRequest = { confirming = false },
-            title = { Text("Write ${keys.size} private ${if (keys.size == 1) "key" else "keys"} to a folder?") },
+            title = { Text(stringResource(R.string.sshconfigexportdialog_write_private_to_a_folder, keys.size, if (keys.size == 1) "key" else "keys")) },
             text = {
                 Column {
                     Text(
-                        "These leave the phone unencrypted, as plain files anyone with the folder can read: " +
+                        stringResource(R.string.sshconfigexportdialog_these_leave_the_phone_unencrypted_as_plain_files) +
                             keys.joinToString(", ") { it.name } + ".",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Spacer(Modifier.padding(4.dp))
                     Text(
-                        "Put them somewhere you control, and set their permissions to 600 once they are there. " +
-                            "ssh refuses a private key that the rest of the machine can read.",
+                        stringResource(R.string.sshconfigexportdialog_put_them_somewhere_you_control_and_set_their_per) +
+                            stringResource(R.string.sshconfigexportdialog_ssh_refuses_a_private_key_that_the_rest_of_the_m),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             },
-            confirmButton = { Button(onClick = { confirming = false; saveFolder.launch(null) }) { Text("Choose a folder") } },
-            dismissButton = { TextButton(onClick = { confirming = false }) { Text("Cancel") } },
+            confirmButton = { Button(onClick = { confirming = false; saveFolder.launch(null) }) { Text(stringResource(R.string.sshconfigexportdialog_choose_a_folder)) } },
+            dismissButton = { TextButton(onClick = { confirming = false }) { Text(stringResource(R.string.sshconfigexportdialog_cancel)) } },
         )
         return
     }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Export as an SSH config") },
+        title = { Text(stringResource(R.string.sshconfigexportdialog_export_as_an_ssh_config)) },
         text = {
             Column {
                 Text(
-                    "$written of your hosts as an OpenSSH config, ready to drop into ~/.ssh on another machine. " +
-                        "Groups and accounts are resolved first, so each host is written with the values it really connects with.",
+                    stringResource(R.string.sshconfigexportdialog_of_your_hosts_as_an_openssh_config_ready_to_drop, written) +
+                        stringResource(R.string.sshconfigexportdialog_groups_and_accounts_are_resolved_first_so_each_h),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.padding(4.dp))
                 Text(
-                    "No password is written. Anything ssh has no setting for, such as a tunnel, Mosh or wake-on-LAN, is named in a comment.",
+                    stringResource(R.string.sshconfigexportdialog_no_password_is_written_anything_ssh_has_no_setti),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (keys.isNotEmpty()) {
@@ -144,9 +146,9 @@ fun SshConfigExportDialog(onDismiss: () -> Unit) {
                         Checkbox(withKeys, { withKeys = it })
                         Spacer(Modifier.width(4.dp))
                         Column {
-                            Text("Write the private keys beside it", style = MaterialTheme.typography.bodyMedium)
+                            Text(stringResource(R.string.sshconfigexportdialog_write_the_private_keys_beside_it), style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "${keys.size} of your keys can be copied. Keystore and security-key identities cannot leave the device",
+                                stringResource(R.string.sshconfigexportdialog_of_your_keys_can_be_copied_keystore_and_security, keys.size),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -156,10 +158,10 @@ fun SshConfigExportDialog(onDismiss: () -> Unit) {
         },
         confirmButton = {
             Button(onClick = { if (withKeys) confirming = true else saveConfig.launch(CONFIG_NAME) }) {
-                Text(if (withKeys) "Continue" else "Choose where")
+                Text(if (withKeys) "Continue" else stringResource(R.string.sshconfigexportdialog_choose_where))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.sshconfigexportdialog_cancel)) } },
     )
 }
 

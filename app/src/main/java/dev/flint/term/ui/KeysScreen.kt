@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -111,7 +113,7 @@ fun KeysScreen(nav: NavController) {
         scope.launch(Dispatchers.IO) {
             val text = runCatching { context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() }.getOrNull()
             withContext(Dispatchers.Main) {
-                if (text == null) Toast.makeText(context, "Could not read file", Toast.LENGTH_SHORT).show() else into(text)
+                if (text == null) Toast.makeText(context, context.getString(R.string.keysscreen_could_not_read_file), Toast.LENGTH_SHORT).show() else into(text)
             }
         }
     }
@@ -127,7 +129,7 @@ fun KeysScreen(nav: NavController) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Keys",
+                title = stringResource(R.string.keysscreen_keys),
                 // A top-level screen now, so no back arrow: the bottom bar is
                 // how you got here and how you leave.
                 onBack = null,
@@ -141,7 +143,7 @@ fun KeysScreen(nav: NavController) {
             ExtendedFloatingActionButton(
                 onClick = { showAdd = true },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("Add") },
+                text = { Text(stringResource(R.string.keysscreen_add)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -158,19 +160,19 @@ fun KeysScreen(nav: NavController) {
                 // one long list where "Accounts" is a key.
                 Group(modifier = Modifier.padding(top = 8.dp, bottom = 14.dp)) {
                     GroupRow(
-                        title = "Accounts",
+                        title = stringResource(R.string.keysscreen_accounts),
                         subtitle = when (accounts.size) {
-                            0 -> "A username and key that hosts can share"
-                            1 -> "1 login shared by hosts"
-                            else -> "${accounts.size} logins shared by hosts"
+                            0 -> stringResource(R.string.keysscreen_a_username_and_key_that_hosts_can_share)
+                            1 -> stringResource(R.string.keysscreen_1_login_shared_by_hosts)
+                            else -> stringResource(R.string.keysscreen_logins_shared_by_hosts, accounts.size)
                         },
                         icon = Icons.Rounded.Person,
                         onClick = { nav.navigate(Routes.ACCOUNTS) },
                     )
                     RowDivider()
                     GroupRow(
-                        title = "Trusted host keys",
-                        subtitle = if (known.isEmpty()) "None yet" else "${known.size} servers  ·  view, copy or forget",
+                        title = stringResource(R.string.keysscreen_trusted_host_keys),
+                        subtitle = if (known.isEmpty()) stringResource(R.string.keysscreen_none_yet) else stringResource(R.string.keysscreen_servers_view_copy_or_forget, known.size),
                         icon = Icons.Rounded.Dns,
                         iconTint = MaterialTheme.colorScheme.tertiary,
                         onClick = { nav.navigate(Routes.KNOWN_HOSTS) },
@@ -180,9 +182,9 @@ fun KeysScreen(nav: NavController) {
             if (identities.isEmpty()) {
                 item {
                     EmptyState(
-                        Icons.Rounded.VpnKey, "No keys yet",
-                        "Generate a key on this device, where the private half never leaves it. You can also import an OpenSSH or PEM key, or add a security key you plug in or tap.",
-                        "Add a key",
+                        Icons.Rounded.VpnKey, stringResource(R.string.keysscreen_no_keys_yet),
+                        stringResource(R.string.keysscreen_generate_a_key_on_this_device_where_the_private),
+                        stringResource(R.string.keysscreen_add_a_key),
                     ) { showAdd = true }
                 }
             } else {
@@ -201,10 +203,10 @@ fun KeysScreen(nav: NavController) {
                                     // that needs touching, one that asks, one with a
                                     // certificate — should not need a tap to discover.
                                     val traits = buildList {
-                                        if (id.hardware) add(id.backing.ifBlank { "in the keystore" })
-                                        if (id.securityKey) add("needs the key")
+                                        if (id.hardware) add(id.backing.ifBlank { stringResource(R.string.keysscreen_in_the_keystore) })
+                                        if (id.securityKey) add(stringResource(R.string.keysscreen_needs_the_key))
                                         if (id.certificate.isNotBlank()) add("certificate")
-                                        if (id.requireAuth) add("asks each use")
+                                        if (id.requireAuth) add(stringResource(R.string.keysscreen_asks_each_use))
                                     }
                                     if (traits.isNotEmpty()) append("\n").append(traits.joinToString("  ·  "))
                                 },
@@ -219,7 +221,7 @@ fun KeysScreen(nav: NavController) {
                 }
                 item {
                     Text(
-                        "Tap a key to see and share its public half. Add it to ~/.ssh/authorized_keys on the server.",
+                        stringResource(R.string.keysscreen_tap_a_key_to_see_and_share_its_public_half_add_i),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
                     )
@@ -245,11 +247,11 @@ fun KeysScreen(nav: NavController) {
                     }
                 }
                 Spacer(Modifier.height(18.dp))
-                Text("Fingerprint", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.keysscreen_fingerprint), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(4.dp))
                 SelectionContainer { Text(id.fingerprint, style = CodeStyle.copy(fontSize = 12.sp)) }
                 Spacer(Modifier.height(14.dp))
-                Text("Public key", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.keysscreen_public_key), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(6.dp))
                 SelectionContainer {
                     Text(
@@ -274,9 +276,9 @@ fun KeysScreen(nav: NavController) {
                         Icon(Icons.Rounded.Security, null, Modifier.width(20.dp), tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(10.dp))
                         Text(
-                            "The private half is on the security key, not on this phone. Every login asks you to " +
+                            stringResource(R.string.keysscreen_the_private_half_is_on_the_security_key_not_on_t) +
                                 "${if (SecurityKeyIdentity.transportOf(id) == KeyTransport.NFC) "hold the key to the back of the phone" else "plug the key in"} " +
-                                "and touch it. If you lose the key this identity is gone, so keep a second key authorized on your servers.",
+                                stringResource(R.string.keysscreen_and_touch_it_if_you_lose_the_key_this_identity_i),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -291,9 +293,9 @@ fun KeysScreen(nav: NavController) {
                         Spacer(Modifier.width(10.dp))
                         Text(
                             if (id.requireAuth) {
-                                "Every signature asks for your fingerprint, face or screen lock. The keystore decided that when the key was made, so it cannot be turned off. Make another key without it instead."
+                                stringResource(R.string.keysscreen_every_signature_asks_for_your_fingerprint_face_o)
                             } else {
-                                "Signs without asking. Only a key generated with “Ask before every use” can require it, and that cannot be added afterwards."
+                                stringResource(R.string.keysscreen_signs_without_asking_only_a_key_generated_with_a)
                             },
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -303,20 +305,20 @@ fun KeysScreen(nav: NavController) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Button(onClick = {
                         context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("public key", id.publicKey))
-                        Toast.makeText(context, "Public key copied", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.keysscreen_public_key_copied), Toast.LENGTH_SHORT).show()
                     }, Modifier.weight(1f)) {
-                        Icon(Icons.Rounded.ContentCopy, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text("Copy")
+                        Icon(Icons.Rounded.ContentCopy, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.keysscreen_copy))
                     }
                     Button(onClick = {
                         val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, id.publicKey)
                         context.startActivity(Intent.createChooser(send, "Share public key"))
                     }, Modifier.weight(1f)) {
-                        Icon(Icons.Rounded.Share, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text("Share")
+                        Icon(Icons.Rounded.Share, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.keysscreen_share))
                     }
                 }
                 Spacer(Modifier.height(10.dp))
                 Button(onClick = { pickHostFor = id; detail = null }, Modifier.fillMaxWidth(), enabled = hosts.isNotEmpty()) {
-                    Icon(Icons.Rounded.Dns, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text("Install on a server…")
+                    Icon(Icons.Rounded.Dns, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.keysscreen_install_on_a_server))
                 }
                 Spacer(Modifier.height(6.dp))
                 // The one thing that is not "do something with this key" but
@@ -330,14 +332,14 @@ fun KeysScreen(nav: NavController) {
                     TextButton(onClick = { detail = null; nav.navigate(Routes.keyRotation(id.id)) }, Modifier.fillMaxWidth()) {
                         Icon(Icons.Rounded.Autorenew, null, Modifier.width(18.dp))
                         Spacer(Modifier.width(8.dp))
-                        Text("Replace this key everywhere…")
+                        Text(stringResource(R.string.keysscreen_replace_this_key_everywhere))
                     }
                 }
                 Spacer(Modifier.height(2.dp))
                 TextButton(onClick = { app.store.deleteIdentity(id.id); detail = null }, Modifier.fillMaxWidth()) {
                     Icon(Icons.Rounded.Delete, null, Modifier.width(18.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
-                    Text("Delete key", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.keysscreen_delete_key), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -346,7 +348,7 @@ fun KeysScreen(nav: NavController) {
     pickHostFor?.let { id ->
         ActionSheet(
             onDismiss = { pickHostFor = null },
-            title = "Install ${id.name} on",
+            title = stringResource(R.string.keysscreen_install_on, id.name),
             actions = hosts.map { h -> SheetAction(h.displayName, iconFor(h.icon), subtitle = h.target) { installTarget = h to id; pickHostFor = null } },
         )
     }
@@ -355,17 +357,17 @@ fun KeysScreen(nav: NavController) {
     if (showAdd) {
         ActionSheet(
             onDismiss = { showAdd = false },
-            title = "Add a key",
+            title = stringResource(R.string.keysscreen_add_a_key),
             actions = listOf(
-                SheetAction("Generate a key", Icons.Rounded.VpnKey, subtitle = "On this phone, or inside its keystore") {
+                SheetAction(stringResource(R.string.keysscreen_generate_a_key), Icons.Rounded.VpnKey, subtitle = stringResource(R.string.keysscreen_on_this_phone_or_inside_its_keystore)) {
                     showAdd = false
                     showGenerate = true
                 },
-                SheetAction("Add a security key", Icons.Rounded.Security, subtitle = "A FIDO2 key you plug in or tap") {
+                SheetAction(stringResource(R.string.keysscreen_add_a_security_key), Icons.Rounded.Security, subtitle = stringResource(R.string.keysscreen_a_fido2_key_you_plug_in_or_tap)) {
                     showAdd = false
                     showSecurityKey = true
                 },
-                SheetAction("Import a key…", Icons.Rounded.FileOpen, subtitle = "An OpenSSH or PEM private key file") {
+                SheetAction(stringResource(R.string.keysscreen_import_a_key), Icons.Rounded.FileOpen, subtitle = stringResource(R.string.keysscreen_an_openssh_or_pem_private_key_file)) {
                     showAdd = false
                     picker.launch(arrayOf("*/*"))
                 },
@@ -389,17 +391,17 @@ fun KeysScreen(nav: NavController) {
         var busy by remember { mutableStateOf(false) }
         ModalBottomSheet(onDismissRequest = { showGenerate = false }, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
             Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Generate key", style = MaterialTheme.typography.titleLarge)
-                Field(name, { name = it }, "Name / comment")
-                Segmented(listOf("Ed25519", "ECDSA", "RSA 4096", "In the chip"), alg) { alg = it }
+                Text(stringResource(R.string.keysscreen_generate_key), style = MaterialTheme.typography.titleLarge)
+                Field(name, { name = it }, stringResource(R.string.keysscreen_name_comment))
+                Segmented(listOf("Ed25519", "ECDSA", "RSA 4096", stringResource(R.string.keysscreen_in_the_chip)), alg) { alg = it }
                 Text(
                     when (alg) {
-                        0 -> "Modern, fast and small. Use this unless the server is very old."
-                        1 -> "NIST P-256. Broad compatibility."
-                        2 -> "Largest keys. Works with older servers."
+                        0 -> stringResource(R.string.keysscreen_modern_fast_and_small_use_this_unless_the_server)
+                        1 -> stringResource(R.string.keysscreen_nist_p_256_broad_compatibility)
+                        2 -> stringResource(R.string.keysscreen_largest_keys_works_with_older_servers)
                         // The honest trade: safest against a stolen phone, and
                         // impossible to move to another one.
-                        else -> "Made inside this device's keystore and never readable by this app, a backup or a sync. It cannot leave this phone, so give each device its own key and authorise them all on the server. ECDSA P-256, the only kind the keystore makes."
+                        else -> stringResource(R.string.keysscreen_made_inside_this_device_s_keystore_and_never_rea)
                     },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -407,7 +409,7 @@ fun KeysScreen(nav: NavController) {
                 // what protects it.
                 if (alg != 3) {
                     Field(
-                        passphrase, { passphrase = it }, "Passphrase (optional)",
+                        passphrase, { passphrase = it }, stringResource(R.string.keysscreen_passphrase_optional),
                         visualTransformation = PasswordVisualTransformation(),
                         autofill = ContentType.NewPassword,
                     )
@@ -416,9 +418,9 @@ fun KeysScreen(nav: NavController) {
                     // the keystore fixes this when it creates the key.
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text("Ask before every use", style = MaterialTheme.typography.bodyLarge)
+                            Text(stringResource(R.string.keysscreen_ask_before_every_use), style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                "A fingerprint, face or the screen lock for each signature, enforced by the keystore. It has to be decided now: the key cannot be changed afterwards.",
+                                stringResource(R.string.keysscreen_a_fingerprint_face_or_the_screen_lock_for_each_s),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -452,7 +454,7 @@ fun KeysScreen(nav: NavController) {
                                         withContext(Dispatchers.Main) {
                                             Toast.makeText(
                                                 context,
-                                                "This device cannot tie a key to your fingerprint. Set up a screen lock first. The key was made without it.",
+                                                context.getString(R.string.keysscreen_this_device_cannot_tie_a_key_to_your_fingerprint),
                                                 Toast.LENGTH_LONG,
                                             ).show()
                                         }
@@ -481,11 +483,11 @@ fun KeysScreen(nav: NavController) {
         val encrypted = text.contains("ENCRYPTED") || text.contains("bcrypt")
         ModalBottomSheet(onDismissRequest = { importText = null }, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
             Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Import key", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.keysscreen_import_key), style = MaterialTheme.typography.titleLarge)
                 Text(text.lineSequence().firstOrNull().orEmpty(), style = CodeStyle.copy(fontSize = 12.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Field(name, { name = it }, "Name")
                 Field(
-                    passphrase, { passphrase = it }, if (encrypted) "Passphrase" else "Passphrase (if any)",
+                    passphrase, { passphrase = it }, if (encrypted) "Passphrase" else stringResource(R.string.keysscreen_passphrase_if_any),
                     visualTransformation = PasswordVisualTransformation(),
                     autofill = ContentType.Password,
                 )
@@ -496,10 +498,10 @@ fun KeysScreen(nav: NavController) {
                             app.store.upsertIdentity(Identity(name = name.trim(), privateKey = text, publicKey = k.publicKey, fingerprint = k.fingerprint, passphrase = passphrase))
                             withContext(Dispatchers.Main) { importText = null }
                         } catch (e: CoreException) {
-                            withContext(Dispatchers.Main) { Toast.makeText(context, "Invalid key: ${e.message}", Toast.LENGTH_LONG).show() }
+                            withContext(Dispatchers.Main) { Toast.makeText(context, context.getString(R.string.keysscreen_invalid_key, e.message), Toast.LENGTH_LONG).show() }
                         }
                     }
-                }, modifier = Modifier.fillMaxWidth()) { Text("Import") }
+                }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.keysscreen_import)) }
             }
         }
     }
@@ -525,25 +527,25 @@ fun KeysScreen(nav: NavController) {
         }
         ModalBottomSheet(onDismissRequest = { certFor = null }, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
             Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("Certificate for ${id.name}", style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.keysscreen_certificate_for, id.name), style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Paste the certificate your CA issued for this key. It is a single line ending in -cert-v01@openssh.com. Servers that trust the CA then accept this key without having seen it before, until the certificate expires.",
+                    stringResource(R.string.keysscreen_paste_the_certificate_your_ca_issued_for_this_ke),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Field(
                     certText, { certText = it }, "Certificate",
                     mono = true, singleLine = false, minLines = 3,
-                    error = error ?: parsed?.let { if (it.host) "that is a host certificate, which identifies a server and not you" else null },
+                    error = error ?: parsed?.let { if (it.host) stringResource(R.string.keysscreen_that_is_a_host_certificate_which_identifies_a_se) else null },
                 )
                 OutlinedButton(onClick = { certPicker.launch(arrayOf("*/*")) }, Modifier.fillMaxWidth()) {
-                    Icon(Icons.Rounded.FileOpen, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text("Load from a file…")
+                    Icon(Icons.Rounded.FileOpen, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.keysscreen_load_from_a_file))
                 }
                 parsed?.let { CertificateFacts(it) }
                 Button(
                     enabled = parsed?.let { !it.host } == true,
                     onClick = { app.store.upsertIdentity(id.copy(certificate = certText.trim())); certFor = null },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("Attach") }
+                ) { Text(stringResource(R.string.keysscreen_attach)) }
             }
         }
     }
@@ -568,24 +570,24 @@ private fun CertificateBlock(identity: Identity, onAttach: () -> Unit, onRemove:
                 .onFailure { parsed = null; error = it.message ?: "this certificate no longer parses" }
         }
     }
-    Text("Certificate", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(stringResource(R.string.keysscreen_certificate), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
     Spacer(Modifier.height(6.dp))
     if (identity.certificate.isBlank()) {
         Text(
-            "None. If your servers trust an SSH certificate authority rather than a list of keys, attach the certificate it issued for this key.",
+            stringResource(R.string.keysscreen_none_if_your_servers_trust_an_ssh_certificate_au),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = onAttach, Modifier.fillMaxWidth()) {
-            Icon(Icons.Rounded.Verified, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text("Attach a certificate…")
+            Icon(Icons.Rounded.Verified, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text(stringResource(R.string.keysscreen_attach_a_certificate))
         }
     } else {
         error?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
         parsed?.let { CertificateFacts(it) }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            OutlinedButton(onClick = onAttach, Modifier.weight(1f)) { Text("Replace…") }
-            OutlinedButton(onClick = onRemove, Modifier.weight(1f)) { Text("Remove", color = MaterialTheme.colorScheme.error) }
+            OutlinedButton(onClick = onAttach, Modifier.weight(1f)) { Text(stringResource(R.string.keysscreen_replace)) }
+            OutlinedButton(onClick = onRemove, Modifier.weight(1f)) { Text(stringResource(R.string.keysscreen_remove), color = MaterialTheme.colorScheme.error) }
         }
     }
 }
@@ -597,7 +599,7 @@ private fun CertificateFacts(info: CertificateInfo) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(info.keyType, style = CodeStyle.copy(fontSize = 12.sp), color = MaterialTheme.colorScheme.tertiary)
         Text(
-            "Logs in as ${certPrincipals(info)}",
+            stringResource(R.string.keysscreen_logs_in_as, certPrincipals(info)),
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
@@ -606,7 +608,7 @@ private fun CertificateFacts(info: CertificateInfo) {
             color = if (expired) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (info.keyId.isNotBlank()) {
-            Text("Issued to ${info.keyId}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.keysscreen_issued_to, info.keyId), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         SelectionContainer {
             Text("CA ${info.caFingerprint}", style = CodeStyle.copy(fontSize = 11.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -658,16 +660,16 @@ private fun SecurityKeySheet(onDismiss: () -> Unit, onEnrolled: (Identity) -> Un
 
     ModalBottomSheet(onDismissRequest = { if (!busy) onDismiss() }, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("Add a security key", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.keysscreen_add_a_security_key), style = MaterialTheme.typography.titleLarge)
             Text(
-                "The private key is made on the token and stays there. Every login needs the key present and a touch on it.",
+                stringResource(R.string.keysscreen_the_private_key_is_made_on_the_token_and_stays_t),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Segmented(transports.map { it.label }, transports.indexOf(transport)) { transport = transports[it] }
             Text(
                 blocked ?: when (transport) {
-                    KeyTransport.USB -> "Plug the key into this phone, with an adapter if it needs one."
-                    KeyTransport.NFC -> "Hold the key against the back of the phone and keep it there."
+                    KeyTransport.USB -> stringResource(R.string.keysscreen_plug_the_key_into_this_phone_with_an_adapter_if)
+                    KeyTransport.NFC -> stringResource(R.string.keysscreen_hold_the_key_against_the_back_of_the_phone_and_k)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = if (blocked != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -676,13 +678,13 @@ private fun SecurityKeySheet(onDismiss: () -> Unit, onEnrolled: (Identity) -> Un
             Segmented(algorithms.map { it.label }, algorithms.indexOf(algorithm)) { algorithm = algorithms[it] }
             Text(
                 if (algorithm == SecurityKeyAlgorithm.Ed25519) {
-                    "Smaller and faster. Not every key supports it, and one that does not will make an ECDSA key instead and tell you."
+                    stringResource(R.string.keysscreen_smaller_and_faster_not_every_key_supports_it_and)
                 } else {
-                    "NIST P-256. Every FIDO2 key can do this one."
+                    stringResource(R.string.keysscreen_nist_p_256_every_fido2_key_can_do_this_one)
                 },
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Field(name, { name = it }, "Name / comment")
+            Field(name, { name = it }, stringResource(R.string.keysscreen_name_comment))
             problem?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error) }
             Button(
                 enabled = name.isNotBlank() && !busy && blocked == null,
@@ -709,7 +711,7 @@ private fun SecurityKeySheet(onDismiss: () -> Unit, onEnrolled: (Identity) -> Un
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text(if (busy) "Waiting for the key…" else "Add security key") }
+            ) { Text(if (busy) stringResource(R.string.keysscreen_waiting_for_the_key) else stringResource(R.string.keysscreen_add_security_key)) }
         }
     }
 }

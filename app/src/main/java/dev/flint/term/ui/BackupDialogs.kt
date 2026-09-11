@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.net.Uri
 import android.os.Build
 import android.widget.Toast
@@ -78,7 +80,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
             }
             Toast.makeText(
                 context,
-                if (ok) "Backed up ${Vault.describe(Vault.strip(snapshot, withSecrets))}" else "Could not write the backup",
+                if (ok) context.getString(R.string.backupdialogs_backed_up, Vault.describe(Vault.strip(snapshot, withSecrets))) else "Could not write the backup",
                 Toast.LENGTH_LONG,
             ).show()
             onDismiss()
@@ -89,34 +91,34 @@ fun BackupDialog(onDismiss: () -> Unit) {
     val short = passphrase.isNotEmpty() && passphrase.length < 8
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text("Back up to a file") },
+        title = { Text(stringResource(R.string.backupdialogs_back_up_to_a_file)) },
         text = {
             Column {
                 Text(
-                    "Hosts, keys, snippets, tunnels and settings, encrypted with a passphrase you choose. " +
-                        "There is no way to open the file without it.",
+                    stringResource(R.string.backupdialogs_hosts_keys_snippets_tunnels_and_settings_encrypt) +
+                        stringResource(R.string.backupdialogs_there_is_no_way_to_open_the_file_without_it),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.padding(6.dp))
                 OutlinedTextField(
-                    passphrase, { passphrase = it }, label = { Text("Passphrase") }, singleLine = true,
+                    passphrase, { passphrase = it }, label = { Text(stringResource(R.string.backupdialogs_passphrase)) }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    isError = short, supportingText = if (short) ({ Text("At least 8 characters") }) else null,
+                    isError = short, supportingText = if (short) ({ Text(stringResource(R.string.backupdialogs_at_least_8_characters)) }) else null,
                     modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.NewPassword },
                 )
                 OutlinedTextField(
-                    again, { again = it }, label = { Text("Again") }, singleLine = true,
+                    again, { again = it }, label = { Text(stringResource(R.string.backupdialogs_again)) }, singleLine = true,
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    isError = mismatch, supportingText = if (mismatch) ({ Text("The two do not match") }) else null,
+                    isError = mismatch, supportingText = if (mismatch) ({ Text(stringResource(R.string.backupdialogs_the_two_do_not_match)) }) else null,
                     modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.NewPassword },
                 )
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
                     Checkbox(withSecrets, { withSecrets = it })
                     Spacer(Modifier.width(4.dp))
                     Column {
-                        Text("Include passwords, private keys and tunnel configs", style = MaterialTheme.typography.bodyMedium)
+                        Text(stringResource(R.string.backupdialogs_include_passwords_private_keys_and_tunnel_config), style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "Off leaves a file safe to hand to someone else. Keys in the phone's keystore never leave it either way",
+                            stringResource(R.string.backupdialogs_off_leaves_a_file_safe_to_hand_to_someone_else_k),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -132,9 +134,9 @@ fun BackupDialog(onDismiss: () -> Unit) {
                     passphrase = ""; again = ""
                     save.launch("flintterm-${SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())}.${Vault.EXTENSION}")
                 }
-            }) { Text(if (busy) "Encrypting…" else "Choose where") }
+            }) { Text(if (busy) "Encrypting…" else stringResource(R.string.backupdialogs_choose_where)) }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.backupdialogs_cancel)) } },
     )
 }
 
@@ -161,8 +163,8 @@ fun RestoreFlow(onDismiss: () -> Unit) {
                 runCatching { context.contentResolver.openInputStream(uri)?.use { it.readBytes() } }.getOrNull()
             }
             when {
-                bytes == null -> { Toast.makeText(context, "Could not read that file", Toast.LENGTH_SHORT).show(); onDismiss() }
-                !isVault(bytes) -> { Toast.makeText(context, "That is not a backup made by this app", Toast.LENGTH_LONG).show(); onDismiss() }
+                bytes == null -> { Toast.makeText(context, context.getString(R.string.backupdialogs_could_not_read_that_file), Toast.LENGTH_SHORT).show(); onDismiss() }
+                !isVault(bytes) -> { Toast.makeText(context, context.getString(R.string.backupdialogs_that_is_not_a_backup_made_by_this_app), Toast.LENGTH_LONG).show(); onDismiss() }
                 else -> file = bytes
             }
         }
@@ -176,11 +178,11 @@ fun RestoreFlow(onDismiss: () -> Unit) {
     if (bytes != null && result == null) {
         AlertDialog(
             onDismissRequest = { if (!busy) onDismiss() },
-            title = { Text("Open the backup") },
+            title = { Text(stringResource(R.string.backupdialogs_open_the_backup)) },
             text = {
                 Column {
                     OutlinedTextField(
-                        passphrase, { passphrase = it; error = null }, label = { Text("Passphrase") }, singleLine = true,
+                        passphrase, { passphrase = it; error = null }, label = { Text(stringResource(R.string.backupdialogs_passphrase)) }, singleLine = true,
                         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         isError = error != null, supportingText = error?.let { { Text(it) } },
                         modifier = Modifier.fillMaxWidth().semantics { contentType = ContentType.Password },
@@ -205,24 +207,24 @@ fun RestoreFlow(onDismiss: () -> Unit) {
                     }
                 }) { Text(if (busy) "Opening…" else "Open") }
             },
-            dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
+            dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.backupdialogs_cancel)) } },
         )
     }
 
     if (result != null) {
         val (meta, snap) = result
         val made = buildString {
-            if (meta.device.isNotBlank()) append("Made on ${meta.device}")
+            if (meta.device.isNotBlank()) append(stringResource(R.string.backupdialogs_made_on, meta.device))
             if (meta.exportedAt > 0) {
-                append(if (isEmpty()) "Made " else " ")
+                append(if (isEmpty()) stringResource(R.string.backupdialogs_made) else " ")
                 append(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(meta.exportedAt)))
             }
-            if (!meta.withSecrets) append(if (isEmpty()) "Without" else ", without").append(" passwords or private keys")
+            if (!meta.withSecrets) append(if (isEmpty()) "Without" else stringResource(R.string.backupdialogs_without)).append(" passwords or private keys")
             if (isNotEmpty()) append(".")
         }
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Restore ${Vault.describe(snap)}?") },
+            title = { Text(stringResource(R.string.backupdialogs_restore_fmt, Vault.describe(snap))) },
             text = {
                 Column {
                     if (made.isNotEmpty()) {
@@ -230,7 +232,7 @@ fun RestoreFlow(onDismiss: () -> Unit) {
                         Spacer(Modifier.padding(4.dp))
                     }
                     Text(
-                        "Everything in the file is added. Where this phone already has the same entry, the file's version replaces it. Nothing is deleted.",
+                        stringResource(R.string.backupdialogs_everything_in_the_file_is_added_where_this_phone),
                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -238,11 +240,11 @@ fun RestoreFlow(onDismiss: () -> Unit) {
             confirmButton = {
                 Button(onClick = {
                     app.store.restore(Vault.merge(app.store.snapshot(), snap, meta.withSecrets))
-                    Toast.makeText(context, "Restored ${Vault.describe(snap)}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, context.getString(R.string.backupdialogs_restored, Vault.describe(snap)), Toast.LENGTH_LONG).show()
                     onDismiss()
-                }) { Text("Restore") }
+                }) { Text(stringResource(R.string.backupdialogs_restore)) }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.backupdialogs_cancel)) } },
         )
     }
 }

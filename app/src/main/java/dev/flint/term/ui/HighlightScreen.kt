@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,12 +86,12 @@ fun HighlightScreen(nav: NavController) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(title = "Highlighting", subtitle = "Recolor what matches, as it is drawn", onBack = { nav.popBackStack() }) },
+        topBar = { AppHeader(title = stringResource(R.string.highlightscreen_highlighting), subtitle = stringResource(R.string.highlightscreen_recolor_what_matches_as_it_is_drawn), onBack = { nav.popBackStack() }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { editing = HighlightRule(color = HostAccents[4].value.toLong().toInt()) },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("New rule") },
+                text = { Text(stringResource(R.string.highlightscreen_new_rule)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -100,8 +102,8 @@ fun HighlightScreen(nav: NavController) {
             item {
                 Group {
                     GroupRow(
-                        title = "Highlight matches",
-                        subtitle = if (rules.isEmpty()) "Nothing to apply yet" else "${rules.count { it.enabled }} of ${rules.size} rules on",
+                        title = stringResource(R.string.highlightscreen_highlight_matches),
+                        subtitle = if (rules.isEmpty()) stringResource(R.string.highlightscreen_nothing_to_apply_yet) else stringResource(R.string.highlightscreen_of_rules_on, rules.count { it.enabled }, rules.size),
                         icon = Icons.Rounded.FormatColorText,
                         iconTint = MaterialTheme.colorScheme.primary,
                         checked = settings.highlightEnabled, onCheckedChange = { v -> app.store.updateSettings { it.copy(highlightEnabled = v) } },
@@ -111,9 +113,9 @@ fun HighlightScreen(nav: NavController) {
             if (rules.isEmpty()) {
                 item {
                     EmptyState(
-                        Icons.Rounded.FormatColorText, "No rules yet",
-                        "A rule paints what its pattern matches on screen. The presets are the three every log has: errors in red, warnings in yellow, ok in green.",
-                        "Add the presets",
+                        Icons.Rounded.FormatColorText, stringResource(R.string.highlightscreen_no_rules_yet),
+                        stringResource(R.string.highlightscreen_a_rule_paints_what_its_pattern_matches_on_screen),
+                        stringResource(R.string.highlightscreen_add_the_presets),
                     ) { write(dev.flint.term.core.highlightPresets().map { HighlightRule(pattern = it.pattern, color = it.color) }) }
                 }
             } else {
@@ -124,7 +126,7 @@ fun HighlightScreen(nav: NavController) {
                                 title = rule.pattern.ifBlank { "(empty)" },
                                 subtitle = errors[rule.id]
                                     ?: buildString {
-                                        append(if (rule.wholeLine) "Whole line" else "The match")
+                                        append(if (rule.wholeLine) stringResource(R.string.highlightscreen_whole_line) else stringResource(R.string.highlightscreen_the_match))
                                         if (!rule.enabled) append("   ·   off")
                                     },
                                 subtitleMono = errors[rule.id] != null,
@@ -135,10 +137,10 @@ fun HighlightScreen(nav: NavController) {
                                 trailing = {
                                     Row {
                                         IconButton(onClick = { move(i, i - 1) }, enabled = i > 0) {
-                                            Icon(Icons.Rounded.KeyboardArrowUp, "Move up")
+                                            Icon(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.highlightscreen_move_up))
                                         }
                                         IconButton(onClick = { move(i, i + 1) }, enabled = i < rules.lastIndex) {
-                                            Icon(Icons.Rounded.KeyboardArrowDown, "Move down")
+                                            Icon(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.highlightscreen_move_down))
                                         }
                                     }
                                 },
@@ -150,7 +152,7 @@ fun HighlightScreen(nav: NavController) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Text(
-                            "Tried from the top. The first rule to claim a piece of a line keeps it.",
+                            stringResource(R.string.highlightscreen_tried_from_the_top_the_first_rule_to_claim_a_pie),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         val missing = remember(rules) {
@@ -159,7 +161,7 @@ fun HighlightScreen(nav: NavController) {
                                 .map { HighlightRule(pattern = it.pattern, color = it.color) }
                         }
                         if (missing.isNotEmpty()) {
-                            TextButton(onClick = { write(rules + missing) }) { Text("Add the presets") }
+                            TextButton(onClick = { write(rules + missing) }) { Text(stringResource(R.string.highlightscreen_add_the_presets)) }
                         }
                     }
                 }
@@ -220,25 +222,25 @@ fun HighlightRuleEditor(
             Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(if (isNew) "New rule" else "Edit rule", style = MaterialTheme.typography.titleLarge)
+            Text(if (isNew) stringResource(R.string.highlightscreen_new_rule) else stringResource(R.string.highlightscreen_edit_rule), style = MaterialTheme.typography.titleLarge)
             Field(
                 pattern, { pattern = it }, "Pattern", mono = true,
-                placeholder = "(?i)\\berror\\b",
+                placeholder = stringResource(R.string.highlightscreen_i_berror_b),
                 keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
                 error = error,
-                hint = "A regular expression. (?i) at the front ignores case.",
+                hint = stringResource(R.string.highlightscreen_a_regular_expression_i_at_the_front_ignores_case),
             )
-            Text("Color", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.highlightscreen_color), style = MaterialTheme.typography.titleSmall)
             ColorPicker(selected = Color(color), onSelect = { color = it.value.toLong().toInt() })
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Color the whole line", Modifier.weight(1f))
+                Text(stringResource(R.string.highlightscreen_color_the_whole_line), Modifier.weight(1f))
                 AppSwitch(wholeLine, { wholeLine = it })
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Rule is on", Modifier.weight(1f))
+                Text(stringResource(R.string.highlightscreen_rule_is_on), Modifier.weight(1f))
                 AppSwitch(enabled, { enabled = it })
             }
-            Text("Test line", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.highlightscreen_test_line), style = MaterialTheme.typography.titleSmall)
             Field(testLine, { testLine = it }, "Try it on", mono = true, keyboardOptions = KeyboardOptions(autoCorrectEnabled = false))
             Box(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(12.dp),
@@ -247,10 +249,10 @@ fun HighlightRuleEditor(
             }
             Text(
                 when {
-                    error != null -> "Nothing is highlighted while the pattern is broken."
-                    pattern.isBlank() -> "Type a pattern to see what it would do."
-                    matched -> if (wholeLine) "Matches, so the whole line is colored." else "Matches. Only what matched is colored."
-                    else -> "Nothing matched this line."
+                    error != null -> stringResource(R.string.highlightscreen_nothing_is_highlighted_while_the_pattern_is_brok)
+                    pattern.isBlank() -> stringResource(R.string.highlightscreen_type_a_pattern_to_see_what_it_would_do)
+                    matched -> if (wholeLine) stringResource(R.string.highlightscreen_matches_so_the_whole_line_is_colored) else stringResource(R.string.highlightscreen_matches_only_what_matched_is_colored)
+                    else -> stringResource(R.string.highlightscreen_nothing_matched_this_line)
                 },
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -259,11 +261,11 @@ fun HighlightRuleEditor(
                     enabled = pattern.isNotBlank() && error == null,
                     onClick = { onSave(initial.copy(pattern = pattern, color = color, wholeLine = wholeLine, enabled = enabled)) },
                     modifier = Modifier.weight(1f),
-                ) { Text("Save") }
+                ) { Text(stringResource(R.string.highlightscreen_save)) }
                 if (!isNew) {
                     TextButton(onClick = onDelete) {
                         Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.width(6.dp)); Text("Delete", color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.highlightscreen_delete), color = MaterialTheme.colorScheme.error)
                     }
                 }
             }

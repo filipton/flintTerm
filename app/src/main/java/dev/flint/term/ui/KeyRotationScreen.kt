@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -109,7 +111,7 @@ fun KeyRotationScreen(nav: NavController, identityId: String) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Replace key",
+                title = stringResource(R.string.keyrotationscreen_replace_key),
                 subtitle = old.name,
                 onBack = if (running) null else ({ nav.popBackStack() }),
             )
@@ -131,13 +133,13 @@ fun KeyRotationScreen(nav: NavController, identityId: String) {
                 item {
                     EmptyState(
                         Icons.Rounded.Key,
-                        "Nothing uses this key",
-                        "No saved host logs in with it, so there is nothing to replace. Delete it from the Keys screen if it is not needed.",
+                        stringResource(R.string.keyrotationscreen_nothing_uses_this_key),
+                        stringResource(R.string.keyrotationscreen_no_saved_host_logs_in_with_it_so_there_is_nothin),
                     )
                 }
                 return@LazyColumn
             }
-            item { GroupLabel(if (users.size == 1) "One host uses it" else "${users.size} hosts use it") }
+            item { GroupLabel(if (users.size == 1) stringResource(R.string.keyrotationscreen_one_host_uses_it) else stringResource(R.string.keyrotationscreen_hosts_use_it, users.size)) }
             item {
                 Group {
                     users.forEachIndexed { i, user ->
@@ -156,12 +158,12 @@ fun KeyRotationScreen(nav: NavController, identityId: String) {
             if (!running && !done) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Field(name, { name = it }, "Name for the new key")
+                        Field(name, { name = it }, stringResource(R.string.keyrotationscreen_name_for_the_new_key))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text("Remove the old key afterwards", style = MaterialTheme.typography.bodyLarge)
+                                Text(stringResource(R.string.keyrotationscreen_remove_the_old_key_afterwards), style = MaterialTheme.typography.bodyLarge)
                                 Text(
-                                    "Only from hosts where the new key has already logged in",
+                                    stringResource(R.string.keyrotationscreen_only_from_hosts_where_the_new_key_has_already_lo),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -170,13 +172,13 @@ fun KeyRotationScreen(nav: NavController, identityId: String) {
                             AppSwitch(removeOld, { removeOld = it })
                         }
                         Text(
-                            "Each host gets the new key, is asked to log in with it, and only then loses the old one. " +
-                                "A host that cannot be reached keeps the old key and is listed at the end.",
+                            stringResource(R.string.keyrotationscreen_each_host_gets_the_new_key_is_asked_to_log_in_wi) +
+                                stringResource(R.string.keyrotationscreen_a_host_that_cannot_be_reached_keeps_the_old_key),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Button(onClick = { start() }, Modifier.fillMaxWidth(), enabled = name.isNotBlank()) {
-                            Text(if (users.size == 1) "Replace on 1 host" else "Replace on ${users.size} hosts")
+                            Text(if (users.size == 1) stringResource(R.string.keyrotationscreen_replace_on_1_host) else stringResource(R.string.keyrotationscreen_replace_on_hosts, users.size))
                         }
                     }
                 }
@@ -186,10 +188,10 @@ fun KeyRotationScreen(nav: NavController, identityId: String) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(
                             if (stuck.isEmpty()) {
-                                "Every host now logs in with ${name.trim()}."
+                                stringResource(R.string.keyrotationscreen_every_host_now_logs_in_with, name.trim())
                             } else {
-                                "${users.size - stuck.size} of ${users.size} hosts moved over. Still on the old key: " +
-                                    stuck.joinToString(", ") { it.host.displayName } + ". They are unchanged, so nothing has been lost."
+                                stringResource(R.string.keyrotationscreen_of_hosts_moved_over_still_on_the_old_key, users.size - stuck.size, users.size) +
+                                    stuck.joinToString(", ") { it.host.displayName } + stringResource(R.string.keyrotationscreen_they_are_unchanged_so_nothing_has_been_lost)
                             },
                             style = MaterialTheme.typography.bodyMedium,
                         )
@@ -200,10 +202,10 @@ fun KeyRotationScreen(nav: NavController, identityId: String) {
                             }, Modifier.fillMaxWidth()) {
                                 Icon(Icons.Rounded.Delete, null, Modifier.width(18.dp), tint = MaterialTheme.colorScheme.error)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Delete the old key", color = MaterialTheme.colorScheme.error)
+                                Text(stringResource(R.string.keyrotationscreen_delete_the_old_key), color = MaterialTheme.colorScheme.error)
                             }
                         }
-                        Button(onClick = { nav.popBackStack() }, Modifier.fillMaxWidth()) { Text("Done") }
+                        Button(onClick = { nav.popBackStack() }, Modifier.fillMaxWidth()) { Text(stringResource(R.string.keyrotationscreen_done)) }
                     }
                 }
             }

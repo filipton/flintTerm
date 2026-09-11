@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -23,19 +25,19 @@ fun RenameSessionDialog(session: TerminalSession, onDismiss: () -> Unit) {
     var name by remember(session.id) { mutableStateOf(session.label) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Rename") },
+        title = { Text(stringResource(R.string.renamesessiondialog_rename)) },
         text = {
             Field(
                 value = name,
                 onValueChange = { name = it },
-                label = "Name",
+                label = stringResource(R.string.renamesessiondialog_name),
                 placeholder = session.defaultLabel,
-                hint = "Leave it empty to go back to ${session.defaultLabel}",
+                hint = stringResource(R.string.renamesessiondialog_leave_it_empty_to_go_back_to, session.defaultLabel),
             )
         },
         confirmButton = {
-            TextButton(onClick = { session.rename(name); onDismiss() }) { Text("Rename") }
+            TextButton(onClick = { session.rename(name); onDismiss() }) { Text(stringResource(R.string.renamesessiondialog_rename)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.renamesessiondialog_cancel)) } },
     )
 }

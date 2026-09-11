@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -84,15 +86,15 @@ fun RecordingsScreen(nav: NavController) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(title = "Recordings", subtitle = dir.absolutePath, onBack = { nav.popBackStack() }) },
+        topBar = { AppHeader(title = stringResource(R.string.recordingsscreen_recordings), subtitle = dir.absolutePath, onBack = { nav.popBackStack() }) },
     ) { padding ->
         LazyColumn(state = rememberScreenListState("recordings"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
             if (files.isEmpty()) {
                 item {
                     EmptyState(
                         Icons.Rounded.Movie,
-                        "Nothing recorded yet",
-                        "Start a recording from a terminal's menu, or switch one on for a host that should always be logged.",
+                        stringResource(R.string.recordingsscreen_nothing_recorded_yet),
+                        stringResource(R.string.recordingsscreen_start_a_recording_from_a_terminal_s_menu_or_swit),
                     )
                 }
             }
@@ -222,7 +224,7 @@ private fun CastPlayer(file: File, onBack: () -> Unit) {
                 IconButton(onClick = { playing = !playing }) {
                     Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play")
                 }
-                IconButton(onClick = { seek(0); playing = true }) { Icon(Icons.Rounded.Replay, "From the start") }
+                IconButton(onClick = { seek(0); playing = true }) { Icon(Icons.Rounded.Replay, stringResource(R.string.recordingsscreen_from_the_start)) }
                 val position = ready.frames.getOrNull((at - 1).coerceAtLeast(0))?.atMillis ?: 0
                 Text(
                     "${formatSeconds(position)} / ${formatSeconds(ready.durationMillis)}",

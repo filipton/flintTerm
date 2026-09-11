@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -59,7 +61,7 @@ fun GroupsScreen(nav: NavController) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(title = "Groups", onBack = { nav.popBackStack() }) },
+        topBar = { AppHeader(title = stringResource(R.string.groupsscreen_groups), onBack = { nav.popBackStack() }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = {
@@ -68,7 +70,7 @@ fun GroupsScreen(nav: NavController) {
                     nav.navigate(Routes.groupEdit(made.id))
                 },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("Add") },
+                text = { Text(stringResource(R.string.groupsscreen_add)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -80,8 +82,8 @@ fun GroupsScreen(nav: NavController) {
                 item {
                     EmptyState(
                         Icons.Rounded.Folder,
-                        "No groups yet",
-                        "A group files hosts together and carries what they share: a jump host, a VPN, a proxy, an account. Hosts you give a group to appear here.",
+                        stringResource(R.string.groupsscreen_no_groups_yet),
+                        stringResource(R.string.groupsscreen_a_group_files_hosts_together_and_carries_what_th),
                     )
                 }
             }
@@ -92,11 +94,11 @@ fun GroupsScreen(nav: NavController) {
                         title = g.label,
                         subtitle = listOfNotNull(
                             when (count) {
-                                0 -> "no hosts"
-                                1 -> "1 host"
-                                else -> "$count hosts"
+                                0 -> stringResource(R.string.groupsscreen_no_hosts)
+                                1 -> stringResource(R.string.groupsscreen_1_host)
+                                else -> stringResource(R.string.groupsscreen_hosts, count)
                             },
-                            g.defaultCount().takeIf { it > 0 }?.let { "$it shared setting${if (it > 1) "s" else ""}" },
+                            g.defaultCount().takeIf { it > 0 }?.let { stringResource(R.string.groupsscreen_shared_setting, it, if (it > 1) "s" else "") },
                         ).joinToString("  ·  "),
                         icon = Icons.Rounded.Folder,
                         onClick = { nav.navigate(Routes.groupEdit(g.id)) },
@@ -122,9 +124,9 @@ fun GroupEditScreen(nav: NavController, id: String) {
 
     if (group == null) {
         // Deleted from under us (or a stale link): nothing to edit.
-        Scaffold(topBar = { AppHeader(title = "Group", onBack = { nav.popBackStack() }) }) { p ->
+        Scaffold(topBar = { AppHeader(title = stringResource(R.string.groupsscreen_group), onBack = { nav.popBackStack() }) }) { p ->
             Column(Modifier.fillMaxSize().padding(p)) {
-                EmptyState(Icons.Rounded.Folder, "Gone", "This group no longer exists.")
+                EmptyState(Icons.Rounded.Folder, "Gone", stringResource(R.string.groupsscreen_this_group_no_longer_exists))
             }
         }
         return
@@ -141,7 +143,7 @@ fun GroupEditScreen(nav: NavController, id: String) {
         topBar = {
             AppHeader(
                 title = group.label,
-                subtitle = if (members == 1) "1 host" else "$members hosts",
+                subtitle = if (members == 1) stringResource(R.string.groupsscreen_1_host) else stringResource(R.string.groupsscreen_hosts, members),
                 onBack = {
                     save { it.copy(name = name.trim()) }
                     nav.popBackStack()
@@ -152,13 +154,13 @@ fun GroupEditScreen(nav: NavController, id: String) {
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("group-edit"))) {
             Group {
                 Column(Modifier.padding(14.dp)) {
-                    Field(name, { name = it }, "Group name", placeholder = "Work")
+                    Field(name, { name = it }, "Group name", placeholder = stringResource(R.string.groupsscreen_work))
                 }
             }
 
-            Group("Shared by every host in this group") {
+            Group(stringResource(R.string.groupsscreen_shared_by_every_host_in_this_group)) {
                 GroupRow(
-                    title = "Account",
+                    title = stringResource(R.string.groupsscreen_account),
                     subtitle = accounts.firstOrNull { it.id == group.accountId }?.let { "${it.label}  ·  ${it.username}" } ?: "None",
                     icon = Icons.Rounded.Person,
                     onClick = { sheet = GroupPick.Account },
@@ -167,8 +169,8 @@ fun GroupEditScreen(nav: NavController, id: String) {
                 GroupRow(
                     title = "VPN",
                     subtitle = when {
-                        group.tailscaleId != null -> "${tailnets.firstOrNull { it.id == group.tailscaleId }?.name.orEmpty().ifBlank { "Tailscale" }}  ·  Tailscale"
-                        group.tunnelId != null -> "${tunnels.firstOrNull { it.id == group.tunnelId }?.name.orEmpty()}  ·  WireGuard"
+                        group.tailscaleId != null -> stringResource(R.string.groupsscreen_tailscale_fmt, tailnets.firstOrNull { it.id == group.tailscaleId }?.name.orEmpty().ifBlank { "Tailscale" })
+                        group.tunnelId != null -> stringResource(R.string.groupsscreen_wireguard_fmt, tunnels.firstOrNull { it.id == group.tunnelId }?.name.orEmpty())
                         else -> "None"
                     },
                     icon = if (group.tailscaleId != null) Icons.Rounded.Hub else Icons.Rounded.VpnLock,
@@ -177,7 +179,7 @@ fun GroupEditScreen(nav: NavController, id: String) {
                 )
                 RowDivider()
                 GroupRow(
-                    title = "Jump host",
+                    title = stringResource(R.string.groupsscreen_jump_host),
                     subtitle = hosts.firstOrNull { it.id == group.jumpHostId }?.displayName ?: "None",
                     icon = Icons.Rounded.AltRoute,
                     iconTint = MaterialTheme.colorScheme.tertiary,
@@ -185,7 +187,7 @@ fun GroupEditScreen(nav: NavController, id: String) {
                 )
                 RowDivider()
                 GroupRow(
-                    title = "Proxy",
+                    title = stringResource(R.string.groupsscreen_proxy),
                     subtitle = proxies.firstOrNull { it.id == group.proxyId }?.let { "${it.label}  ·  ${it.target}" } ?: "None",
                     icon = Icons.Rounded.SwapHoriz,
                     iconTint = MaterialTheme.colorScheme.secondary,
@@ -193,8 +195,8 @@ fun GroupEditScreen(nav: NavController, id: String) {
                 )
                 RowDivider()
                 GroupRow(
-                    title = "Color scheme",
-                    subtitle = group.theme?.let { Schemes.nameOf(it) } ?: "App default  ·  ${Schemes.nameOf(settings.theme)}",
+                    title = stringResource(R.string.groupsscreen_color_scheme),
+                    subtitle = group.theme?.let { Schemes.nameOf(it) } ?: stringResource(R.string.groupsscreen_app_default, Schemes.nameOf(settings.theme)),
                     icon = Icons.Rounded.Palette,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     onClick = {
@@ -213,7 +215,7 @@ fun GroupEditScreen(nav: NavController, id: String) {
                         save { it.copy(color = if (it.color == c.toArgb()) 0 else c.toArgb()) }
                     }
                     Text(
-                        "Used on the cards of hosts that have not picked a color of their own.",
+                        stringResource(R.string.groupsscreen_used_on_the_cards_of_hosts_that_have_not_picked),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -221,8 +223,8 @@ fun GroupEditScreen(nav: NavController, id: String) {
 
             Group {
                 GroupRow(
-                    title = "Delete group",
-                    subtitle = "Its hosts keep every setting of their own and simply stop inheriting",
+                    title = stringResource(R.string.groupsscreen_delete_group),
+                    subtitle = stringResource(R.string.groupsscreen_its_hosts_keep_every_setting_of_their_own_and_si),
                     icon = Icons.Rounded.Delete,
                     iconTint = MaterialTheme.colorScheme.error,
                     titleColor = MaterialTheme.colorScheme.error,
@@ -239,8 +241,8 @@ fun GroupEditScreen(nav: NavController, id: String) {
     when (sheet) {
         GroupPick.Account -> ActionSheet(
             onDismiss = { sheet = null },
-            title = "Account",
-            actions = listOf(SheetAction("None", Icons.Rounded.Person) { save { it.copy(accountId = null) }; sheet = null }) +
+            title = stringResource(R.string.groupsscreen_account),
+            actions = listOf(SheetAction(stringResource(R.string.groupsscreen_none), Icons.Rounded.Person) { save { it.copy(accountId = null) }; sheet = null }) +
                 accounts.map { a ->
                     SheetAction(a.label, Icons.Rounded.Person, subtitle = a.username) { save { it.copy(accountId = a.id) }; sheet = null }
                 },
@@ -248,19 +250,19 @@ fun GroupEditScreen(nav: NavController, id: String) {
         GroupPick.Vpn -> ActionSheet(
             onDismiss = { sheet = null },
             title = "VPN",
-            subtitle = "Used by hosts in this group that have not chosen one",
-            actions = listOf(SheetAction("Direct network", Icons.Rounded.VpnLock) { save { it.copy(tunnelId = null, tailscaleId = null) }; sheet = null }) +
+            subtitle = stringResource(R.string.groupsscreen_used_by_hosts_in_this_group_that_have_not_chosen),
+            actions = listOf(SheetAction(stringResource(R.string.groupsscreen_direct_network), Icons.Rounded.VpnLock) { save { it.copy(tunnelId = null, tailscaleId = null) }; sheet = null }) +
                 tunnels.map { t ->
-                    SheetAction(t.name, Icons.Rounded.VpnLock, subtitle = "WireGuard") { save { it.copy(tunnelId = t.id, tailscaleId = null) }; sheet = null }
+                    SheetAction(t.name, Icons.Rounded.VpnLock, subtitle = stringResource(R.string.groupsscreen_wireguard)) { save { it.copy(tunnelId = t.id, tailscaleId = null) }; sheet = null }
                 } +
                 tailnets.map { p ->
-                    SheetAction(p.name.ifBlank { "Tailscale" }, Icons.Rounded.Hub, subtitle = "Tailscale") { save { it.copy(tailscaleId = p.id, tunnelId = null) }; sheet = null }
+                    SheetAction(p.name.ifBlank { "Tailscale" }, Icons.Rounded.Hub, subtitle = stringResource(R.string.groupsscreen_tailscale)) { save { it.copy(tailscaleId = p.id, tunnelId = null) }; sheet = null }
                 },
         )
         GroupPick.Jump -> ActionSheet(
             onDismiss = { sheet = null },
-            title = "Jump host",
-            actions = listOf(SheetAction("None", Icons.Rounded.AltRoute) { save { it.copy(jumpHostId = null) }; sheet = null }) +
+            title = stringResource(R.string.groupsscreen_jump_host),
+            actions = listOf(SheetAction(stringResource(R.string.groupsscreen_none), Icons.Rounded.AltRoute) { save { it.copy(jumpHostId = null) }; sheet = null }) +
                 // A member of the group cannot be its own way in, so those are
                 // left out rather than offered and then ignored.
                 hosts.filter { it.groupId != group.id && !it.isTelnet }.map { h ->
@@ -269,8 +271,8 @@ fun GroupEditScreen(nav: NavController, id: String) {
         )
         GroupPick.Proxy -> ActionSheet(
             onDismiss = { sheet = null },
-            title = "Proxy",
-            actions = listOf(SheetAction("None", Icons.Rounded.SwapHoriz) { save { it.copy(proxyId = null) }; sheet = null }) +
+            title = stringResource(R.string.groupsscreen_proxy),
+            actions = listOf(SheetAction(stringResource(R.string.groupsscreen_none), Icons.Rounded.SwapHoriz) { save { it.copy(proxyId = null) }; sheet = null }) +
                 proxies.map { p ->
                     SheetAction(p.label, Icons.Rounded.SwapHoriz, subtitle = p.target) { save { it.copy(proxyId = p.id) }; sheet = null }
                 },
@@ -287,11 +289,11 @@ fun NewGroupDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
     var name by remember { mutableStateOf("") }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New group") },
-        text = { Field(name, { name = it }, "Name", placeholder = "Work") },
+        title = { Text(stringResource(R.string.groupsscreen_new_group)) },
+        text = { Field(name, { name = it }, "Name", placeholder = stringResource(R.string.groupsscreen_work)) },
         confirmButton = {
-            TextButton(onClick = { onCreate(name.trim()) }, enabled = name.isNotBlank()) { Text("Create") }
+            TextButton(onClick = { onCreate(name.trim()) }, enabled = name.isNotBlank()) { Text(stringResource(R.string.groupsscreen_create)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.groupsscreen_cancel)) } },
     )
 }

@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -191,10 +193,10 @@ fun HostsScreen(nav: NavController) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "flintTerm",
+                title = stringResource(R.string.hostsscreen_flintterm),
                 actions = {
                     CommandPaletteButton()
-                    IconButton(onClick = { nav.navigate(Routes.TUNNELS) }) { Icon(Icons.Rounded.VpnLock, "VPNs and proxies") }
+                    IconButton(onClick = { nav.navigate(Routes.TUNNELS) }) { Icon(Icons.Rounded.VpnLock, stringResource(R.string.hostsscreen_vpns_and_proxies)) }
                     IconButton(onClick = { moreSheet = true }) { Icon(Icons.Rounded.MoreVert, "More") }
                 },
             )
@@ -203,7 +205,7 @@ fun HostsScreen(nav: NavController) {
             ExtendedFloatingActionButton(
                 onClick = { nav.navigate(Routes.hostEdit("new")) },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("New host") },
+                text = { Text(stringResource(R.string.hostsscreen_new_host)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -224,14 +226,14 @@ fun HostsScreen(nav: NavController) {
                 },
             contentPadding = PaddingValues(bottom = 110.dp),
         ) {
-            item { SearchField(query, { query = it }, "Search hosts", Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
+            item { SearchField(query, { query = it }, stringResource(R.string.hostsscreen_search_hosts), Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) }
 
             quick?.let { target ->
                 item(key = "quick") {
                     Group {
                         GroupRow(
-                            title = "Connect to ${target.target}",
-                            subtitle = "Not saved. The session can save it afterwards",
+                            title = stringResource(R.string.hostsscreen_connect_to, target.target),
+                            subtitle = stringResource(R.string.hostsscreen_not_saved_the_session_can_save_it_afterwards),
                             icon = Icons.Rounded.Bolt,
                             iconTint = MaterialTheme.colorScheme.tertiary,
                             onClick = { query = ""; connect(target) },
@@ -249,7 +251,7 @@ fun HostsScreen(nav: NavController) {
             }
 
             if (active.isNotEmpty()) {
-                item { GroupLabel("Active sessions") }
+                item { GroupLabel(stringResource(R.string.hostsscreen_active_sessions)) }
                 item {
                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(active, key = { it.id }) { s ->
@@ -267,15 +269,15 @@ fun HostsScreen(nav: NavController) {
                 item {
                     Group("VPN") {
                         GroupRow(
-                            title = "Traffic goes through ${vpn.label}",
+                            title = stringResource(R.string.hostsscreen_traffic_goes_through, vpn.label),
                             subtitle = vpn.stats?.let { st ->
-                                val active = if (st.active == 1UL) "1 connection" else "${st.active} connections"
-                                "$active  ·  ${humanBytes(st.sent.toLong())} sent  ·  ${humanBytes(st.received.toLong())} received"
+                                val active = if (st.active == 1UL) stringResource(R.string.hostsscreen_1_connection) else stringResource(R.string.hostsscreen_connections, st.active)
+                                stringResource(R.string.hostsscreen_sent_received, active, humanBytes(st.sent.toLong()), humanBytes(st.received.toLong()))
                             } ?: if (vpn.connecting) "Connecting…" else "Starting…",
                             icon = Icons.Rounded.VpnLock,
                             iconTint = Status.online,
                             trailing = {
-                                TextButton(onClick = { dev.flint.term.session.SshVpnService.stop(app) }) { Text("Stop") }
+                                TextButton(onClick = { dev.flint.term.session.SshVpnService.stop(app) }) { Text(stringResource(R.string.hostsscreen_stop)) }
                             },
                         )
                     }
@@ -283,10 +285,10 @@ fun HostsScreen(nav: NavController) {
             }
 
             item {
-                Group("This device") {
+                Group(stringResource(R.string.hostsscreen_this_device)) {
                     GroupRow(
-                        title = "Local shell",
-                        subtitle = "/system/bin/sh on this device",
+                        title = stringResource(R.string.hostsscreen_local_shell),
+                        subtitle = stringResource(R.string.hostsscreen_system_bin_sh_on_this_device),
                         icon = Icons.Rounded.Terminal,
                         iconTint = MaterialTheme.colorScheme.secondary,
                         onClick = {
@@ -298,7 +300,7 @@ fun HostsScreen(nav: NavController) {
                         RowDivider()
                         GroupRow(
                             title = d.label,
-                            subtitle = "USB serial  ·  ${d.ids}",
+                            subtitle = stringResource(R.string.hostsscreen_usb_serial, d.ids),
                             icon = Icons.Rounded.Cable,
                             iconTint = MaterialTheme.colorScheme.tertiary,
                             onClick = { serialTarget = d },
@@ -311,14 +313,14 @@ fun HostsScreen(nav: NavController) {
                 item {
                     EmptyState(
                         icon = Icons.Rounded.Dns,
-                        title = "No hosts yet",
-                        body = "Add a server and connect with a tap. Keys, jump hosts and port forwards live on the host.",
-                        actionLabel = "Add your first host",
+                        title = stringResource(R.string.hostsscreen_no_hosts_yet),
+                        body = stringResource(R.string.hostsscreen_add_a_server_and_connect_with_a_tap_keys_jump_ho),
+                        actionLabel = stringResource(R.string.hostsscreen_add_your_first_host),
                         onAction = { nav.navigate(Routes.hostEdit("new")) },
                     )
                 }
             } else if (filtered.isEmpty()) {
-                item { EmptyState(Icons.Rounded.Search, "Nothing matches", "Try a different name or address.") }
+                item { EmptyState(Icons.Rounded.Search, stringResource(R.string.hostsscreen_nothing_matches), stringResource(R.string.hostsscreen_try_a_different_name_or_address)) }
             }
 
             groups.forEach { (group, list) ->
@@ -349,7 +351,7 @@ fun HostsScreen(nav: NavController) {
                     Group("Nearby") {
                         if (nearby.isEmpty()) {
                             GroupRow(
-                                title = "Looking for hosts on this network…",
+                                title = stringResource(R.string.hostsscreen_looking_for_hosts_on_this_network),
                                 icon = Icons.Rounded.Wifi,
                                 iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -388,27 +390,27 @@ fun HostsScreen(nav: NavController) {
     if (moreSheet) {
         ActionSheet(
             onDismiss = { moreSheet = false },
-            title = "Hosts",
+            title = stringResource(R.string.hostsscreen_hosts),
             actions = listOf(
                 SheetAction(
-                    "Run on many hosts",
+                    stringResource(R.string.hostsscreen_run_on_many_hosts),
                     Icons.Rounded.PlayArrow,
-                    subtitle = "One command across several servers, each answer beside its host",
+                    subtitle = stringResource(R.string.hostsscreen_one_command_across_several_servers_each_answer_b),
                 ) { moreSheet = false; nav.navigate(Routes.BROADCAST) },
                 SheetAction(
-                    "Groups",
+                    stringResource(R.string.hostsscreen_groups),
                     Icons.Rounded.Folder,
-                    subtitle = "What the hosts in a group share: a jump host, a VPN, a proxy, an account",
+                    subtitle = stringResource(R.string.hostsscreen_what_the_hosts_in_a_group_share_a_jump_host_a_vp),
                 ) { moreSheet = false; nav.navigate(Routes.GROUPS) },
                 SheetAction(
-                    "Transfers",
+                    stringResource(R.string.hostsscreen_transfers),
                     Icons.Rounded.SwapHoriz,
-                    subtitle = "Files on their way to or from a host",
+                    subtitle = stringResource(R.string.hostsscreen_files_on_their_way_to_or_from_a_host),
                 ) { moreSheet = false; nav.navigate(Routes.TRANSFERS) },
                 SheetAction(
-                    "Import from OpenSSH",
+                    stringResource(R.string.hostsscreen_import_from_openssh),
                     Icons.Rounded.FileDownload,
-                    subtitle = "Hosts from ~/.ssh/config, trusted keys from known_hosts",
+                    subtitle = stringResource(R.string.hostsscreen_hosts_from_ssh_config_trusted_keys_from_known_ho),
                 ) { moreSheet = false; importSheet = true },
             ),
         )
@@ -429,11 +431,11 @@ fun HostsScreen(nav: NavController) {
                 Spacer(Modifier.height(8.dp))
             },
             actions = listOfNotNull(
-                SheetAction("Connect", Icons.Rounded.Terminal) { sheetHost = null; connect(host) },
+                SheetAction(stringResource(R.string.hostsscreen_connect), Icons.Rounded.Terminal) { sheetHost = null; connect(host) },
                 if (host.wol.enabled) SheetAction(
-                    "Wake up",
+                    stringResource(R.string.hostsscreen_wake_up),
                     Icons.Rounded.Bolt,
-                    subtitle = "Send the magic packet. " + dev.flint.term.session.Wol.decide(host, host.jumpHostId != null).reason,
+                    subtitle = stringResource(R.string.hostsscreen_send_the_magic_packet) + dev.flint.term.session.Wol.decide(host, host.jumpHostId != null).reason,
                 ) {
                     sheetHost = null
                     val jump = host.jumpHostId?.let { id -> hosts.firstOrNull { it.id == id } }
@@ -450,27 +452,27 @@ fun HostsScreen(nav: NavController) {
                         }.start()
                     }
                 } else null,
-                SheetAction("Browse files", Icons.Rounded.Folder, subtitle = "Open an SFTP session") {
+                SheetAction(stringResource(R.string.hostsscreen_browse_files), Icons.Rounded.Folder, subtitle = stringResource(R.string.hostsscreen_open_an_sftp_session)) {
                     sheetHost = null
                     val s = app.sessions.openSsh(host)
                     nav.navigate(Routes.sftp(s.id))
                 },
-                SheetAction("Status", Icons.Rounded.Speed, subtitle = "Load, memory, disks and what is running") {
+                SheetAction(stringResource(R.string.hostsscreen_status), Icons.Rounded.Speed, subtitle = stringResource(R.string.hostsscreen_load_memory_disks_and_what_is_running)) {
                     sheetHost = null
                     val s = app.sessions.openSsh(host)
                     nav.navigate(Routes.server(s.id))
                 },
-                SheetAction("Install SSH key", Icons.Rounded.Key, subtitle = "Put one of your keys into authorized_keys on the server") { sheetHost = null; installKeyHost = host },
-                SheetAction("Edit", Icons.Rounded.Edit) { sheetHost = null; nav.navigate(Routes.hostEdit(host.id)) },
-                SheetAction("Add to home screen", Icons.Rounded.Add) {
+                SheetAction(stringResource(R.string.hostsscreen_install_ssh_key), Icons.Rounded.Key, subtitle = stringResource(R.string.hostsscreen_put_one_of_your_keys_into_authorized_keys_on_the)) { sheetHost = null; installKeyHost = host },
+                SheetAction(stringResource(R.string.hostsscreen_edit), Icons.Rounded.Edit) { sheetHost = null; nav.navigate(Routes.hostEdit(host.id)) },
+                SheetAction(stringResource(R.string.hostsscreen_add_to_home_screen), Icons.Rounded.Add) {
                     sheetHost = null
-                    if (!dev.flint.term.session.Shortcuts.pin(app, host)) android.widget.Toast.makeText(app, "This launcher does not support pinned shortcuts", android.widget.Toast.LENGTH_SHORT).show()
+                    if (!dev.flint.term.session.Shortcuts.pin(app, host)) android.widget.Toast.makeText(app, app.getString(R.string.hostsscreen_this_launcher_does_not_support_pinned_shortcuts), android.widget.Toast.LENGTH_SHORT).show()
                 },
-                SheetAction("Duplicate", Icons.Rounded.ContentCopy) {
+                SheetAction(stringResource(R.string.hostsscreen_duplicate), Icons.Rounded.ContentCopy) {
                     sheetHost = null
                     app.store.upsertHost(host.copy(id = UUID.randomUUID().toString(), label = (host.label.ifBlank { host.displayName }) + " copy", lastConnected = 0))
                 },
-                SheetAction("Delete", Icons.Rounded.Delete, danger = true) { sheetHost = null; app.store.deleteHost(host.id) },
+                SheetAction(stringResource(R.string.hostsscreen_delete), Icons.Rounded.Delete, danger = true) { sheetHost = null; app.store.deleteHost(host.id) },
             ),
         )
     }
@@ -555,14 +557,14 @@ private fun HostRow(
             }
             Text(host.target, style = CodeStyle.copy(fontSize = 12.sp), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             val bits = buildList {
-                if (via != null) add("via ${via.displayName}")
+                if (via != null) add(stringResource(R.string.hostsscreen_via, via.displayName))
                 // What the machine turned out to be, once it has been connected to
                 // once: more use than any label, and it costs a line nobody else
                 // was using.
                 host.detectedOs.takeIf { it.isNotBlank() }?.let { add(it.take(28)) }
                 if (host.tunnelId != null) add("WireGuard")
                 if (host.wol.enabled) add("WOL")
-                if (host.forwards.isNotEmpty()) add("${host.forwards.size} forward${if (host.forwards.size > 1) "s" else ""}")
+                if (host.forwards.isNotEmpty()) add(stringResource(R.string.hostsscreen_forward, host.forwards.size, if (host.forwards.size > 1) "s" else ""))
             }
             if (bits.isNotEmpty()) {
                 Row(Modifier.padding(top = 3.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -628,14 +630,14 @@ private fun ShareBanner(names: List<String?>, onCancel: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "Pick a host, then a folder",
+                stringResource(R.string.hostsscreen_pick_a_host_then_a_folder),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
                 maxLines = 1,
             )
         }
         IconButton(onClick = onCancel) {
-            Icon(Icons.Rounded.Close, "Cancel upload", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Icon(Icons.Rounded.Close, stringResource(R.string.hostsscreen_cancel_upload), tint = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }

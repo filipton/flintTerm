@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -80,19 +82,19 @@ fun SerialConnectDialog(
         text = {
             Column {
                 Text(
-                    "USB serial  ·  ${device.ids}",
+                    stringResource(R.string.serialconnectdialog_usb_serial, device.ids),
                     style = CodeStyle,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(14.dp))
-                Text("Speed", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.serialconnectdialog_speed), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     SerialSettings.BAUD_RATES.forEach { r ->
                         FilterChip(selected = r == baud, onClick = { baud = r }, label = { Text("$r") })
                     }
                 }
                 Spacer(Modifier.height(12.dp))
-                Text("Format", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.serialconnectdialog_format), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FORMATS.forEach { (label, f) ->
                         val (d, p, st) = f
@@ -112,7 +114,7 @@ fun SerialConnectDialog(
         confirmButton = {
             Button(enabled = !busy, onClick = ::connect) { Text(if (busy) "Opening…" else "Connect") }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.serialconnectdialog_cancel)) } },
     )
 }
 

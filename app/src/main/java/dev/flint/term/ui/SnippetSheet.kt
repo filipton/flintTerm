@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -67,9 +69,9 @@ fun SnippetSheet(hostId: String?, onDismiss: () -> Unit, onManage: () -> Unit, o
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(bottom = 20.dp)) {
             Row(Modifier.padding(horizontal = 24.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                Text("Snippets", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = { creating = true }) { Icon(Icons.Rounded.Add, null, Modifier.width(18.dp)); Spacer(Modifier.width(4.dp)); Text("New") }
-                TextButton(onClick = { onDismiss(); onManage() }) { Text("Manage") }
+                Text(stringResource(R.string.snippetsheet_snippets), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = { creating = true }) { Icon(Icons.Rounded.Add, null, Modifier.width(18.dp)); Spacer(Modifier.width(4.dp)); Text(stringResource(R.string.snippetsheet_new)) }
+                TextButton(onClick = { onDismiss(); onManage() }) { Text(stringResource(R.string.snippetsheet_manage)) }
             }
             if (all.size > 5) {
                 Field(query, { query = it }, "Search", Modifier.padding(horizontal = 24.dp), leading = { Icon(Icons.Rounded.Search, null) })
@@ -77,7 +79,7 @@ fun SnippetSheet(hostId: String?, onDismiss: () -> Unit, onManage: () -> Unit, o
             }
             if (visible.isEmpty()) {
                 Text(
-                    if (all.isEmpty()) "No snippets yet. Tap New to save a command you use often." else "Nothing matches.",
+                    if (all.isEmpty()) stringResource(R.string.snippetsheet_no_snippets_yet_tap_new_to_save_a_command_you_us) else stringResource(R.string.snippetsheet_nothing_matches),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
                 )
@@ -91,7 +93,7 @@ fun SnippetSheet(hostId: String?, onDismiss: () -> Unit, onManage: () -> Unit, o
                         icon = Icons.Rounded.AutoAwesome,
                         iconTint = HostAccents[Math.floorMod(sn.id.hashCode(), HostAccents.size)],
                         onClick = { use(sn) },
-                        trailing = if (!sn.run) ({ Text("insert", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }) else null,
+                        trailing = if (!sn.run) ({ Text(stringResource(R.string.snippetsheet_insert), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }) else null,
                     )
                 }
             }
@@ -102,7 +104,7 @@ fun SnippetSheet(hostId: String?, onDismiss: () -> Unit, onManage: () -> Unit, o
         val values = remember(sn.id) { mutableStateOf(sn.placeholders.associateWith { "" }) }
         AlertDialog(
             onDismissRequest = { filling = null },
-            title = { Text(sn.name.ifBlank { "Fill in" }) },
+            title = { Text(sn.name.ifBlank { stringResource(R.string.snippetsheet_fill_in) }) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(sn.command, style = CodeStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -120,7 +122,7 @@ fun SnippetSheet(hostId: String?, onDismiss: () -> Unit, onManage: () -> Unit, o
                     onDismiss()
                 }) { Text(if (sn.run) "Run" else "Insert") }
             },
-            dismissButton = { TextButton(onClick = { filling = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { filling = null }) { Text(stringResource(R.string.snippetsheet_cancel)) } },
         )
     }
 

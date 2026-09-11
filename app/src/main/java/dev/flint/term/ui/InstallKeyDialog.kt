@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -66,54 +68,54 @@ fun InstallKeyDialog(raw: Host, preselected: Identity? = null, onDismiss: () -> 
         val alreadyUsesKey = host.authType == AuthType.KEY && host.identityId == identity?.id
         AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("Key installed") },
+            title = { Text(stringResource(R.string.installkeydialog_key_installed)) },
             text = {
                 Text(
-                    if (alreadyUsesKey) "${identity?.name} is now on ${host.displayName} ($done)."
-                    else "${identity?.name} is now on ${host.displayName} ($done). Use it for this host from now on instead of the password?",
+                    if (alreadyUsesKey) stringResource(R.string.installkeydialog_is_now_on, identity?.name.orEmpty(), host.displayName, done.orEmpty())
+                    else stringResource(R.string.installkeydialog_is_now_on_use_it_for_this_host_from_now_on_inste, identity?.name.orEmpty(), host.displayName, done.orEmpty()),
                 )
             },
             confirmButton = {
                 if (alreadyUsesKey) {
-                    TextButton(onClick = onDismiss) { Text("Done") }
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.installkeydialog_done)) }
                 } else {
                     Button(onClick = {
                         app.store.upsertHost(raw.copy(authType = AuthType.KEY, identityId = identity?.id, accountId = null))
                         onDismiss()
-                    }) { Text("Use the key") }
+                    }) { Text(stringResource(R.string.installkeydialog_use_the_key)) }
                 }
             },
-            dismissButton = { if (!alreadyUsesKey) TextButton(onClick = onDismiss) { Text("Keep password") } },
+            dismissButton = { if (!alreadyUsesKey) TextButton(onClick = onDismiss) { Text(stringResource(R.string.installkeydialog_keep_password)) } },
         )
         return
     }
 
     AlertDialog(
         onDismissRequest = { if (!busy) onDismiss() },
-        title = { Text("Install key on ${host.displayName}") },
+        title = { Text(stringResource(R.string.installkeydialog_install_key_on, host.displayName)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Adds the public key to ~/.ssh/authorized_keys for ${host.username.ifBlank { "the user" }} on ${host.hostname}, like ssh-copy-id.",
+                    stringResource(R.string.installkeydialog_adds_the_public_key_to_ssh_authorized_keys_for_o, host.username.ifBlank { "the user" }, host.hostname),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 GroupRow(
-                    title = identity?.name ?: "Choose a key",
-                    subtitle = identity?.fingerprint ?: "No keys yet. Generate one in Keys",
+                    title = identity?.name ?: stringResource(R.string.installkeydialog_choose_a_key),
+                    subtitle = identity?.fingerprint ?: stringResource(R.string.installkeydialog_no_keys_yet_generate_one_in_keys),
                     subtitleMono = identity != null,
                     icon = Icons.Rounded.Key,
                     onClick = { if (identities.size > 1) pickKey = true },
                 )
-                Segmented(listOf("Password", "Current login"), if (usePassword) 0 else 1) { usePassword = it == 0 }
+                Segmented(listOf("Password", stringResource(R.string.installkeydialog_current_login)), if (usePassword) 0 else 1) { usePassword = it == 0 }
                 if (usePassword) {
                     Field(
-                        password, { password = it }, "Password for ${host.username.ifBlank { "user" }}",
+                        password, { password = it }, stringResource(R.string.installkeydialog_password_for, host.username.ifBlank { "user" }),
                         visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         autofill = ContentType.Password,
                     )
                 } else {
                     Text(
-                        "Connects the way this host is set up now (${host.authType.name.lowercase()}). Useful for adding a second key.",
+                        stringResource(R.string.installkeydialog_connects_the_way_this_host_is_set_up_now_useful, host.authType.name.lowercase()),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -121,7 +123,7 @@ fun InstallKeyDialog(raw: Host, preselected: Identity? = null, onDismiss: () -> 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.width(20.dp), strokeWidth = 2.dp)
                         Spacer(Modifier.width(10.dp))
-                        Text("Connecting and installing…", style = MaterialTheme.typography.bodySmall)
+                        Text(stringResource(R.string.installkeydialog_connecting_and_installing), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             }
@@ -133,17 +135,17 @@ fun InstallKeyDialog(raw: Host, preselected: Identity? = null, onDismiss: () -> 
                 scope.launch {
                     val r = withContext(Dispatchers.IO) { KeyDeploy.install(app.sessions, host, id, if (usePassword) password else null) }
                     busy = false
-                    r.onSuccess { done = it }.onFailure { Toast.makeText(context, "Install failed: ${it.message}", Toast.LENGTH_LONG).show() }
+                    r.onSuccess { done = it }.onFailure { Toast.makeText(context, context.getString(R.string.installkeydialog_install_failed, it.message), Toast.LENGTH_LONG).show() }
                 }
-            }) { Text("Install") }
+            }) { Text(stringResource(R.string.installkeydialog_install)) }
         },
-        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(R.string.installkeydialog_cancel)) } },
     )
 
     if (pickKey) {
         ActionSheet(
             onDismiss = { pickKey = false },
-            title = "Which key?",
+            title = stringResource(R.string.installkeydialog_which_key),
             actions = identities.map { i -> SheetAction(i.name, Icons.Rounded.Key, subtitle = i.fingerprint) { identity = i; pickKey = false } },
         )
     }

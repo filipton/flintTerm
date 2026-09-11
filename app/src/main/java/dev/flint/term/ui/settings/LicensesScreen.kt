@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,7 +50,7 @@ private val CREDITS = listOf(
 
 @Composable
 fun LicensesScreen(nav: NavController) {
-    SettingsSection(nav, "Licenses", subtitle = "What this app is made of") {
+    SettingsSection(nav, "Licenses", subtitle = stringResource(R.string.licensesscreen_what_this_app_is_made_of)) {
         CREDITS.forEach { (heading, credits) ->
             Group(heading) {
                 credits.forEachIndexed { i, c ->

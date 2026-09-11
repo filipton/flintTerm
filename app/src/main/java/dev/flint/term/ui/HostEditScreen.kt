@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -223,10 +225,10 @@ fun HostEditScreen(nav: NavController, id: String) {
         username.isBlank() -> "Required"
         else -> null
     }
-    val keyError = if (!telnet && account == null && authType == AuthType.KEY && identityId == null) "Pick a key" else null
+    val keyError = if (!telnet && account == null && authType == AuthType.KEY && identityId == null) stringResource(R.string.hosteditscreen_pick_a_key) else null
     val macError = when {
         !wol.enabled -> null
-        wol.mac.isBlank() -> "Required to wake this machine"
+        wol.mac.isBlank() -> stringResource(R.string.hosteditscreen_required_to_wake_this_machine)
         !Wol.isValidMac(wol.mac) -> "Six hex pairs, e.g. a8:a1:59:23:8e:88"
         else -> null
     }
@@ -238,7 +240,7 @@ fun HostEditScreen(nav: NavController, id: String) {
         if (wol.broadcast.isNotBlank()) null
         else (listOf(hostname) + addresses.map { it.hostname })
             .firstNotNullOfOrNull { Wol.autoBroadcast(it) }
-            ?.let { "Auto, $it on your current network" }
+            ?.let { "Auto, ${it} on your current network" }
             ?: "Auto, one packet per interface, because no address is on a network this phone is on"
     }
 
@@ -247,11 +249,11 @@ fun HostEditScreen(nav: NavController, id: String) {
     val valid = connectable && macError == null
     // Shown in a toast when Save is refused, so a problem scrolled off screen still gets named.
     val firstProblem = when {
-        hostError != null -> "The host address is required"
-        portError != null -> "The port must be between 1 and 65535"
-        userError != null -> "A username is required"
-        keyError != null -> "Choose an SSH key, or switch to password auth"
-        macError != null -> "Wake on LAN needs a valid MAC address"
+        hostError != null -> stringResource(R.string.hosteditscreen_the_host_address_is_required)
+        portError != null -> stringResource(R.string.hosteditscreen_the_port_must_be_between_1_and_65535)
+        userError != null -> stringResource(R.string.hosteditscreen_a_username_is_required)
+        keyError != null -> stringResource(R.string.hosteditscreen_choose_an_ssh_key_or_switch_to_password_auth)
+        macError != null -> stringResource(R.string.hosteditscreen_wake_on_lan_needs_a_valid_mac_address)
         else -> null
     }
 
@@ -325,8 +327,8 @@ fun HostEditScreen(nav: NavController, id: String) {
             AppHeader(
                 title = when {
                     page != EditorPage.Main -> page.title
-                    existing == null -> "New host"
-                    else -> "Edit host"
+                    existing == null -> stringResource(R.string.hosteditscreen_new_host)
+                    else -> stringResource(R.string.hosteditscreen_edit_host)
                 },
                 onBack = { if (page != EditorPage.Main) page = EditorPage.Main else nav.popBackStack() },
                 actions = {
@@ -340,7 +342,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                             }
                         },
                         modifier = Modifier.padding(end = 8.dp),
-                    ) { Text("Save") }
+                    ) { Text(stringResource(R.string.hosteditscreen_save)) }
                 },
             )
         },
@@ -362,15 +364,15 @@ fun HostEditScreen(nav: NavController, id: String) {
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primary),
                             contentAlignment = Alignment.Center,
-                        ) { Icon(Icons.Rounded.Edit, "Color and icon", Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onPrimary) }
+                        ) { Icon(Icons.Rounded.Edit, stringResource(R.string.hosteditscreen_color_and_icon), Modifier.size(12.dp), tint = MaterialTheme.colorScheme.onPrimary) }
                     }
                     Spacer(Modifier.width(12.dp))
-                    Field(label, { label = it }, "Name", placeholder = hostname.ifBlank { "My server" })
+                    Field(label, { label = it }, "Name", placeholder = hostname.ifBlank { stringResource(R.string.hosteditscreen_my_server) })
                 }
                 // A group is an object now — it carries a jump host, a VPN and a
                 // login for its members — so it is picked rather than typed.
                 Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Group", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.hosteditscreen_group), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(hostGroups) { g ->
                             FilterChip(
@@ -383,14 +385,14 @@ fun HostEditScreen(nav: NavController, id: String) {
                             FilterChip(
                                 selected = false,
                                 onClick = { newGroup = true },
-                                label = { Text("New group") },
+                                label = { Text(stringResource(R.string.hosteditscreen_new_group)) },
                                 leadingIcon = { Icon(Icons.Rounded.Add, null, Modifier.size(16.dp)) },
                             )
                         }
                     }
                     hostGroups.firstOrNull { it.id == groupId }?.takeIf { it.defaultCount() > 0 }?.let { g ->
                         Text(
-                            "Anything this host leaves unset is taken from ${g.label}.",
+                            stringResource(R.string.hosteditscreen_anything_this_host_leaves_unset_is_taken_from, g.label),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -410,7 +412,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Field(
-                            hostname, { hostname = it }, "Host", Modifier.weight(1f), placeholder = "example.com", mono = true,
+                            hostname, { hostname = it }, "Host", Modifier.weight(1f), placeholder = stringResource(R.string.hosteditscreen_example_com), mono = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                             error = hostError.takeIf { showErrors },
                         )
@@ -422,7 +424,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     }
                     if (protocol == Protocol.SSH && account == null) {
                         Field(
-                            username, { username = it }, "Username", placeholder = "root", mono = true,
+                            username, { username = it }, "Username", placeholder = stringResource(R.string.hosteditscreen_root), mono = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                             error = userError.takeIf { showErrors },
                             autofill = ContentType.Username,
@@ -437,7 +439,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     RowDivider()
                     GroupRow(
                         title = detectedOs,
-                        subtitle = "Read from the host when it was last connected",
+                        subtitle = stringResource(R.string.hosteditscreen_read_from_the_host_when_it_was_last_connected),
                         icon = Icons.Rounded.Memory,
                         iconTint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -451,21 +453,21 @@ fun HostEditScreen(nav: NavController, id: String) {
                 // comes first because it decides whether anything below it is
                 // asked at all.
                 GroupRow(
-                    title = account?.label ?: "This host only",
+                    title = account?.label ?: stringResource(R.string.hosteditscreen_this_host_only),
                     subtitle = account?.let { a ->
                         val how = when (a.authType) {
-                            AuthType.KEY -> identities.firstOrNull { it.id == a.identityId }?.name?.ifBlank { "key" } ?: "no key chosen"
+                            AuthType.KEY -> identities.firstOrNull { it.id == a.identityId }?.name?.ifBlank { "key" } ?: stringResource(R.string.hosteditscreen_no_key_chosen)
                             AuthType.PASSWORD -> "password"
-                            AuthType.NONE -> "no authentication"
+                            AuthType.NONE -> stringResource(R.string.hosteditscreen_no_authentication)
                         }
-                        "${a.username.ifBlank { "no username" }}  ·  $how  ·  shared account"
-                    } ?: "Username and key typed in here, used by this host alone",
+                        stringResource(R.string.hosteditscreen_shared_account, a.username.ifBlank { "no username" }, how)
+                    } ?: stringResource(R.string.hosteditscreen_username_and_key_typed_in_here_used_by_this_host),
                     icon = Icons.Rounded.Person,
                     onClick = { accountSheet = true },
                 )
                 if (account == null) RowDivider()
                 if (account == null) Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Segmented(listOf("Password", "SSH key", "None"), authType.ordinal) { authType = AuthType.entries[it] }
+                    Segmented(listOf("Password", stringResource(R.string.hosteditscreen_ssh_key), "None"), authType.ordinal) { authType = AuthType.entries[it] }
                     if (authType == AuthType.KEY) {
                         val selected = identities.firstOrNull { it.id == identityId }
                         val keyMissing = showErrors && keyError != null
@@ -478,8 +480,8 @@ fun HostEditScreen(nav: NavController, id: String) {
                                 .clickable { keySheet = true },
                         ) {
                             GroupRow(
-                                title = selected?.name ?: if (identities.isEmpty()) "No keys yet" else "Choose a key",
-                                subtitle = selected?.fingerprint ?: "Tap to pick or create one",
+                                title = selected?.name ?: if (identities.isEmpty()) stringResource(R.string.hosteditscreen_no_keys_yet) else stringResource(R.string.hosteditscreen_choose_a_key),
+                                subtitle = selected?.fingerprint ?: stringResource(R.string.hosteditscreen_tap_to_pick_or_create_one),
                                 subtitleMono = selected != null,
                                 icon = Icons.Rounded.Key,
                             )
@@ -488,13 +490,13 @@ fun HostEditScreen(nav: NavController, id: String) {
                     if (authType != AuthType.NONE) {
                         Field(
                             password, { password = it },
-                            if (authType == AuthType.KEY) "Password fallback (optional)" else "Password",
+                            if (authType == AuthType.KEY) stringResource(R.string.hosteditscreen_password_fallback_optional) else "Password",
                             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                             autofill = ContentType.Password,
                             trailing = {
                                 IconButton(onClick = { showPassword = !showPassword }) {
-                                    Icon(if (showPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, "Toggle visibility")
+                                    Icon(if (showPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility, stringResource(R.string.hosteditscreen_toggle_visibility))
                                 }
                             },
                         )
@@ -512,10 +514,10 @@ fun HostEditScreen(nav: NavController, id: String) {
                 GroupRow(
                     title = "VPN",
                     subtitle = when {
-                        tailnet != null -> "${tailnet.name.ifBlank { "Tailscale" }}  ·  Tailscale, so the host can be a MagicDNS name"
-                        jump != null && tunnel != null -> "${tunnel.name}  ·  ignored while a jump host is set (its tunnel is used)"
-                        tunnel != null -> "${tunnel.name}  ·  WireGuard"
-                        else -> "Direct network"
+                        tailnet != null -> stringResource(R.string.hosteditscreen_tailscale_so_the_host_can_be_a_magicdns_name, tailnet.name.ifBlank { "Tailscale" })
+                        jump != null && tunnel != null -> stringResource(R.string.hosteditscreen_ignored_while_a_jump_host_is_set_its_tunnel_is_u, tunnel.name)
+                        tunnel != null -> stringResource(R.string.hosteditscreen_wireguard, tunnel.name)
+                        else -> stringResource(R.string.hosteditscreen_direct_network)
                     },
                     icon = if (tailnet != null) Icons.Rounded.Hub else Icons.Rounded.VpnLock,
                     iconTint = MaterialTheme.colorScheme.secondary,
@@ -525,19 +527,19 @@ fun HostEditScreen(nav: NavController, id: String) {
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Segmented(TunnelMode.entries.map { it.label }, tunnelMode.ordinal) { tunnelMode = TunnelMode.entries[it] }
                         Text(
-                            if (tunnelMode == TunnelMode.WHEN_NEEDED) "Connect directly when the host is on the phone's current network, or when it answers directly. Otherwise use ${tunnel.name}. Good for a home server you also reach over Wi-Fi."
-                            else "Every connection goes through ${tunnel.name}.",
+                            if (tunnelMode == TunnelMode.WHEN_NEEDED) stringResource(R.string.hosteditscreen_connect_directly_when_the_host_is_on_the_phone_s, tunnel.name)
+                            else stringResource(R.string.hosteditscreen_every_connection_goes_through, tunnel.name),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
                 RowDivider()
                 GroupRow(
-                    title = "Other addresses",
+                    title = stringResource(R.string.hosteditscreen_other_addresses),
                     subtitle = if (addresses.isEmpty()) {
-                        "The same machine at another address, such as a LAN address or a tailnet name. Tried in order"
+                        stringResource(R.string.hosteditscreen_the_same_machine_at_another_address_such_as_a_la)
                     } else {
-                        "${addresses.size} more, tried in order after ${hostname.ifBlank { "the address above" }}"
+                        stringResource(R.string.hosteditscreen_more_tried_in_order_after, addresses.size, hostname.ifBlank { "the address above" })
                     },
                     icon = Icons.Rounded.SwapHoriz,
                     iconTint = MaterialTheme.colorScheme.secondary,
@@ -550,15 +552,15 @@ fun HostEditScreen(nav: NavController, id: String) {
                                 addresses = addresses + fresh
                                 openAddress = fresh.id
                             },
-                        ) { Text("Add") }
+                        ) { Text(stringResource(R.string.hosteditscreen_add)) }
                     },
                 )
                 addresses.forEachIndexed { i, address ->
                     val t = tunnels.firstOrNull { it.id == address.tunnelId }
                     val ts = tailnets.firstOrNull { it.id == address.tailscaleId }
                     val via = when {
-                        ts != null -> "through ${ts.name.ifBlank { "Tailscale" }}"
-                        t != null -> "through ${t.name}"
+                        ts != null -> stringResource(R.string.hosteditscreen_through, ts.name.ifBlank { "Tailscale" })
+                        t != null -> stringResource(R.string.hosteditscreen_through, t.name)
                         else -> "direct"
                     }
                     val open = openAddress == address.id
@@ -576,7 +578,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     ) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                address.label.ifBlank { address.hostname.ifBlank { "New address" } },
+                                address.label.ifBlank { address.hostname.ifBlank { stringResource(R.string.hosteditscreen_new_address) } },
                                 style = MaterialTheme.typography.bodyLarge,
                                 maxLines = 1,
                             )
@@ -596,11 +598,11 @@ fun HostEditScreen(nav: NavController, id: String) {
                         IconButton(
                             onClick = { addresses = addresses.toMutableList().also { it.add(i - 1, it.removeAt(i)) } },
                             enabled = i > 0,
-                        ) { Icon(Icons.Rounded.KeyboardArrowUp, "Try this one sooner") }
+                        ) { Icon(Icons.Rounded.KeyboardArrowUp, stringResource(R.string.hosteditscreen_try_this_one_sooner)) }
                         IconButton(
                             onClick = { addresses = addresses.toMutableList().also { it.add(i + 1, it.removeAt(i)) } },
                             enabled = i < addresses.lastIndex,
-                        ) { Icon(Icons.Rounded.KeyboardArrowDown, "Try this one later") }
+                        ) { Icon(Icons.Rounded.KeyboardArrowDown, stringResource(R.string.hosteditscreen_try_this_one_later)) }
                         Icon(
                             if (open) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
                             if (open) "Close" else "Edit",
@@ -625,7 +627,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                             }
                             Field(
                                 address.label, { v -> change { it.copy(label = v) } },
-                                "Name (optional)", placeholder = "Home LAN",
+                                "Name (optional)", placeholder = stringResource(R.string.hosteditscreen_home_lan),
                             )
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 TextButton(onClick = { vpnFor = address.id; vpnSheet = true }, modifier = Modifier.weight(1f)) {
@@ -633,15 +635,15 @@ fun HostEditScreen(nav: NavController, id: String) {
                                     Spacer(Modifier.width(6.dp))
                                     Text(
                                         when {
-                                            ts != null -> "Through ${ts.name.ifBlank { "Tailscale" }}"
-                                            t != null -> "Through ${t.name}"
+                                            ts != null -> stringResource(R.string.hosteditscreen_through_2, ts.name.ifBlank { "Tailscale" })
+                                            t != null -> stringResource(R.string.hosteditscreen_through_2, t.name)
                                             else -> "No VPN"
                                         },
                                         maxLines = 1,
                                     )
                                 }
                                 IconButton(onClick = { addresses = addresses.filterNot { it.id == address.id } }) {
-                                    Icon(Icons.Rounded.Delete, "Remove address", tint = MaterialTheme.colorScheme.error)
+                                    Icon(Icons.Rounded.Delete, stringResource(R.string.hosteditscreen_remove_address), tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                             // Tailscale has no "try it directly first": the node is
@@ -652,9 +654,9 @@ fun HostEditScreen(nav: NavController, id: String) {
                                 }
                                 Text(
                                     if (address.tunnelMode == TunnelMode.WHEN_NEEDED) {
-                                        "Reached directly while this phone is on the same network as it, or while it answers directly. Otherwise ${t.name} is used."
+                                        stringResource(R.string.hosteditscreen_reached_directly_while_this_phone_is_on_the_same, t.name)
                                     } else {
-                                        "This address always goes through ${t.name}."
+                                        stringResource(R.string.hosteditscreen_this_address_always_goes_through, t.name)
                                     },
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -666,8 +668,8 @@ fun HostEditScreen(nav: NavController, id: String) {
                 }
                 RowDivider()
                 GroupRow(
-                    title = "Jump host",
-                    subtitle = jump?.let { "${it.displayName}  ·  ${it.target}" } ?: "Connect directly",
+                    title = stringResource(R.string.hosteditscreen_jump_host),
+                    subtitle = jump?.let { "${it.displayName}  ·  ${it.target}" } ?: stringResource(R.string.hosteditscreen_connect_directly),
                     icon = Icons.Rounded.AltRoute,
                     iconTint = MaterialTheme.colorScheme.tertiary,
                     onClick = { jumpSheet = true },
@@ -678,13 +680,13 @@ fun HostEditScreen(nav: NavController, id: String) {
                 if (protocol == Protocol.SSH) {
                     RowDivider()
                     GroupRow(
-                        title = "Mosh",
+                        title = stringResource(R.string.hosteditscreen_mosh),
                         subtitle = when {
-                            mosh && tailscaleId != null -> "Starts mosh-server over SSH, then keeps the session over UDP inside your tailnet"
-                            mosh && tunnel != null -> "Starts mosh-server over SSH, then keeps the session over UDP through ${tunnel.name}"
-                            mosh && jump != null -> "Starts mosh-server over SSH, then relays UDP through ${jump.displayName} (needs python3 there)"
-                            mosh -> "Starts mosh-server over SSH, then keeps the session over UDP: survives roaming and sleep"
-                            else -> "Needs mosh-server on the host, and UDP 60000–61000 open"
+                            mosh && tailscaleId != null -> stringResource(R.string.hosteditscreen_starts_mosh_server_over_ssh_then_keeps_the_sessi)
+                            mosh && tunnel != null -> stringResource(R.string.hosteditscreen_starts_mosh_server_over_ssh_then_keeps_the_sessi_2, tunnel.name)
+                            mosh && jump != null -> stringResource(R.string.hosteditscreen_starts_mosh_server_over_ssh_then_relays_udp_thro, jump.displayName)
+                            mosh -> stringResource(R.string.hosteditscreen_starts_mosh_server_over_ssh_then_keeps_the_sessi_3)
+                            else -> stringResource(R.string.hosteditscreen_needs_mosh_server_on_the_host_and_udp_6000061000)
                         },
                         icon = Icons.Rounded.Bolt,
                         iconTint = MaterialTheme.colorScheme.secondary,
@@ -697,20 +699,20 @@ fun HostEditScreen(nav: NavController, id: String) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Rounded.Bolt, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.secondary)
                             Spacer(Modifier.width(8.dp))
-                            Text("Before connecting, run on ${jump.displayName}", style = MaterialTheme.typography.titleSmall)
+                            Text(stringResource(R.string.hosteditscreen_before_connecting_run_on, jump.displayName), style = MaterialTheme.typography.titleSmall)
                         }
                         Field(
-                            preCommand, { preCommand = it }, "Command (optional)", mono = true, singleLine = false, minLines = 2,
-                            placeholder = "wakeonlan aa:bb:cc:dd:ee:ff",
+                            preCommand, { preCommand = it }, stringResource(R.string.hosteditscreen_command_optional), mono = true, singleLine = false, minLines = 2,
+                            placeholder = stringResource(R.string.hosteditscreen_wakeonlan_aa_bb_cc_dd_ee_ff),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                         )
                         Text(
-                            "Output is shown in the connection log. Afterwards the tunnel to ${hostname.ifBlank { "the host" }} is retried until it answers. This is useful for waking a machine up.",
+                            stringResource(R.string.hosteditscreen_output_is_shown_in_the_connection_log_afterwards, hostname.ifBlank { "the host" }),
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Keep trying for", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                            Text(if (waitSeconds == 0) "one attempt" else "${waitSeconds}s", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            Text(stringResource(R.string.hosteditscreen_keep_trying_for), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Text(if (waitSeconds == 0) stringResource(R.string.hosteditscreen_one_attempt) else "${waitSeconds}s", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         }
                         AppSlider(
                             value = waitSeconds.toFloat(),
@@ -724,7 +726,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     // same one usually fronts several hosts: here you pick one.
                     val picked = proxies.firstOrNull { it.id == proxyId }
                     GroupRow(
-                        title = "Proxy",
+                        title = stringResource(R.string.hosteditscreen_proxy),
                         subtitle = picked?.let { "${it.label}  ·  ${it.target}" } ?: "None",
                         icon = Icons.Rounded.Lan,
                         iconTint = MaterialTheme.colorScheme.secondary,
@@ -733,16 +735,16 @@ fun HostEditScreen(nav: NavController, id: String) {
                 }
                 RowDivider()
                 GroupRow(
-                    title = "Forward SSH agent",
+                    title = stringResource(R.string.hosteditscreen_forward_ssh_agent),
                     subtitle = when {
                         // Mosh drops the SSH connection once the UDP session is up,
                         // and the forwarded agent goes with it — same as real mosh.
                         // The SSH connection is kept open beside the Mosh session
                         // to hold the agent socket, which is worth saying: it is a
                         // connection that does not survive a network change.
-                        forwardAgent && mosh -> "Kept alive beside Mosh, and ends if the network changes"
-                        forwardAgent -> "ssh and git on the host may use your keys. The signing happens on this phone"
-                        else -> "Off  ·  like ssh -A"
+                        forwardAgent && mosh -> stringResource(R.string.hosteditscreen_kept_alive_beside_mosh_and_ends_if_the_network_c)
+                        forwardAgent -> stringResource(R.string.hosteditscreen_ssh_and_git_on_the_host_may_use_your_keys_the_si)
+                        else -> stringResource(R.string.hosteditscreen_off_like_ssh_a)
                     },
                     icon = Icons.Rounded.Key,
                     iconTint = MaterialTheme.colorScheme.tertiary,
@@ -753,10 +755,10 @@ fun HostEditScreen(nav: NavController, id: String) {
                     // signatures means nothing for a host that forwards nothing.
                     val asking = askBeforeSigning ?: settings.confirmAgentSignatures
                     GroupRow(
-                        title = "Ask before each signature",
+                        title = stringResource(R.string.hosteditscreen_ask_before_each_signature),
                         subtitle = when {
-                            asking -> "A prompt here every time something on this host signs with your key"
-                            else -> "This host signs whenever it asks, as ssh -A does"
+                            asking -> stringResource(R.string.hosteditscreen_a_prompt_here_every_time_something_on_this_host)
+                            else -> stringResource(R.string.hosteditscreen_this_host_signs_whenever_it_asks_as_ssh_a_does)
                         },
                         icon = Icons.Rounded.Fingerprint,
                         iconTint = MaterialTheme.colorScheme.tertiary,
@@ -765,11 +767,11 @@ fun HostEditScreen(nav: NavController, id: String) {
                 }
                 RowDivider()
                 GroupRow(
-                    title = "Knock first",
+                    title = stringResource(R.string.hosteditscreen_knock_first),
                     subtitle = if (knock.enabled) {
                         knockProblem ?: PortKnock.format(PortKnock.parse(knock.sequence))
                     } else {
-                        "Off  ·  for a host behind a knock daemon"
+                        stringResource(R.string.hosteditscreen_off_for_a_host_behind_a_knock_daemon)
                     },
                     icon = Icons.Rounded.DoorFront,
                     iconTint = MaterialTheme.colorScheme.tertiary,
@@ -779,28 +781,28 @@ fun HostEditScreen(nav: NavController, id: String) {
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Field(
                             knock.sequence, { knock = knock.copy(sequence = it) }, "Sequence", mono = true,
-                            placeholder = "7000, 8000/udp, 9000",
+                            placeholder = stringResource(R.string.hosteditscreen_7000_8000_udp_9000),
                             error = knockProblem,
-                            hint = "TCP unless a port says /udp",
+                            hint = stringResource(R.string.hosteditscreen_tcp_unless_a_port_says_udp),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Field(
                                 knock.delayMs.toString(),
                                 { v -> v.filter { it.isDigit() }.take(5).toIntOrNull()?.let { knock = knock.copy(delayMs = it) } },
-                                "Between knocks", Modifier.weight(1f), mono = true,
+                                stringResource(R.string.hosteditscreen_between_knocks), Modifier.weight(1f), mono = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             )
                             Field(
                                 knock.pauseMs.toString(),
                                 { v -> v.filter { it.isDigit() }.take(5).toIntOrNull()?.let { knock = knock.copy(pauseMs = it) } },
-                                "Then wait", Modifier.weight(1f), mono = true,
+                                stringResource(R.string.hosteditscreen_then_wait), Modifier.weight(1f), mono = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             )
                         }
                         // Worth saying plainly, because the rest of this page is
                         // about routes the knock does not take.
                         Text(
-                            "Milliseconds. The packets leave this phone, so a knock cannot open a firewall that only a jump host, tunnel or proxy can reach.",
+                            stringResource(R.string.hosteditscreen_milliseconds_the_packets_leave_this_phone_so_a_k),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -809,10 +811,10 @@ fun HostEditScreen(nav: NavController, id: String) {
             }
 
             // ---- wake on lan -----------------------------------------------------------
-            if (page == EditorPage.Wol) Group("Wake on LAN") {
+            if (page == EditorPage.Wol) Group(stringResource(R.string.hosteditscreen_wake_on_lan)) {
                 GroupRow(
-                    title = "Wake the machine before connecting",
-                    subtitle = "Sends a magic packet, then keeps trying to connect while it boots",
+                    title = stringResource(R.string.hosteditscreen_wake_the_machine_before_connecting),
+                    subtitle = stringResource(R.string.hosteditscreen_sends_a_magic_packet_then_keeps_trying_to_connec),
                     icon = Icons.Rounded.Power,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     trailing = { AppSwitch(wol.enabled, { wol = wol.copy(enabled = it) }) },
@@ -828,18 +830,18 @@ fun HostEditScreen(nav: NavController, id: String) {
                                 r.onSuccess { out ->
                                     val found = Wol.parseDetected(out)
                                     when {
-                                        found.isEmpty() -> Toast.makeText(context, "No network interface with a MAC address found", Toast.LENGTH_LONG).show()
+                                        found.isEmpty() -> Toast.makeText(context, context.getString(R.string.hosteditscreen_no_network_interface_with_a_mac_address_found), Toast.LENGTH_LONG).show()
                                         found.size == 1 -> { wol = wol.copy(mac = found[0].second, broadcast = found[0].third.ifBlank { wol.broadcast }) }
                                         else -> detected = found
                                     }
-                                }.onFailure { Toast.makeText(context, "Could not read MAC: ${it.message}", Toast.LENGTH_LONG).show() }
+                                }.onFailure { Toast.makeText(context, context.getString(R.string.hosteditscreen_could_not_read_mac, it.message), Toast.LENGTH_LONG).show() }
                             }
                         }
                         Field(
-                            wol.mac, { wol = wol.copy(mac = it) }, "MAC address", mono = true, placeholder = "a8:a1:59:23:8e:88",
+                            wol.mac, { wol = wol.copy(mac = it) }, stringResource(R.string.hosteditscreen_mac_address), mono = true, placeholder = "a8:a1:59:23:8e:88",
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                             error = macError.takeIf { showErrors },
-                            hint = if (detecting) "Connecting to read it…" else "Tap the magnifier to read it off the machine (it must be on)",
+                            hint = if (detecting) stringResource(R.string.hosteditscreen_connecting_to_read_it) else stringResource(R.string.hosteditscreen_tap_the_magnifier_to_read_it_off_the_machine_it),
                             trailing = {
                                 if (detecting) {
                                     CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
@@ -847,7 +849,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                                     IconButton(onClick = ::detectMac, enabled = connectable) {
                                         Icon(
                                             Icons.Rounded.Search,
-                                            "Detect the MAC address",
+                                            stringResource(R.string.hosteditscreen_detect_the_mac_address),
                                             tint = if (connectable) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                                         )
                                     }
@@ -857,32 +859,32 @@ fun HostEditScreen(nav: NavController, id: String) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Field(
                                 wol.broadcast, { wol = wol.copy(broadcast = it) }, "Broadcast", Modifier.weight(1f), mono = true,
-                                placeholder = "Auto",
+                                placeholder = stringResource(R.string.hosteditscreen_auto),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                                 hint = if (wol.broadcast.isBlank()) autoBroadcastHint else null,
                             )
                             Field(wol.port.toString(), { v -> v.filter { it.isDigit() }.take(5).toIntOrNull()?.let { wol = wol.copy(port = it) } }, "Port", Modifier.width(96.dp), mono = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                         }
-                        Text("Send from", style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.hosteditscreen_send_from), style = MaterialTheme.typography.titleSmall)
                         Segmented(WolSource.entries.map { it.label }, wol.sendFrom.ordinal) { wol = wol.copy(sendFrom = WolSource.entries[it]) }
                         Text(
                             when (wol.sendFrom) {
-                                WolSource.AUTO -> "Decided when you connect. If this phone is on the machine's network (the same subnet as the broadcast address or the host IP) the phone broadcasts. If it is not, " +
-                                    (if (jump != null) "${jump.displayName} sends the packet." else "it still tries from the phone. Add a jump host so it also works when you are away.")
-                                WolSource.PHONE -> "The phone broadcasts on the network it is on now. This only reaches the machine when you are on the same network."
-                                WolSource.JUMP_HOST -> if (jump != null) "The jump host ${jump.displayName} sends the packet (wakeonlan, python3, etherwake or bash, whichever it has). Its output shows in the connection log."
-                                    else "Pick a jump host above first. Until then the phone sends the packet."
+                                WolSource.AUTO -> stringResource(R.string.hosteditscreen_decided_when_you_connect_if_this_phone_is_on_the) +
+                                    (if (jump != null) stringResource(R.string.hosteditscreen_sends_the_packet, jump.displayName) else stringResource(R.string.hosteditscreen_it_still_tries_from_the_phone_add_a_jump_host_so))
+                                WolSource.PHONE -> stringResource(R.string.hosteditscreen_the_phone_broadcasts_on_the_network_it_is_on_now)
+                                WolSource.JUMP_HOST -> if (jump != null) stringResource(R.string.hosteditscreen_the_jump_host_sends_the_packet_wakeonlan_python3, jump.displayName)
+                                    else stringResource(R.string.hosteditscreen_pick_a_jump_host_above_first_until_then_the_phon)
                             },
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Wake automatically on every connect", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                            Text(stringResource(R.string.hosteditscreen_wake_automatically_on_every_connect), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                             AppSwitch(wol.autoWake, { wol = wol.copy(autoWake = it) })
                         }
                         if (jump == null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Keep trying for", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                                Text(if (waitSeconds == 0) "one attempt" else "${waitSeconds}s", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                                Text(stringResource(R.string.hosteditscreen_keep_trying_for), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                                Text(if (waitSeconds == 0) stringResource(R.string.hosteditscreen_one_attempt) else "${waitSeconds}s", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                             }
                             AppSlider(
                                 value = waitSeconds.toFloat(),
@@ -902,13 +904,13 @@ fun HostEditScreen(nav: NavController, id: String) {
                     title = EditorPage.Route.title,
                     subtitle = listOfNotNull(
                         tailnet?.let { it.name.ifBlank { "Tailscale" } } ?: tunnel?.name,
-                        addresses.size.takeIf { it > 0 }?.let { "$it more address${if (it > 1) "es" else ""}" },
-                        jump?.displayName?.let { "through $it" },
+                        addresses.size.takeIf { it > 0 }?.let { stringResource(R.string.hosteditscreen_more_address, it, if (it > 1) "es" else "") },
+                        jump?.displayName?.let { stringResource(R.string.hosteditscreen_through, it) },
                         "Mosh".takeIf { mosh },
                         "agent".takeIf { forwardAgent },
                         "asks".takeIf { forwardAgent && (askBeforeSigning ?: settings.confirmAgentSignatures) },
                         "knock".takeIf { knock.enabled },
-                    ).joinToString("  ·  ").ifEmpty { "Direct connection" },
+                    ).joinToString("  ·  ").ifEmpty { stringResource(R.string.hosteditscreen_direct_connection) },
                     icon = Icons.Rounded.AltRoute,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     onClick = { page = EditorPage.Route },
@@ -917,12 +919,12 @@ fun HostEditScreen(nav: NavController, id: String) {
                 GroupRow(
                     title = EditorPage.OnConnect.title,
                     subtitle = listOfNotNull(
-                        startupSnippetIds.size.takeIf { it > 0 }?.let { "$it snippet${if (it > 1) "s" else ""}" },
-                        "a command".takeIf { startup.isNotBlank() },
-                        env.size.takeIf { it > 0 }?.let { "$it variable${if (it > 1) "s" else ""}" },
+                        startupSnippetIds.size.takeIf { it > 0 }?.let { stringResource(R.string.hosteditscreen_snippet, it, if (it > 1) "s" else "") },
+                        stringResource(R.string.hosteditscreen_a_command).takeIf { startup.isNotBlank() },
+                        env.size.takeIf { it > 0 }?.let { stringResource(R.string.hosteditscreen_variable, it, if (it > 1) "s" else "") },
                         "tmux".takeIf { persistent },
                         "recorded".takeIf { recordSessions },
-                    ).joinToString("  ·  ").ifEmpty { "Nothing yet" },
+                    ).joinToString("  ·  ").ifEmpty { stringResource(R.string.hosteditscreen_nothing_yet) },
                     icon = Icons.Rounded.PlayArrow,
                     iconTint = MaterialTheme.colorScheme.primary,
                     onClick = { page = EditorPage.OnConnect },
@@ -933,8 +935,8 @@ fun HostEditScreen(nav: NavController, id: String) {
                 GroupRow(
                     title = EditorPage.Terminal.title,
                     subtitle = listOfNotNull(
-                        hostTheme?.let { Schemes.nameOf(it) } ?: "App default  ·  ${Schemes.nameOf(inheritedTheme)}",
-                        overrides.takeIf { it > 0 }?.let { "$it override${if (it > 1) "s" else ""}" },
+                        hostTheme?.let { Schemes.nameOf(it) } ?: stringResource(R.string.hosteditscreen_app_default, Schemes.nameOf(inheritedTheme)),
+                        overrides.takeIf { it > 0 }?.let { stringResource(R.string.hosteditscreen_override, it, if (it > 1) "s" else "") },
                         "alerts".takeIf { patterns.isNotBlank() },
                     ).joinToString("  ·  "),
                     icon = Icons.Rounded.Palette,
@@ -948,7 +950,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     subtitle = when (forwards.size) {
                         0 -> "None"
                         1 -> forwards.first().describe()
-                        else -> "${forwards.size} forwards"
+                        else -> stringResource(R.string.hosteditscreen_forwards, forwards.size)
                     },
                     icon = Icons.Rounded.SwapHoriz,
                     iconTint = MaterialTheme.colorScheme.secondary,
@@ -958,7 +960,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                 GroupRow(
                     title = EditorPage.Wol.title,
                     subtitle = if (wol.enabled) {
-                        Wol.normalizeMac(wol.mac).ifBlank { "No MAC address yet" }
+                        Wol.normalizeMac(wol.mac).ifBlank { stringResource(R.string.hosteditscreen_no_mac_address_yet) }
                     } else {
                         "Off"
                     },
@@ -968,10 +970,10 @@ fun HostEditScreen(nav: NavController, id: String) {
                 )
             }
 
-            if (page == EditorPage.Main) Group("This host") {
+            if (page == EditorPage.Main) Group(stringResource(R.string.hosteditscreen_this_host)) {
                 GroupRow(
-                    title = "Show in Files app",
-                    subtitle = if (showInFiles) "In Android's file picker" else "Off",
+                    title = stringResource(R.string.hosteditscreen_show_in_files_app),
+                    subtitle = if (showInFiles) stringResource(R.string.hosteditscreen_in_android_s_file_picker) else "Off",
                     icon = Icons.Rounded.FolderOpen,
                     iconTint = MaterialTheme.colorScheme.primary,
                     trailing = { AppSwitch(showInFiles, { showInFiles = it }) },
@@ -979,45 +981,45 @@ fun HostEditScreen(nav: NavController, id: String) {
             }
 
             // ---- terminal ------------------------------------------------------------
-            if (page == EditorPage.Terminal) Group("This host's terminal") {
+            if (page == EditorPage.Terminal) Group(stringResource(R.string.hosteditscreen_this_host_s_terminal)) {
                 OverrideRow(
-                    title = "Keyboard protocol",
+                    title = stringResource(R.string.hosteditscreen_keyboard_protocol),
                     icon = Icons.Rounded.Keyboard,
                     value = keyboardProtocol,
                     subtitle = if (keyboardProtocol ?: settings.keyboardProtocol) {
-                        "Ctrl+[, Shift+Enter and Ctrl+Shift+letter reach programs here that ask for them"
+                        stringResource(R.string.hosteditscreen_ctrl_shift_enter_and_ctrl_shift_letter_reach_pro)
                     } else {
-                        "Plain xterm keys, for a device whose terminal predates the protocol"
+                        stringResource(R.string.hosteditscreen_plain_xterm_keys_for_a_device_whose_terminal_pre)
                     },
                     onChange = { keyboardProtocol = it },
                 )
                 RowDivider()
                 OverrideRow(
-                    title = "Ctrl+[, Ctrl+I and Ctrl+M",
+                    title = stringResource(R.string.hosteditscreen_ctrl_ctrl_i_and_ctrl_m),
                     icon = Icons.Rounded.Keyboard,
                     value = fixtermsCtrlKeys,
                     subtitle = if (fixtermsCtrlKeys ?: settings.fixtermsCtrlKeys) {
-                        "Sent as keys of their own here, so a tmux binding on Ctrl+[ fires"
+                        stringResource(R.string.hosteditscreen_sent_as_keys_of_their_own_here_so_a_tmux_binding)
                     } else {
-                        "Sent as the Escape, Tab and Enter bytes, as a plain terminal always has"
+                        stringResource(R.string.hosteditscreen_sent_as_the_escape_tab_and_enter_bytes_as_a_plai)
                     },
                     onChange = { fixtermsCtrlKeys = it },
                 )
                 RowDivider()
                 OverrideRow(
-                    title = "Inline images",
+                    title = stringResource(R.string.hosteditscreen_inline_images),
                     icon = Icons.Rounded.Image,
                     value = terminalImages,
                     subtitle = if (terminalImages ?: (settings.terminalImages != TerminalImages.OFF)) {
-                        "Programs here may draw pictures in the terminal. The app picks the protocol"
+                        stringResource(R.string.hosteditscreen_programs_here_may_draw_pictures_in_the_terminal)
                     } else {
-                        "Image escapes from this host are ignored"
+                        stringResource(R.string.hosteditscreen_image_escapes_from_this_host_are_ignored)
                     },
                     onChange = { terminalImages = it },
                 )
                 RowDivider()
                 OverrideRow(
-                    title = "tmux controls",
+                    title = stringResource(R.string.hosteditscreen_tmux_controls),
                     icon = Icons.Rounded.Dashboard,
                     value = tmuxControls,
                     // Not "Follow": leaving this alone means "when this host is
@@ -1025,18 +1027,18 @@ fun HostEditScreen(nav: NavController, id: String) {
                     // deferral to the app's setting.
                     neutral = "Auto",
                     subtitle = if (settings.tmuxControls && (tmuxControls ?: persistent)) {
-                        "The chords sheet, the window list and the swipe that changes window"
+                        stringResource(R.string.hosteditscreen_the_chords_sheet_the_window_list_and_the_swipe_t)
                     } else {
-                        "Off  ·  nothing to drive without a tmux on the other end"
+                        stringResource(R.string.hosteditscreen_off_nothing_to_drive_without_a_tmux_on_the_other)
                     },
                     onChange = { tmuxControls = it },
                 )
                 RowDivider()
                 Column(Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Font size", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Text(stringResource(R.string.hosteditscreen_font_size), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         Text(
-                            if (fontSizeSp > 0f) "${fontSizeSp.roundToInt()} sp" else "Follow settings",
+                            if (fontSizeSp > 0f) "${fontSizeSp.roundToInt()} sp" else stringResource(R.string.hosteditscreen_follow_settings),
                             style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
                         )
                     }
@@ -1051,13 +1053,13 @@ fun HostEditScreen(nav: NavController, id: String) {
                     Box(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(12.dp),
                     ) {
-                        Text("~ $ ls -la  # preview 0123", style = CodeStyle.copy(fontSize = (if (fontSizeSp > 0f) fontSizeSp else settings.fontSizeSp).sp))
+                        Text(stringResource(R.string.hosteditscreen_ls_la_preview_0123), style = CodeStyle.copy(fontSize = (if (fontSizeSp > 0f) fontSizeSp else settings.fontSizeSp).sp))
                     }
                     Text(
                         if (fontSizeSp > 0f) {
-                            "Pinching in a session on this host changes this size, not the app's."
+                            stringResource(R.string.hosteditscreen_pinching_in_a_session_on_this_host_changes_this)
                         } else {
-                            "This host draws at the app's ${settings.fontSizeSp.roundToInt()} sp, and pinching changes that."
+                            stringResource(R.string.hosteditscreen_this_host_draws_at_the_app_s_sp_and_pinching_cha, settings.fontSizeSp.roundToInt())
                         },
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 8.dp),
@@ -1066,20 +1068,20 @@ fun HostEditScreen(nav: NavController, id: String) {
                 RowDivider()
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Field(
-                        patterns, { patterns = it }, "Notify when output matches (one regex per line)", mono = true, singleLine = false, minLines = 2,
-                        placeholder = "build (finished|failed)\nERROR",
+                        patterns, { patterns = it }, stringResource(R.string.hosteditscreen_notify_when_output_matches_one_regex_per_line), mono = true, singleLine = false, minLines = 2,
+                        placeholder = stringResource(R.string.hosteditscreen_build_finished_failed_nerror),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                     )
-                    Text("Matching lines raise a notification while the app is in the background.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.hosteditscreen_matching_lines_raise_a_notification_while_the_ap), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             // Six hundred previews do not belong inline on a settings page; the
             // picker opens as a sheet, since this draft host has no route to
             // come back to.
-            if (page == EditorPage.Terminal) Group("Color scheme") {
+            if (page == EditorPage.Terminal) Group(stringResource(R.string.hosteditscreen_color_scheme)) {
                 GroupRow(
-                    title = hostTheme?.let { Schemes.nameOf(it) } ?: "App default",
-                    subtitle = if (hostTheme == null) Schemes.nameOf(inheritedTheme) else "This host only",
+                    title = hostTheme?.let { Schemes.nameOf(it) } ?: stringResource(R.string.hosteditscreen_app_default_2),
+                    subtitle = if (hostTheme == null) Schemes.nameOf(inheritedTheme) else stringResource(R.string.hosteditscreen_this_host_only),
                     icon = Icons.Rounded.Palette,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     onClick = { themeSheet = true },
@@ -1090,29 +1092,29 @@ fun HostEditScreen(nav: NavController, id: String) {
             if (confirmRecord) {
                 AlertDialog(
                     onDismissRequest = { confirmRecord = false },
-                    title = { Text("Record every session?") },
+                    title = { Text(stringResource(R.string.hosteditscreen_record_every_session)) },
                     text = {
                         Text(
-                            "Everything the host prints is written to a file, from login to logout. " +
-                                "Recording carries on while the app is in the background, so a session " +
-                                "left open all day can reach several gigabytes. Only the end of a very " +
-                                "large recording can be opened again.",
+                            stringResource(R.string.hosteditscreen_everything_the_host_prints_is_written_to_a_file) +
+                                stringResource(R.string.hosteditscreen_recording_carries_on_while_the_app_is_in_the_bac) +
+                                stringResource(R.string.hosteditscreen_left_open_all_day_can_reach_several_gigabytes_on) +
+                                stringResource(R.string.hosteditscreen_large_recording_can_be_opened_again),
                         )
                     },
                     confirmButton = {
-                        TextButton(onClick = { recordSessions = true; confirmRecord = false }) { Text("Record") }
+                        TextButton(onClick = { recordSessions = true; confirmRecord = false }) { Text(stringResource(R.string.hosteditscreen_record)) }
                     },
-                    dismissButton = { TextButton(onClick = { confirmRecord = false }) { Text("Cancel") } },
+                    dismissButton = { TextButton(onClick = { confirmRecord = false }) { Text(stringResource(R.string.hosteditscreen_cancel)) } },
                 )
             }
 
-            if (page == EditorPage.OnConnect) Group("After login") {
+            if (page == EditorPage.OnConnect) Group(stringResource(R.string.hosteditscreen_after_login)) {
                 GroupRow(
-                    title = "Record every session",
+                    title = stringResource(R.string.hosteditscreen_record_every_session_2),
                     subtitle = if (recordSessions) {
-                        "Saved as ${settings.recordingFormat.label.lowercase()}, login to logout"
+                        stringResource(R.string.hosteditscreen_saved_as_login_to_logout, settings.recordingFormat.label.lowercase())
                     } else {
-                        "Off  ·  record by hand from the terminal's ⋮ menu"
+                        stringResource(R.string.hosteditscreen_off_record_by_hand_from_the_terminal_s_menu)
                     },
                     icon = Icons.Rounded.FiberManualRecord,
                     iconTint = MaterialTheme.colorScheme.error,
@@ -1120,8 +1122,8 @@ fun HostEditScreen(nav: NavController, id: String) {
                 )
                 RowDivider()
                 GroupRow(
-                    title = "Persistent session",
-                    subtitle = "Attach to tmux at login, and attach again automatically when the connection drops",
+                    title = stringResource(R.string.hosteditscreen_persistent_session),
+                    subtitle = stringResource(R.string.hosteditscreen_attach_to_tmux_at_login_and_attach_again_automat),
                     icon = Icons.Rounded.Power,
                     iconTint = MaterialTheme.colorScheme.primary,
                     trailing = { AppSwitch(persistent, { persistent = it }) },
@@ -1129,17 +1131,17 @@ fun HostEditScreen(nav: NavController, id: String) {
                 if (persistent) {
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Field(tmuxSession, { tmuxSession = it }, "tmux session name", Modifier.weight(1f), mono = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false))
+                            Field(tmuxSession, { tmuxSession = it }, stringResource(R.string.hosteditscreen_tmux_session_name), Modifier.weight(1f), mono = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false))
                             // What the chords sheet and the window list send, so
                             // a tmux rebound to C-a is driven as it is configured.
-                            Field(tmuxPrefix, { tmuxPrefix = it }, "tmux prefix", Modifier.width(120.dp), mono = true, placeholder = "C-b", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false))
+                            Field(tmuxPrefix, { tmuxPrefix = it }, stringResource(R.string.hosteditscreen_tmux_prefix), Modifier.width(120.dp), mono = true, placeholder = "C-b", keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false))
                         }
-                        Text("Needs tmux on the host. Your shell runs inside it, so running programs survive disconnects.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+                        Text(stringResource(R.string.hosteditscreen_needs_tmux_on_the_host_your_shell_runs_inside_it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                             Column(Modifier.weight(1f)) {
-                                Text("Back to the last session", style = MaterialTheme.typography.bodyMedium)
+                                Text(stringResource(R.string.hosteditscreen_back_to_the_last_session), style = MaterialTheme.typography.bodyMedium)
                                 Text(
-                                    "Reattach to whichever tmux session you were last in, so switching sessions on the host sticks. The name above is only used when tmux has none.",
+                                    stringResource(R.string.hosteditscreen_reattach_to_whichever_tmux_session_you_were_last),
                                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
@@ -1152,11 +1154,11 @@ fun HostEditScreen(nav: NavController, id: String) {
                 // tmux attach line — which uses exec, so nothing after it would.
                 val chosenSnippets = startupSnippetIds.mapNotNull { id -> snippets.firstOrNull { it.id == id } }
                 GroupRow(
-                    title = "Run snippets",
+                    title = stringResource(R.string.hosteditscreen_run_snippets),
                     subtitle = when {
-                        chosenSnippets.isEmpty() -> "Saved commands, run in order before the one below"
-                        chosenSnippets.size == 1 -> chosenSnippets.first().name.ifBlank { "One snippet" }
-                        else -> "${chosenSnippets.size} snippets  ·  ${chosenSnippets.joinToString(", ") { it.name.ifBlank { "unnamed" } }}"
+                        chosenSnippets.isEmpty() -> stringResource(R.string.hosteditscreen_saved_commands_run_in_order_before_the_one_below)
+                        chosenSnippets.size == 1 -> chosenSnippets.first().name.ifBlank { stringResource(R.string.hosteditscreen_one_snippet) }
+                        else -> stringResource(R.string.hosteditscreen_snippets, chosenSnippets.size, chosenSnippets.joinToString(", ") { it.name.ifBlank { "unnamed" } })
                     },
                     icon = Icons.Rounded.AutoAwesome,
                     iconTint = MaterialTheme.colorScheme.tertiary,
@@ -1166,12 +1168,12 @@ fun HostEditScreen(nav: NavController, id: String) {
                 // shared list, so it lives here, next to the snippets it runs after.
                 Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Field(
-                        startup, { startup = it }, "Command for this host only", mono = true, singleLine = false, minLines = 2,
-                        placeholder = "cd /srv && ./status.sh",
+                        startup, { startup = it }, stringResource(R.string.hosteditscreen_command_for_this_host_only), mono = true, singleLine = false, minLines = 2,
+                        placeholder = stringResource(R.string.hosteditscreen_cd_srv_status_sh),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                     )
                     Text(
-                        "Runs after the snippets above and before tmux, without being saved to the snippet list.",
+                        stringResource(R.string.hosteditscreen_runs_after_the_snippets_above_and_before_tmux_wi),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -1180,15 +1182,15 @@ fun HostEditScreen(nav: NavController, id: String) {
                 if (protocol == Protocol.SSH) {
                     RowDivider()
                     GroupRow(
-                        title = "Environment variables",
+                        title = stringResource(R.string.hosteditscreen_environment_variables),
                         subtitle = when {
-                            env.isEmpty() && mosh -> "Passed to mosh-server, which sets them itself. The server's AcceptEnv does not apply"
-                            env.isEmpty() -> "Asked for when the shell opens. Most servers accept only LANG and LC_*"
-                            else -> "${env.size} set on connect"
+                            env.isEmpty() && mosh -> stringResource(R.string.hosteditscreen_passed_to_mosh_server_which_sets_them_itself_the)
+                            env.isEmpty() -> stringResource(R.string.hosteditscreen_asked_for_when_the_shell_opens_most_servers_acce)
+                            else -> stringResource(R.string.hosteditscreen_set_on_connect, env.size)
                         },
                         icon = Icons.Rounded.DataObject,
                         iconTint = MaterialTheme.colorScheme.secondary,
-                        trailing = { TextButton(onClick = { env = env + EnvEntry("", "") }) { Text("Add") } },
+                        trailing = { TextButton(onClick = { env = env + EnvEntry("", "") }) { Text(stringResource(R.string.hosteditscreen_add)) } },
                     )
                     env.forEachIndexed { i, e ->
                         Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1202,11 +1204,11 @@ fun HostEditScreen(nav: NavController, id: String) {
                                 )
                                 Field(
                                     e.value, { v -> env = env.mapIndexed { j, x -> if (j == i) x.copy(value = v) else x } },
-                                    "Value", Modifier.weight(1f), placeholder = "flintTerm", mono = true,
+                                    "Value", Modifier.weight(1f), placeholder = stringResource(R.string.hosteditscreen_flintterm), mono = true,
                                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                                 )
                                 IconButton(onClick = { env = env.filterIndexed { j, _ -> j != i } }) {
-                                    Icon(Icons.Rounded.Delete, "Remove variable", tint = MaterialTheme.colorScheme.error)
+                                    Icon(Icons.Rounded.Delete, stringResource(R.string.hosteditscreen_remove_variable), tint = MaterialTheme.colorScheme.error)
                                 }
                             }
                             if (i < env.lastIndex) HorizontalDivider()
@@ -1215,9 +1217,9 @@ fun HostEditScreen(nav: NavController, id: String) {
                     if (env.isNotEmpty()) {
                         Text(
                             if (mosh) {
-                                "Mosh takes these as mosh-server arguments, so they are set for the session whatever the server's AcceptEnv says. Names must look like variable names, and anything else is left out."
+                                stringResource(R.string.hosteditscreen_mosh_takes_these_as_mosh_server_arguments_so_the)
                             } else {
-                                "sshd only passes the names its AcceptEnv lists, and by default that is LANG and LC_* only. Anything else is dropped silently, so the connection log shows how many were asked for, not how many arrived. Turning Mosh on avoids this limit."
+                                stringResource(R.string.hosteditscreen_sshd_only_passes_the_names_its_acceptenv_lists_a)
                             },
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
@@ -1227,11 +1229,11 @@ fun HostEditScreen(nav: NavController, id: String) {
             }
 
             // ---- forwards ------------------------------------------------------------
-            if (page == EditorPage.Forwards) Group("Port forwarding") {
+            if (page == EditorPage.Forwards) Group(stringResource(R.string.hosteditscreen_port_forwarding)) {
                 forwards.forEachIndexed { i, f ->
                     GroupRow(
                         title = f.describe(),
-                        subtitle = if (f.autoStart) "Starts with the session" else "Manual",
+                        subtitle = if (f.autoStart) stringResource(R.string.hosteditscreen_starts_with_the_session) else "Manual",
                         subtitleMono = false,
                         icon = Icons.Rounded.SwapHoriz,
                         iconTint = MaterialTheme.colorScheme.secondary,
@@ -1241,7 +1243,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     if (i < forwards.lastIndex) RowDivider()
                 }
                 if (forwards.isNotEmpty()) RowDivider()
-                GroupRow(title = "Add forward", icon = Icons.Rounded.Add, iconTint = MaterialTheme.colorScheme.primary, onClick = { editingForward = PortForward() })
+                GroupRow(title = stringResource(R.string.hosteditscreen_add_forward), icon = Icons.Rounded.Add, iconTint = MaterialTheme.colorScheme.primary, onClick = { editingForward = PortForward() })
             }
             Spacer(Modifier.height(40.dp))
         }
@@ -1256,7 +1258,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     HostGlyph(preview, 44)
                     Spacer(Modifier.width(14.dp))
-                    Text("Color & icon", style = MaterialTheme.typography.titleLarge)
+                    Text(stringResource(R.string.hosteditscreen_color_icon), style = MaterialTheme.typography.titleLarge)
                 }
                 ColorPicker(selected = if (color != 0) Color(color) else null) { c -> color = if (color == c.toArgb()) 0 else c.toArgb() }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1288,20 +1290,20 @@ fun HostEditScreen(nav: NavController, id: String) {
     if (accountSheet) {
         ActionSheet(
             onDismiss = { accountSheet = false },
-            title = "Account",
-            subtitle = "Who to log in as",
+            title = stringResource(R.string.hosteditscreen_account),
+            subtitle = stringResource(R.string.hosteditscreen_who_to_log_in_as),
             actions = listOf(
                 SheetAction(
-                    "This host only",
+                    stringResource(R.string.hosteditscreen_this_host_only),
                     Icons.Rounded.Person,
-                    subtitle = "Keep the username and key typed into this host",
+                    subtitle = stringResource(R.string.hosteditscreen_keep_the_username_and_key_typed_into_this_host),
                 ) { accountId = null; accountSheet = false },
             ) + accounts.map { a ->
-                SheetAction(a.label, Icons.Rounded.Person, subtitle = a.username.ifBlank { "no username" }) {
+                SheetAction(a.label, Icons.Rounded.Person, subtitle = a.username.ifBlank { stringResource(R.string.hosteditscreen_no_username) }) {
                     accountId = a.id
                     accountSheet = false
                 }
-            } + SheetAction("New account…", Icons.Rounded.Add) {
+            } + SheetAction(stringResource(R.string.hosteditscreen_new_account), Icons.Rounded.Add) {
                 accountSheet = false
                 // Seeded with whatever has been typed here already, so making
                 // this host's login shared does not mean typing it twice.
@@ -1329,17 +1331,17 @@ fun HostEditScreen(nav: NavController, id: String) {
     if (keySheet) {
         ActionSheet(
             onDismiss = { keySheet = false },
-            title = "SSH key",
+            title = stringResource(R.string.hosteditscreen_ssh_key),
             actions = identities.map { i ->
                 SheetAction(i.name, Icons.Rounded.Key, subtitle = i.fingerprint) { identityId = i.id; keySheet = false }
-            } + SheetAction("Manage keys…", Icons.Rounded.Add) { keySheet = false; nav.navigate(Routes.KEYS) },
+            } + SheetAction(stringResource(R.string.hosteditscreen_manage_keys), Icons.Rounded.Add) { keySheet = false; nav.navigate(Routes.KEYS) },
         )
     }
     detected?.let { list ->
         ActionSheet(
             onDismiss = { detected = null },
-            title = "Which interface?",
-            subtitle = "The first one carries the default route.",
+            title = stringResource(R.string.hosteditscreen_which_interface),
+            subtitle = stringResource(R.string.hosteditscreen_the_first_one_carries_the_default_route),
             actions = list.map { (iface, mac, bc) ->
                 SheetAction(iface, subtitle = mac + if (bc.isNotBlank()) "  ·  broadcast $bc" else "") {
                     wol = wol.copy(mac = mac, broadcast = bc.ifBlank { wol.broadcast }); detected = null
@@ -1364,20 +1366,20 @@ fun HostEditScreen(nav: NavController, id: String) {
             onDismiss = { vpnSheet = false; vpnFor = null },
             title = "VPN",
             subtitle = if (target == null) {
-                "Only this host's traffic goes through it. No system VPN needed."
+                stringResource(R.string.hosteditscreen_only_this_host_s_traffic_goes_through_it_no_syst)
             } else {
-                "Used for this address only, so a LAN address can stay direct."
+                stringResource(R.string.hosteditscreen_used_for_this_address_only_so_a_lan_address_can)
             },
             actions = listOf(
-                SheetAction("Direct network", Icons.Rounded.SwapHoriz, subtitle = "No VPN") { choose(null, null) },
+                SheetAction(stringResource(R.string.hosteditscreen_direct_network), Icons.Rounded.SwapHoriz, subtitle = "No VPN") { choose(null, null) },
             ) +
                 tunnels.map { t ->
-                    SheetAction(t.name.ifBlank { "Tunnel" }, Icons.Rounded.VpnLock, subtitle = "WireGuard tunnel") { choose(t.id, null) }
+                    SheetAction(t.name.ifBlank { "Tunnel" }, Icons.Rounded.VpnLock, subtitle = stringResource(R.string.hosteditscreen_wireguard_tunnel)) { choose(t.id, null) }
                 } +
                 tailnets.map { p ->
-                    SheetAction(p.name.ifBlank { "Tailscale" }, Icons.Rounded.Hub, subtitle = if (p.joined) "Tailscale" else "Tailscale, not joined yet") { choose(null, p.id) }
+                    SheetAction(p.name.ifBlank { "Tailscale" }, Icons.Rounded.Hub, subtitle = if (p.joined) "Tailscale" else stringResource(R.string.hosteditscreen_tailscale_not_joined_yet)) { choose(null, p.id) }
                 } +
-                SheetAction("Manage VPN & tunnels…", Icons.Rounded.Add) { vpnSheet = false; vpnFor = null; nav.navigate(Routes.TUNNELS) },
+                SheetAction(stringResource(R.string.hosteditscreen_manage_vpn_tunnels), Icons.Rounded.Add) { vpnSheet = false; vpnFor = null; nav.navigate(Routes.TUNNELS) },
         )
     }
     if (snippetSheet) {
@@ -1388,17 +1390,17 @@ fun HostEditScreen(nav: NavController, id: String) {
         val asking = snippets.count { (it.hostIds.isEmpty() || draftId in it.hostIds) && it.placeholders.isNotEmpty() }
         ActionSheet(
             onDismiss = { snippetSheet = false },
-            title = "Run on connect",
+            title = stringResource(R.string.hosteditscreen_run_on_connect),
             subtitle = when {
-                offered.isEmpty() && asking > 0 -> "Every snippet for this host asks for a value"
-                offered.isEmpty() -> "No snippets for this host yet"
-                asking > 0 -> "Run in the order picked. $asking snippet(s) ask for a value and cannot run unattended."
-                else -> "Run in the order picked, before the host's own command"
+                offered.isEmpty() && asking > 0 -> stringResource(R.string.hosteditscreen_every_snippet_for_this_host_asks_for_a_value)
+                offered.isEmpty() -> stringResource(R.string.hosteditscreen_no_snippets_for_this_host_yet)
+                asking > 0 -> stringResource(R.string.hosteditscreen_run_in_the_order_picked_snippet_s_ask_for_a_valu, asking)
+                else -> stringResource(R.string.hosteditscreen_run_in_the_order_picked_before_the_host_s_own_co)
             },
             actions = offered.map { sn ->
                 val on = sn.id in startupSnippetIds
                 SheetAction(
-                    sn.name.ifBlank { "Unnamed snippet" } + if (on) "  ✓" else "",
+                    sn.name.ifBlank { stringResource(R.string.hosteditscreen_unnamed_snippet) } + if (on) "  ✓" else "",
                     Icons.Rounded.AutoAwesome,
                     subtitle = sn.command.lines().first().take(60),
                 ) {
@@ -1406,27 +1408,27 @@ fun HostEditScreen(nav: NavController, id: String) {
                     // order they are switched on in is the order they run in.
                     startupSnippetIds = if (on) startupSnippetIds - sn.id else startupSnippetIds + sn.id
                 }
-            } + SheetAction("Manage snippets…", Icons.Rounded.Add) { snippetSheet = false; nav.navigate(Routes.SNIPPETS) },
+            } + SheetAction(stringResource(R.string.hosteditscreen_manage_snippets), Icons.Rounded.Add) { snippetSheet = false; nav.navigate(Routes.SNIPPETS) },
         )
     }
     if (proxySheet) {
         ActionSheet(
             onDismiss = { proxySheet = false },
-            title = "Proxy",
-            subtitle = "The first hop is dialled through it. Proxies are managed with the tunnels.",
-            actions = listOf(SheetAction("None", Icons.Rounded.SwapHoriz) { proxyId = null; proxySheet = false }) +
+            title = stringResource(R.string.hosteditscreen_proxy),
+            subtitle = stringResource(R.string.hosteditscreen_the_first_hop_is_dialled_through_it_proxies_are),
+            actions = listOf(SheetAction(stringResource(R.string.hosteditscreen_none), Icons.Rounded.SwapHoriz) { proxyId = null; proxySheet = false }) +
                 proxies.map { p ->
                     SheetAction(p.label, Icons.Rounded.Lan, subtitle = p.target) { proxyId = p.id; proxySheet = false }
                 } +
-                SheetAction("Manage proxies…", Icons.Rounded.Add) { proxySheet = false; nav.navigate(Routes.TUNNELS) },
+                SheetAction(stringResource(R.string.hosteditscreen_manage_proxies), Icons.Rounded.Add) { proxySheet = false; nav.navigate(Routes.TUNNELS) },
         )
     }
     if (jumpSheet) {
         ActionSheet(
             onDismiss = { jumpSheet = false },
-            title = "Connect through",
-            subtitle = "The jump host is connected first, then this host is reached through it.",
-            actions = listOf(SheetAction("Direct connection", Icons.Rounded.SwapHoriz) { jumpHostId = null; jumpSheet = false }) +
+            title = stringResource(R.string.hosteditscreen_connect_through),
+            subtitle = stringResource(R.string.hosteditscreen_the_jump_host_is_connected_first_then_this_host),
+            actions = listOf(SheetAction(stringResource(R.string.hosteditscreen_direct_connection), Icons.Rounded.SwapHoriz) { jumpHostId = null; jumpSheet = false }) +
                 jumpCandidates.map { h ->
                     SheetAction(h.displayName, iconFor(h.icon), subtitle = h.target + (h.jumpHostId?.let { " (itself via a jump host)" } ?: "")) { jumpHostId = h.id; jumpSheet = false }
                 },
@@ -1457,29 +1459,29 @@ fun ForwardDialog(initial: PortForward, onDismiss: () -> Unit, onSave: (PortForw
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Port forward") },
+        title = { Text(stringResource(R.string.hosteditscreen_port_forward)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Segmented(listOf("Local -L", "Remote -R", "SOCKS -D"), type.ordinal) { type = ForwardType.entries[it] }
+                Segmented(listOf(stringResource(R.string.hosteditscreen_local_l), stringResource(R.string.hosteditscreen_remote_r), "SOCKS -D"), type.ordinal) { type = ForwardType.entries[it] }
                 Text(
                     when (type) {
-                        ForwardType.LOCAL -> "This device listens, and connections go to the target through the server."
-                        ForwardType.REMOTE -> "The server listens, and connections are delivered to the target from this device."
-                        ForwardType.DYNAMIC -> "A SOCKS5 proxy on this device. Point a browser or app at it and its traffic leaves from the server."
+                        ForwardType.LOCAL -> stringResource(R.string.hosteditscreen_this_device_listens_and_connections_go_to_the_ta)
+                        ForwardType.REMOTE -> stringResource(R.string.hosteditscreen_the_server_listens_and_connections_are_delivered)
+                        ForwardType.DYNAMIC -> stringResource(R.string.hosteditscreen_a_socks5_proxy_on_this_device_point_a_browser_or)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Field(bindHost, { bindHost = it }, if (type == ForwardType.REMOTE) "Remote bind" else "Bind address", Modifier.weight(1f), mono = true)
+                    Field(bindHost, { bindHost = it }, if (type == ForwardType.REMOTE) stringResource(R.string.hosteditscreen_remote_bind) else stringResource(R.string.hosteditscreen_bind_address), Modifier.weight(1f), mono = true)
                     Field(bindPort, { bindPort = it.filter { c -> c.isDigit() }.take(5) }, "Port", Modifier.width(88.dp), mono = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 }
                 if (!dynamic) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Field(targetHost, { targetHost = it }, "Target host", Modifier.weight(1f), mono = true)
+                    Field(targetHost, { targetHost = it }, stringResource(R.string.hosteditscreen_target_host), Modifier.weight(1f), mono = true)
                     Field(targetPort, { targetPort = it.filter { c -> c.isDigit() }.take(5) }, "Port", Modifier.width(88.dp), mono = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Start automatically", Modifier.weight(1f))
+                    Text(stringResource(R.string.hosteditscreen_start_automatically), Modifier.weight(1f))
                     AppSwitch(checked = autoStart, onCheckedChange = { autoStart = it })
                 }
             }
@@ -1487,9 +1489,9 @@ fun ForwardDialog(initial: PortForward, onDismiss: () -> Unit, onSave: (PortForw
         confirmButton = {
             Button(enabled = valid, onClick = {
                 onSave(initial.copy(type = type, bindHost = bindHost.trim(), bindPort = bindPort.toInt(), targetHost = targetHost.trim(), targetPort = targetPort.toInt(), autoStart = autoStart))
-            }) { Text("Save") }
+            }) { Text(stringResource(R.string.hosteditscreen_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.hosteditscreen_cancel)) } },
     )
 }
 

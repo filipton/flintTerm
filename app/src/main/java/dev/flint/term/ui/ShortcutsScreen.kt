@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.view.KeyEvent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.focusable
@@ -90,10 +92,10 @@ fun ShortcutsScreen(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Shortcuts", onBack = onBack,
+                title = stringResource(R.string.shortcutsscreen_shortcuts), onBack = onBack,
                 actions = {
                     if (settings.shortcuts.isNotEmpty()) {
-                        IconButton(onClick = { save(emptyList()) }) { Icon(Icons.Rounded.RestartAlt, "Reset to the built-in shortcuts") }
+                        IconButton(onClick = { save(emptyList()) }) { Icon(Icons.Rounded.RestartAlt, stringResource(R.string.shortcutsscreen_reset_to_the_built_in_shortcuts)) }
                     }
                 },
             )
@@ -102,9 +104,9 @@ fun ShortcutsScreen(onBack: () -> Unit) {
         LazyColumn(state = rememberScreenListState("shortcuts"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
             item {
                 Text(
-                    "Key combinations a hardware keyboard gives to the app instead of to the host. The host never " +
-                        "sees them, so they all use Ctrl and nearly all use Shift as well, which is the range a " +
-                        "shell leaves free.",
+                    stringResource(R.string.shortcutsscreen_key_combinations_a_hardware_keyboard_gives_to_th) +
+                        stringResource(R.string.shortcutsscreen_sees_them_so_they_all_use_ctrl_and_nearly_all_us) +
+                        stringResource(R.string.shortcutsscreen_shell_leaves_free),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -116,7 +118,7 @@ fun ShortcutsScreen(onBack: () -> Unit) {
                         val chord = KeyShortcuts.binding(bindings, action)
                         GroupRow(
                             title = action.label,
-                            subtitle = chord?.let { KeyShortcuts.describe(it) } ?: "Not bound",
+                            subtitle = chord?.let { KeyShortcuts.describe(it) } ?: stringResource(R.string.shortcutsscreen_not_bound),
                             subtitleMono = chord != null,
                             icon = Icons.Rounded.Keyboard,
                             iconTint = MaterialTheme.colorScheme.secondary,
@@ -124,7 +126,7 @@ fun ShortcutsScreen(onBack: () -> Unit) {
                             trailing = if (chord == null) {
                                 null
                             } else {
-                                { IconButton(onClick = { clear(action) }) { Icon(Icons.Rounded.Backspace, "Clear ${action.label}") } }
+                                { IconButton(onClick = { clear(action) }) { Icon(Icons.Rounded.Backspace, stringResource(R.string.shortcutsscreen_clear, action.label)) } }
                             },
                         )
                         if (i < Shortcut.entries.lastIndex) RowDivider()
@@ -189,21 +191,21 @@ private fun RecordDialog(
             }
             .focusRequester(focus)
             .focusable(),
-        title = { Text("Press the keys for ${action.label}") },
+        title = { Text(stringResource(R.string.shortcutsscreen_press_the_keys_for, action.label)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    caught?.let { KeyShortcuts.describe(it) } ?: "Waiting for a key…",
+                    caught?.let { KeyShortcuts.describe(it) } ?: stringResource(R.string.shortcutsscreen_waiting_for_a_key),
                     style = if (caught != null) CodeStyle else MaterialTheme.typography.bodyLarge,
                     color = if (problem != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    problem ?: "Hold Ctrl and Shift, then press the key. This needs a hardware keyboard.",
+                    problem ?: stringResource(R.string.shortcutsscreen_hold_ctrl_and_shift_then_press_the_key_this_need),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (problem != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (bound) {
-                    TextButton(onClick = onClear, contentPadding = PaddingValues(0.dp)) { Text("Clear this shortcut") }
+                    TextButton(onClick = onClear, contentPadding = PaddingValues(0.dp)) { Text(stringResource(R.string.shortcutsscreen_clear_this_shortcut)) }
                 }
             }
         },
@@ -211,9 +213,9 @@ private fun RecordDialog(
             TextButton(
                 onClick = { caught?.let(onBind) },
                 enabled = caught != null && problem == null,
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.shortcutsscreen_save)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.shortcutsscreen_cancel)) } },
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     )
 }

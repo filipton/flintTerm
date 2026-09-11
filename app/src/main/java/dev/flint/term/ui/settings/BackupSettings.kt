@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Description
@@ -31,23 +33,23 @@ fun BackupSettings(nav: NavController) {
     SettingsSection(nav, "Backup") {
         Group("Backup") {
             GroupRow(
-                title = "Back up to a file",
-                subtitle = "Hosts, keys, snippets, tunnels and settings, protected with a passphrase",
+                title = stringResource(R.string.backupsettings_back_up_to_a_file),
+                subtitle = stringResource(R.string.backupsettings_hosts_keys_snippets_tunnels_and_settings_protect),
                 icon = Icons.Rounded.Archive, iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { backup = true },
             )
             RowDivider()
             GroupRow(
-                title = "Restore from a file",
-                subtitle = "Adds what the file has. Nothing here is deleted",
+                title = stringResource(R.string.backupsettings_restore_from_a_file),
+                subtitle = stringResource(R.string.backupsettings_adds_what_the_file_has_nothing_here_is_deleted),
                 icon = Icons.Rounded.Unarchive, iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { restore = true },
             )
         }
         Group("Export") {
             GroupRow(
-                title = "Export as an SSH config",
-                subtitle = "A plain ~/.ssh/config another machine can use",
+                title = stringResource(R.string.backupsettings_export_as_an_ssh_config),
+                subtitle = stringResource(R.string.backupsettings_a_plain_ssh_config_another_machine_can_use),
                 icon = Icons.Rounded.Description, iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { sshConfig = true },
             )

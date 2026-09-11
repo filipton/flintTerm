@@ -96,6 +96,9 @@ android {
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
         debug {
+            // en-XA is accented and about a third longer, en-XB is right to
+            // left: between them they show which rows a translation breaks.
+            isPseudoLocalesEnabled = true
             isMinifyEnabled = false
         }
     }
@@ -104,6 +107,13 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    androidResources {
+        // Feeds the per-app language picker on Android 13+, from whatever
+        // values-* folders exist.
+        generateLocaleConfig = true
+    }
+
 
     buildFeatures {
         compose = true

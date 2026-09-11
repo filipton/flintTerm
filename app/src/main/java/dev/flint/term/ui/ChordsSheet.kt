@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -113,8 +115,8 @@ private fun ChordsSheet(
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Chords", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = onManage) { Text("Edit") }
+                Text(stringResource(R.string.chordssheet_chords), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = onManage) { Text(stringResource(R.string.chordssheet_edit)) }
             }
             if (tabs.size > 1) {
                 Spacer(Modifier.height(8.dp))
@@ -124,7 +126,7 @@ private fun ChordsSheet(
             val shown = chords.filter { it.tab == tab && it.keys.isNotBlank() }
             if (shown.isEmpty()) {
                 Text(
-                    "Nothing on this tab yet. Edit adds a chord.",
+                    stringResource(R.string.chordssheet_nothing_on_this_tab_yet_edit_adds_a_chord),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -165,7 +167,7 @@ private fun TmuxWindowsSheet(session: TerminalSession, onDismiss: () -> Unit, on
         // The groups below sit on the sheet, not the page: their gaps must match it.
         CompositionLocalProvider(LocalBackdrop provides MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(bottom = 24.dp)) {
-            Text("tmux windows", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
+            Text(stringResource(R.string.chordssheet_tmux_windows), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
             Spacer(Modifier.height(8.dp))
             val list = windows
             when {
@@ -173,17 +175,17 @@ private fun TmuxWindowsSheet(session: TerminalSession, onDismiss: () -> Unit, on
                 list == null -> Row(Modifier.padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                     Spacer(Modifier.size(12.dp))
-                    Text("Asking tmux…", style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.chordssheet_asking_tmux), style = MaterialTheme.typography.bodyMedium)
                 }
-                list.isEmpty() -> Message("No windows. This session is not inside tmux.")
+                list.isEmpty() -> Message(stringResource(R.string.chordssheet_no_windows_this_session_is_not_inside_tmux))
                 else -> Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     Group {
                         list.forEachIndexed { i, w ->
                             GroupRow(
                                 title = "${w.index}: ${w.name}",
                                 subtitle = when {
-                                    w.active -> "Current window"
-                                    !w.hasPrefixKey -> "Past 9, so tmux is asked to switch"
+                                    w.active -> stringResource(R.string.chordssheet_current_window)
+                                    !w.hasPrefixKey -> stringResource(R.string.chordssheet_past_9_so_tmux_is_asked_to_switch)
                                     else -> null
                                 },
                                 onClick = { onSelect(w) },

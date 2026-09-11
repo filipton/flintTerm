@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.view.KeyEvent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -151,7 +153,7 @@ fun CommandPalette(nav: NavController) {
         val session = app.sessions.sessions.value.lastOrNull { !it.isFinished }
         close()
         if (session == null) {
-            android.widget.Toast.makeText(app, "No open session to type into", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(app, app.getString(R.string.commandpalette_no_open_session_to_type_into), android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         runCatching {
@@ -183,7 +185,7 @@ fun CommandPalette(nav: NavController) {
                     if (sections.isEmpty()) {
                         item {
                             Text(
-                                if (query.isBlank()) "Nothing here yet. Add a host to start." else "Nothing matches.",
+                                if (query.isBlank()) stringResource(R.string.commandpalette_nothing_here_yet_add_a_host_to_start) else stringResource(R.string.commandpalette_nothing_matches),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(24.dp),
@@ -192,7 +194,7 @@ fun CommandPalette(nav: NavController) {
                     }
                     sections.forEach { (kind, rows) ->
                         item(key = "s-${kind.name}") {
-                            GroupLabel(if (kind == PaletteKind.HOST && query.isBlank()) "Recent hosts" else kind.label)
+                            GroupLabel(if (kind == PaletteKind.HOST && query.isBlank()) stringResource(R.string.commandpalette_recent_hosts) else kind.label)
                         }
                         items(rows.size, key = { "${kind.name}-${rows[it].entry.route}-${rows[it].entry.id}-${rows[it].entry.title}" }) { i ->
                             PaletteRow(
@@ -229,7 +231,7 @@ private fun PaletteField(value: String, onChange: (String) -> Unit, focus: Focus
         Box(Modifier.weight(1f)) {
             if (value.isEmpty()) {
                 Text(
-                    "Hosts, snippets, settings, actions",
+                    stringResource(R.string.commandpalette_hosts_snippets_settings_actions),
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -283,7 +285,7 @@ private fun PaletteRow(match: PaletteMatch, onClick: () -> Unit, onFiles: (() ->
         }
         if (onFiles != null) {
             IconButton(onClick = onFiles) {
-                Icon(Icons.Rounded.Folder, "Browse files", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Rounded.Folder, stringResource(R.string.commandpalette_browse_files), tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -314,6 +316,6 @@ private fun tint(kind: PaletteKind): Color = when (kind) {
 @Composable
 fun CommandPaletteButton() {
     IconButton(onClick = { CommandPaletteState.show() }) {
-        Icon(Icons.Rounded.Search, "Search everything")
+        Icon(Icons.Rounded.Search, stringResource(R.string.commandpalette_search_everything))
     }
 }

@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -74,16 +76,16 @@ fun TerminalSettings(nav: NavController) {
         val current = settings.termName.trim().ifEmpty { DEFAULT_TERM }
         ActionSheet(
             onDismiss = { termSheet = false },
-            title = "Terminal type",
-            subtitle = "What a session tells the server it is. Applies to new sessions.",
+            title = stringResource(R.string.terminalsettings_terminal_type),
+            subtitle = stringResource(R.string.terminalsettings_what_a_session_tells_the_server_it_is_applies_to),
             actions = TERM_PRESETS.map { (name, help) ->
                 SheetAction(name + if (name == current) "   ✓" else "", subtitle = help) {
                     app.store.updateSettings { it.copy(termName = name) }
                     termSheet = false
                 }
             } + SheetAction(
-                "Custom…",
-                subtitle = if (TERM_PRESETS.none { it.first == current }) current else "A name the host has terminfo for",
+                stringResource(R.string.terminalsettings_custom),
+                subtitle = if (TERM_PRESETS.none { it.first == current }) current else stringResource(R.string.terminalsettings_a_name_the_host_has_terminfo_for),
             ) {
                 termCustom = current
                 termSheet = false
@@ -93,7 +95,7 @@ fun TerminalSettings(nav: NavController) {
     termCustom?.let { typed ->
         AlertDialog(
             onDismissRequest = { termCustom = null },
-            title = { Text("Terminal type") },
+            title = { Text(stringResource(R.string.terminalsettings_terminal_type)) },
             text = {
                 OutlinedTextField(
                     value = typed,
@@ -106,9 +108,9 @@ fun TerminalSettings(nav: NavController) {
                 TextButton(onClick = {
                     app.store.updateSettings { it.copy(termName = typed.trim().ifEmpty { DEFAULT_TERM }) }
                     termCustom = null
-                }) { Text("Set") }
+                }) { Text(stringResource(R.string.terminalsettings_set)) }
             },
-            dismissButton = { TextButton(onClick = { termCustom = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { termCustom = null }) { Text(stringResource(R.string.terminalsettings_cancel)) } },
         )
     }
 
@@ -116,8 +118,8 @@ fun TerminalSettings(nav: NavController) {
     if (predictSheet) {
         ActionSheet(
             onDismiss = { predictSheet = false },
-            title = "Predictive echo",
-            subtitle = "Mosh draws a keystroke before the server confirms it",
+            title = stringResource(R.string.terminalsettings_predictive_echo),
+            subtitle = stringResource(R.string.terminalsettings_mosh_draws_a_keystroke_before_the_server_confirm),
             actions = PredictiveEcho.entries.map { mode ->
                 SheetAction(
                     mode.label + if (mode == settings.predictiveEcho) "   ✓" else "",
@@ -134,19 +136,19 @@ fun TerminalSettings(nav: NavController) {
         Group("Terminal") {
             Column(Modifier.padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Scrollback", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    Text("${settings.scrollback / 1000}k lines", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.terminalsettings_scrollback), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(stringResource(R.string.terminalsettings_k_lines, settings.scrollback / 1000), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
                 AppSlider(
                     value = settings.scrollback.toFloat(),
                     onValueChange = { v -> app.store.updateSettings { it.copy(scrollback = (v / 1000).roundToInt().coerceAtLeast(1) * 1000) } },
                     valueRange = 1000f..50000f,
                 )
-                Text("Applies to new sessions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.terminalsettings_applies_to_new_sessions), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             RowDivider()
             GroupRow(
-                title = "Terminal type",
+                title = stringResource(R.string.terminalsettings_terminal_type),
                 subtitle = settings.termName.trim().ifEmpty { DEFAULT_TERM },
                 subtitleMono = true,
                 icon = Icons.Rounded.Terminal,
@@ -155,8 +157,8 @@ fun TerminalSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Redraw limit",
-                subtitle = "Saves battery when output arrives very fast. Off is as smooth as the screen allows",
+                title = stringResource(R.string.terminalsettings_redraw_limit),
+                subtitle = stringResource(R.string.terminalsettings_saves_battery_when_output_arrives_very_fast_off),
                 icon = Icons.Rounded.Speed,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.maxFps > 0,
@@ -165,8 +167,8 @@ fun TerminalSettings(nav: NavController) {
             if (settings.maxFps > 0) {
                 Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("At most", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                        Text("${settings.maxFps} per second", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                        Text(stringResource(R.string.terminalsettings_at_most), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Text(stringResource(R.string.terminalsettings_per_second, settings.maxFps), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                     }
                     AppSlider(
                         value = settings.maxFps.toFloat(),
@@ -174,9 +176,9 @@ fun TerminalSettings(nav: NavController) {
                         valueRange = 15f..120f,
                     )
                     Text(
-                        "Without a limit the terminal redraws only when something changes, and not at " +
-                            "all while the screen is still. A limit only matters when output arrives very " +
-                            "fast, and there it saves about a fifth of the battery.",
+                        stringResource(R.string.terminalsettings_without_a_limit_the_terminal_redraws_only_when_s) +
+                            stringResource(R.string.terminalsettings_all_while_the_screen_is_still_a_limit_only_matte) +
+                            stringResource(R.string.terminalsettings_fast_and_there_it_saves_about_a_fifth_of_the_bat),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -188,9 +190,9 @@ fun TerminalSettings(nav: NavController) {
                     IconTile(Icons.Rounded.Image, MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Inline images", style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.terminalsettings_inline_images), style = MaterialTheme.typography.bodyLarge)
                         Text(
-                            "Pictures drawn in the terminal by chafa, timg or kitty's icat",
+                            stringResource(R.string.terminalsettings_pictures_drawn_in_the_terminal_by_chafa_timg_or),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -200,14 +202,14 @@ fun TerminalSettings(nav: NavController) {
                     app.store.updateSettings { it.copy(terminalImages = TerminalImages.entries[i]) }
                 }
                 Text(
-                    "Off means the app answers neither protocol, so a program that asks will use text instead. A host can turn images off on its own.",
+                    stringResource(R.string.terminalsettings_off_means_the_app_answers_neither_protocol_so_a),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             RowDivider()
             GroupRow(
-                title = "Predictive echo",
-                subtitle = "Mosh only  ·  ${settings.predictiveEcho.help}",
+                title = stringResource(R.string.terminalsettings_predictive_echo),
+                subtitle = stringResource(R.string.terminalsettings_mosh_only, settings.predictiveEcho.help),
                 icon = Icons.Rounded.Bolt,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 onClick = { predictSheet = true },
@@ -217,8 +219,8 @@ fun TerminalSettings(nav: NavController) {
 
         Group("Completion") {
             GroupRow(
-                title = "Complete from history",
-                subtitle = "The rest of a command you have run here appears in gray after the cursor",
+                title = stringResource(R.string.terminalsettings_complete_from_history),
+                subtitle = stringResource(R.string.terminalsettings_the_rest_of_a_command_you_have_run_here_appears),
                 icon = Icons.Rounded.History,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.completeFromHistory,
@@ -226,8 +228,8 @@ fun TerminalSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Tab takes the suggestion",
-                subtitle = "Only while one is showing. Otherwise Tab is the shell's own completion",
+                title = stringResource(R.string.terminalsettings_tab_takes_the_suggestion),
+                subtitle = stringResource(R.string.terminalsettings_only_while_one_is_showing_otherwise_tab_is_the_s),
                 icon = Icons.Rounded.KeyboardTab,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.tabAcceptsSuggestion,
@@ -242,7 +244,7 @@ fun TerminalSettings(nav: NavController) {
                     IconTile(Icons.Rounded.FiberManualRecord, MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Session recordings", style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(R.string.terminalsettings_session_recordings), style = MaterialTheme.typography.bodyLarge)
                         Text(settings.recordingFormat.help, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -250,14 +252,14 @@ fun TerminalSettings(nav: NavController) {
                     app.store.updateSettings { it.copy(recordingFormat = RecordingFormat.entries[i]) }
                 }
                 Text(
-                    "Start a recording from the terminal's ⋮ menu, or set a host to record every session.",
+                    stringResource(R.string.terminalsettings_start_a_recording_from_the_terminal_s_menu_or_se),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             RowDivider()
             GroupRow(
-                title = "Recordings",
-                subtitle = "Play back a recording, read a log, share or delete one",
+                title = stringResource(R.string.terminalsettings_recordings),
+                subtitle = stringResource(R.string.terminalsettings_play_back_a_recording_read_a_log_share_or_delete),
                 icon = Icons.Rounded.Movie,
                 iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { nav.navigate(Routes.RECORDINGS) },

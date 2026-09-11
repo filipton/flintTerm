@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -51,8 +53,8 @@ fun ConnectionsSettings(nav: NavController) {
     if (dataSheet) {
         ActionSheet(
             onDismiss = { dataSheet = false },
-            title = "Data saver",
-            subtitle = "Waits for Wi-Fi before transferring files, and sends keepalives less often. Typing is never delayed.",
+            title = stringResource(R.string.connectionssettings_data_saver),
+            subtitle = stringResource(R.string.connectionssettings_waits_for_wi_fi_before_transferring_files_and_se),
             actions = DataSaver.entries.map { mode ->
                 SheetAction(mode.label + if (mode == settings.dataSaver) "   ✓" else "", subtitle = mode.help) {
                     app.store.updateSettings { it.copy(dataSaver = mode) }
@@ -68,20 +70,20 @@ fun ConnectionsSettings(nav: NavController) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconTile(Icons.Rounded.Timer, MaterialTheme.colorScheme.primary)
                     Spacer(Modifier.width(14.dp))
-                    Text("Keepalive", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-                    Text(if (settings.keepaliveSeconds == 0) "off" else "every ${settings.keepaliveSeconds}s", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                    Text(stringResource(R.string.connectionssettings_keepalive), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(if (settings.keepaliveSeconds == 0) "off" else stringResource(R.string.connectionssettings_every_s, settings.keepaliveSeconds), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
                 AppSlider(
                     value = settings.keepaliveSeconds.toFloat(),
                     onValueChange = { v -> app.store.updateSettings { it.copy(keepaliveSeconds = (v / 5).roundToInt() * 5) } },
                     valueRange = 0f..120f,
                 )
-                Text("Keeps idle connections alive through NAT and mobile networks. Applies to new sessions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.connectionssettings_keeps_idle_connections_alive_through_nat_and_mob), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             RowDivider()
             GroupRow(
-                title = "Data saver",
-                subtitle = "Waits for Wi-Fi to transfer files, and sends keepalives less often",
+                title = stringResource(R.string.connectionssettings_data_saver),
+                subtitle = stringResource(R.string.connectionssettings_waits_for_wi_fi_to_transfer_files_and_sends_keep),
                 icon = Icons.Rounded.DataSaverOn,
                 iconTint = MaterialTheme.colorScheme.tertiary,
                 onClick = { dataSheet = true },
@@ -89,8 +91,8 @@ fun ConnectionsSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Ask before agent signing",
-                subtitle = "A forwarded key asks first. Off signs whenever asked, as ssh -A does",
+                title = stringResource(R.string.connectionssettings_ask_before_agent_signing),
+                subtitle = stringResource(R.string.connectionssettings_a_forwarded_key_asks_first_off_signs_whenever_as),
                 icon = Icons.Rounded.Key,
                 iconTint = MaterialTheme.colorScheme.tertiary,
                 checked = settings.confirmAgentSignatures,
@@ -98,8 +100,8 @@ fun ConnectionsSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Find hosts on this network",
-                subtitle = "Servers that announce SSH on this network appear under Nearby",
+                title = stringResource(R.string.connectionssettings_find_hosts_on_this_network),
+                subtitle = stringResource(R.string.connectionssettings_servers_that_announce_ssh_on_this_network_appear),
                 icon = Icons.Rounded.Wifi,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.discoverNearbyHosts,
@@ -107,8 +109,8 @@ fun ConnectionsSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Show the server's message",
-                subtitle = "What a server prints before login: a notice, or a link to sign in with",
+                title = stringResource(R.string.connectionssettings_show_the_server_s_message),
+                subtitle = stringResource(R.string.connectionssettings_what_a_server_prints_before_login_a_notice_or_a),
                 icon = Icons.Rounded.Campaign,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.showAuthBanners,
@@ -116,8 +118,8 @@ fun ConnectionsSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Learn the host's shell history",
-                subtitle = "Reads the host's shell history once a week, so commands you ran there can complete what you type",
+                title = stringResource(R.string.connectionssettings_learn_the_host_s_shell_history),
+                subtitle = stringResource(R.string.connectionssettings_reads_the_host_s_shell_history_once_a_week_so_co),
                 icon = Icons.Rounded.History,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.importShellHistory,
@@ -136,9 +138,9 @@ fun ConnectionsSettings(nav: NavController) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 )
                 Text(
-                    "Used while a host acts as a VPN. Lookups are sent over TCP from that host, so " +
-                        "putting an internal DNS server here is what makes internal names work. " +
-                        "127.0.0.1 means the server's own resolver.",
+                    stringResource(R.string.connectionssettings_used_while_a_host_acts_as_a_vpn_lookups_are_sent) +
+                        stringResource(R.string.connectionssettings_putting_an_internal_dns_server_here_is_what_make) +
+                        stringResource(R.string.connectionssettings_127_0_0_1_means_the_server_s_own_resolver),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

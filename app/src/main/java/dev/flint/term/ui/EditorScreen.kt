@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
@@ -181,9 +183,9 @@ fun EditorScreen(nav: NavController, sessionId: String, path: String) {
                 saving = false
                 result.onSuccess {
                     buffer = b.withSaved(text)
-                    toast("Saved $name")
+                    toast("Saved ${name}")
                     then()
-                }.onFailure { toast(it.message ?: "Could not save $name") }
+                }.onFailure { toast(it.message ?: "Could not save ${name}") }
             }
         }
     }
@@ -205,15 +207,15 @@ fun EditorScreen(nav: NavController, sessionId: String, path: String) {
         topBar = {
             AppHeader(
                 title = name,
-                subtitle = if (dirty) "$path  ·  unsaved changes" else path,
+                subtitle = if (dirty) stringResource(R.string.editorscreen_unsaved_changes_fmt, path) else path,
                 onBack = { leave() },
                 actions = {
                     if (buffer != null) {
-                        IconButton(onClick = { insertIndent() }) { Icon(Icons.Rounded.KeyboardTab, "Insert indent") }
+                        IconButton(onClick = { insertIndent() }) { Icon(Icons.Rounded.KeyboardTab, stringResource(R.string.editorscreen_insert_indent)) }
                         IconButton(onClick = { lineNumbers = !lineNumbers }) {
                             Icon(
                                 Icons.Rounded.FormatListNumbered,
-                                "Line numbers",
+                                stringResource(R.string.editorscreen_line_numbers),
                                 tint = if (lineNumbers) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
@@ -228,12 +230,12 @@ fun EditorScreen(nav: NavController, sessionId: String, path: String) {
                 loading -> LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 16.dp))
                 oversized -> EmptyState(
                     Icons.Rounded.OpenInNew,
-                    "Too large to edit here",
-                    "$name is ${humanBytes(entry?.size?.toLong() ?: 0)}. The editor stops at 2 MB so typing stays quick. Another app can open it instead.",
-                    actionLabel = "Open in…",
+                    stringResource(R.string.editorscreen_too_large_to_edit_here),
+                    stringResource(R.string.editorscreen_is_the_editor_stops_at_2_mb_so_typing_stays_quic, name, humanBytes(entry?.size?.toLong() ?: 0)),
+                    actionLabel = stringResource(R.string.editorscreen_open_in),
                     onAction = { entry?.let { ExternalEdit.open(context, app.transfers, session, it, edit = true) { m -> toast(m) } } },
                 )
-                error != null -> EmptyState(Icons.Rounded.Error, "Cannot open this file", error.orEmpty())
+                error != null -> EmptyState(Icons.Rounded.Error, stringResource(R.string.editorscreen_cannot_open_this_file), error.orEmpty())
                 buffer != null -> CodeField(
                     value = value,
                     onValueChange = { value = it },
@@ -248,15 +250,15 @@ fun EditorScreen(nav: NavController, sessionId: String, path: String) {
     if (confirmLeave) {
         AlertDialog(
             onDismissRequest = { confirmLeave = false },
-            title = { Text("Unsaved changes") },
-            text = { Text("$name has changes that are not on the host yet.") },
+            title = { Text(stringResource(R.string.editorscreen_unsaved_changes)) },
+            text = { Text(stringResource(R.string.editorscreen_has_changes_that_are_not_on_the_host_yet, name)) },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { confirmLeave = false; nav.popBackStack() }) { Text("Discard") }
-                    Button(onClick = { confirmLeave = false; save { nav.popBackStack() } }) { Text("Save") }
+                    TextButton(onClick = { confirmLeave = false; nav.popBackStack() }) { Text(stringResource(R.string.editorscreen_discard)) }
+                    Button(onClick = { confirmLeave = false; save { nav.popBackStack() } }) { Text(stringResource(R.string.editorscreen_save)) }
                 }
             },
-            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text(stringResource(R.string.editorscreen_cancel)) } },
         )
     }
 }

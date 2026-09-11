@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -127,25 +129,25 @@ fun ImportSheet(onDismiss: () -> Unit) {
     if (plans == null && keys == null && incoming == null && columns == null && ppk == null) {
         ActionSheet(
             onDismiss = onDismiss,
-            title = "Import",
-            subtitle = "Copy the file off your computer or other phone first",
+            title = stringResource(R.string.importsheet_import),
+            subtitle = stringResource(R.string.importsheet_copy_the_file_off_your_computer_or_other_phone_f),
             actions = listOf(
-                SheetAction("ssh config", Icons.Rounded.Description, subtitle = "Host blocks become hosts. ProxyJump becomes a jump host, and IdentityFile is matched to a key with the same name") { pickConfig.launch(arrayOf("*/*")) },
-                SheetAction("known_hosts", Icons.Rounded.Security, subtitle = "Trust the server keys your computer already trusts") { pickKnown.launch(arrayOf("*/*")) },
+                SheetAction(stringResource(R.string.importsheet_ssh_config), Icons.Rounded.Description, subtitle = stringResource(R.string.importsheet_host_blocks_become_hosts_proxyjump_becomes_a_jum)) { pickConfig.launch(arrayOf("*/*")) },
+                SheetAction(stringResource(R.string.importsheet_known_hosts), Icons.Rounded.Security, subtitle = stringResource(R.string.importsheet_trust_the_server_keys_your_computer_already_trus)) { pickKnown.launch(arrayOf("*/*")) },
                 SheetAction(
-                    "ConnectBot export", Icons.Rounded.Description,
-                    subtitle = "The JSON from ConnectBot's Export hosts",
-                    section = "From another app",
+                    stringResource(R.string.importsheet_connectbot_export), Icons.Rounded.Description,
+                    subtitle = stringResource(R.string.importsheet_the_json_from_connectbot_s_export_hosts),
+                    section = stringResource(R.string.importsheet_from_another_app),
                 ) { pickConnectBot.launch(arrayOf("*/*")) },
                 SheetAction(
-                    "PuTTY key", Icons.Rounded.VpnKey,
-                    subtitle = "A .ppk file, version 2 or 3",
-                    section = "From another app",
+                    stringResource(R.string.importsheet_putty_key), Icons.Rounded.VpnKey,
+                    subtitle = stringResource(R.string.importsheet_a_ppk_file_version_2_or_3),
+                    section = stringResource(R.string.importsheet_from_another_app),
                 ) { pickPpk.launch(arrayOf("*/*")) },
                 SheetAction(
                     "CSV", Icons.Rounded.GridOn,
-                    subtitle = "Termius's template, or any spreadsheet with a column of hostnames",
-                    section = "From another app",
+                    subtitle = stringResource(R.string.importsheet_termius_s_template_or_any_spreadsheet_with_a_col),
+                    section = stringResource(R.string.importsheet_from_another_app),
                 ) { pickCsv.launch(arrayOf("*/*")) },
             ),
         )
@@ -155,7 +157,7 @@ fun ImportSheet(onDismiss: () -> Unit) {
         var ticked by remember(list) { mutableStateOf(list.filter { it.existing == null }.map { it.entry.alias }.toSet()) }
         AlertDialog(
             onDismissRequest = { plans = null; onDismiss() },
-            title = { Text("Import ${ticked.size} of ${list.size} hosts") },
+            title = { Text(stringResource(R.string.importsheet_import_of_hosts, ticked.size, list.size)) },
             text = {
                 LazyColumn(Modifier.heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     items(list, key = { it.entry.alias }) { p ->
@@ -184,11 +186,11 @@ fun ImportSheet(onDismiss: () -> Unit) {
             confirmButton = {
                 Button(enabled = ticked.isNotEmpty(), onClick = {
                     OpenSshImport.apply(app.store, list.filter { it.entry.alias in ticked }, group = "")
-                    Toast.makeText(context, "Imported ${ticked.size} host${if (ticked.size == 1) "" else "s"}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.importsheet_imported_host, ticked.size, if (ticked.size == 1) "" else "s"), Toast.LENGTH_SHORT).show()
                     plans = null; onDismiss()
-                }) { Text("Import") }
+                }) { Text(stringResource(R.string.importsheet_import)) }
             },
-            dismissButton = { TextButton(onClick = { plans = null; onDismiss() }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { plans = null; onDismiss() }) { Text(stringResource(R.string.importsheet_cancel)) } },
         )
     }
 
@@ -198,10 +200,10 @@ fun ImportSheet(onDismiss: () -> Unit) {
         val fresh = list.filter { k -> trusted.none { it.sameHostAs(k) && it.keyBase64 == k.keyBase64 } }
         AlertDialog(
             onDismissRequest = { keys = null; onDismiss() },
-            title = { Text("Trust ${fresh.size} server key${if (fresh.size == 1) "" else "s"}?") },
+            title = { Text(stringResource(R.string.importsheet_trust_server_key, fresh.size, if (fresh.size == 1) "" else "s")) },
             text = {
                 Column {
-                    if (fresh.size < list.size) Text("${list.size - fresh.size} already trusted.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+                    if (fresh.size < list.size) Text(stringResource(R.string.importsheet_already_trusted, list.size - fresh.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
                     LazyColumn(Modifier.heightIn(max = 360.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         items(fresh) { k ->
                             Column {
@@ -220,11 +222,11 @@ fun ImportSheet(onDismiss: () -> Unit) {
             confirmButton = {
                 Button(enabled = fresh.isNotEmpty(), onClick = {
                     fresh.forEach { app.store.rememberHostKey(it) }
-                    Toast.makeText(context, "Trusted ${fresh.size} server key${if (fresh.size == 1) "" else "s"}", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.importsheet_trusted_server_key, fresh.size, if (fresh.size == 1) "" else "s"), Toast.LENGTH_SHORT).show()
                     keys = null; onDismiss()
-                }) { Text("Trust") }
+                }) { Text(stringResource(R.string.importsheet_trust)) }
             },
-            dismissButton = { TextButton(onClick = { keys = null; onDismiss() }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { keys = null; onDismiss() }) { Text(stringResource(R.string.importsheet_cancel)) } },
         )
     }
 
@@ -232,11 +234,11 @@ fun ImportSheet(onDismiss: () -> Unit) {
         var mapping by remember(table) { mutableStateOf(table.suggested) }
         AlertDialog(
             onDismissRequest = { columns = null; onDismiss() },
-            title = { Text("Which column is which?") },
+            title = { Text(stringResource(R.string.importsheet_which_column_is_which)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        "${table.rows.size} row${if (table.rows.size == 1) "" else "s"}. Only the hostname is required.",
+                        stringResource(R.string.importsheet_row_only_the_hostname_is_required, table.rows.size, if (table.rows.size == 1) "" else "s"),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(8.dp))
@@ -252,20 +254,20 @@ fun ImportSheet(onDismiss: () -> Unit) {
                     val hosts = CsvImport.hosts(table, mapping)
                     columns = null
                     offer("CSV", hosts)
-                }) { Text("Continue") }
+                }) { Text(stringResource(R.string.importsheet_continue)) }
             },
-            dismissButton = { TextButton(onClick = { columns = null; onDismiss() }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { columns = null; onDismiss() }) { Text(stringResource(R.string.importsheet_cancel)) } },
         )
     }
 
     incoming?.let { (source, plan) ->
         AlertDialog(
             onDismissRequest = { incoming = null; onDismiss() },
-            title = { Text("Import ${plan.describe()} from $source?") },
+            title = { Text(stringResource(R.string.importsheet_import_from, plan.describe(), source)) },
             text = {
                 Column {
                     if (plan.alreadyHere > 0) Text(
-                        "Hosts you already have are left exactly as they are.",
+                        stringResource(R.string.importsheet_hosts_you_already_have_are_left_exactly_as_they),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp),
                     )
@@ -294,9 +296,9 @@ fun ImportSheet(onDismiss: () -> Unit) {
                     plan.fresh.forEach { app.store.upsertHost(it.toHost()) }
                     say("Imported ${plan.describe()}")
                     incoming = null; onDismiss()
-                }) { Text("Import") }
+                }) { Text(stringResource(R.string.importsheet_import)) }
             },
-            dismissButton = { TextButton(onClick = { incoming = null; onDismiss() }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { incoming = null; onDismiss() }) { Text(stringResource(R.string.importsheet_cancel)) } },
         )
     }
 
@@ -307,16 +309,16 @@ fun ImportSheet(onDismiss: () -> Unit) {
         var busy by remember(bytes) { mutableStateOf(false) }
         AlertDialog(
             onDismissRequest = { ppk = null; onDismiss() },
-            title = { Text("Import PuTTY key") },
+            title = { Text(stringResource(R.string.importsheet_import_putty_key)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(
-                        "The key is converted to the OpenSSH format and saved here. The .ppk file is left alone.",
+                        stringResource(R.string.importsheet_the_key_is_converted_to_the_openssh_format_and_s),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Field(name, { name = it }, "Name")
                     Field(
-                        passphrase, { passphrase = it }, "Passphrase (if any)",
+                        passphrase, { passphrase = it }, stringResource(R.string.importsheet_passphrase_if_any),
                         visualTransformation = PasswordVisualTransformation(),
                         autofill = ContentType.Password,
                     )
@@ -349,7 +351,7 @@ fun ImportSheet(onDismiss: () -> Unit) {
                     }
                 }) { Text(if (busy) "Importing…" else "Import") }
             },
-            dismissButton = { TextButton(onClick = { ppk = null; onDismiss() }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { ppk = null; onDismiss() }) { Text(stringResource(R.string.importsheet_cancel)) } },
         )
     }
 }
@@ -362,15 +364,15 @@ private fun ColumnChoice(label: String, headers: List<String>, selected: Int?, o
         Text(label, Modifier.weight(1f), fontWeight = FontWeight.Medium)
         Box {
             Text(
-                selected?.let { headers.getOrNull(it) }?.ifBlank { "Column ${selected + 1}" } ?: "Not imported",
+                selected?.let { headers.getOrNull(it) }?.ifBlank { stringResource(R.string.importsheet_column, selected + 1) } ?: stringResource(R.string.importsheet_not_imported),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (selected == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
             )
             DropdownMenu(open, onDismissRequest = { open = false }) {
-                DropdownMenuItem(text = { Text("Not imported") }, onClick = { onSelect(null); open = false })
+                DropdownMenuItem(text = { Text(stringResource(R.string.importsheet_not_imported)) }, onClick = { onSelect(null); open = false })
                 headers.forEachIndexed { at, header ->
                     DropdownMenuItem(
-                        text = { Text(header.ifBlank { "Column ${at + 1}" }) },
+                        text = { Text(header.ifBlank { stringResource(R.string.importsheet_column, at + 1) }) },
                         onClick = { onSelect(at); open = false },
                     )
                 }

@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
@@ -99,11 +101,11 @@ fun LockScreen(activity: FragmentActivity, onUnlocked: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { Icon(Icons.Rounded.Lock, null, Modifier.size(40.dp), tint = MaterialTheme.colorScheme.primary) }
             Spacer(Modifier.height(20.dp))
-            Text("Locked", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.applock_locked), style = MaterialTheme.typography.titleLarge)
             Spacer(Modifier.height(6.dp))
-            Text("Unlock with your fingerprint, face or screen lock.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.applock_unlock_with_your_fingerprint_face_or_screen_lock), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(20.dp))
-            Button(onClick = { failed = false; AppLock.prompt(activity) { ok -> if (ok) onUnlocked() else failed = true } }) { Text(if (failed) "Try again" else "Unlock") }
+            Button(onClick = { failed = false; AppLock.prompt(activity) { ok -> if (ok) onUnlocked() else failed = true } }) { Text(if (failed) stringResource(R.string.applock_try_again) else "Unlock") }
         }
     }
 }

@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -312,7 +314,7 @@ fun SftpPane(
             }
             LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 100.dp)) {
                 if (!loading && shown.isEmpty() && error == null && client != null) {
-                    item { EmptyState(Icons.Rounded.FolderOpen, "Empty folder", "Upload something with the + button.") }
+                    item { EmptyState(Icons.Rounded.FolderOpen, stringResource(R.string.sftpscreen_empty_folder), stringResource(R.string.sftpscreen_upload_something_with_the_button)) }
                 }
                 items(shown, key = { it.path }) { e ->
                     FileRow(
@@ -342,12 +344,12 @@ fun SftpPane(
     entrySheet?.let { e ->
         val actions = buildList {
             if (e.isDir) {
-                add(SheetAction("Open", Icons.Rounded.FolderOpen) { entrySheet = null; refresh(e.path) })
-                add(SheetAction("Download folder", Icons.Rounded.Download) { entrySheet = null; pendingDownload = e; saveDirTo.launch(null) })
+                add(SheetAction(stringResource(R.string.sftpscreen_open), Icons.Rounded.FolderOpen) { entrySheet = null; refresh(e.path) })
+                add(SheetAction(stringResource(R.string.sftpscreen_download_folder), Icons.Rounded.Download) { entrySheet = null; pendingDownload = e; saveDirTo.launch(null) })
             } else {
-                add(SheetAction("Download", Icons.Rounded.Download, subtitle = humanBytes(e.size.toLong())) { entrySheet = null; pendingDownload = e; saveTo.launch(e.name) })
+                add(SheetAction(stringResource(R.string.sftpscreen_download), Icons.Rounded.Download, subtitle = humanBytes(e.size.toLong())) { entrySheet = null; pendingDownload = e; saveTo.launch(e.name) })
                 if (e.size < 512_000u) {
-                    add(SheetAction("View", Icons.Rounded.Visibility) {
+                    add(SheetAction(stringResource(R.string.sftpscreen_view), Icons.Rounded.Visibility) {
                         entrySheet = null
                         scope.launch(Dispatchers.IO) {
                             val r = runCatching { client!!.readText(e.path, 512_000u) }
@@ -357,32 +359,32 @@ fun SftpPane(
                 }
             }
             if (editableInApp(e)) {
-                add(SheetAction("Edit", Icons.Rounded.Edit, subtitle = "Here, with highlighting") {
+                add(SheetAction(stringResource(R.string.sftpscreen_edit), Icons.Rounded.Edit, subtitle = stringResource(R.string.sftpscreen_here_with_highlighting)) {
                     entrySheet = null
                     nav.navigate(Routes.edit(session.id, e.path))
                 })
             }
-            add(SheetAction("Copy to host…", Icons.Rounded.SwapHoriz, subtitle = "Straight to another server") {
+            add(SheetAction(stringResource(R.string.sftpscreen_copy_to_host), Icons.Rounded.SwapHoriz, subtitle = stringResource(R.string.sftpscreen_straight_to_another_server)) {
                 entrySheet = null
                 copySource = e
             })
             if (!e.isDir && e.size < 50_000_000u) {
-                add(SheetAction("Edit in…", Icons.Rounded.Edit, subtitle = "Changes are uploaded back automatically") {
+                add(SheetAction(stringResource(R.string.sftpscreen_edit_in), Icons.Rounded.Edit, subtitle = stringResource(R.string.sftpscreen_changes_are_uploaded_back_automatically)) {
                     entrySheet = null
                     ExternalEdit.open(context, app.transfers, session, e, edit = true) { toast(it) }
                 })
-                add(SheetAction("Open in…", Icons.Rounded.OpenInNew) {
+                add(SheetAction(stringResource(R.string.sftpscreen_open_in), Icons.Rounded.OpenInNew) {
                     entrySheet = null
                     ExternalEdit.open(context, app.transfers, session, e, edit = false) { toast(it) }
                 })
             }
-            add(SheetAction("Copy path", Icons.Rounded.ContentCopy) {
+            add(SheetAction(stringResource(R.string.sftpscreen_copy_path), Icons.Rounded.ContentCopy) {
                 entrySheet = null
                 context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("path", e.path))
                 toast("Path copied")
             })
-            add(SheetAction("Rename", Icons.Rounded.DriveFileRenameOutline) { entrySheet = null; renaming = e })
-            add(SheetAction("Delete", Icons.Rounded.Delete, danger = true) {
+            add(SheetAction(stringResource(R.string.sftpscreen_rename), Icons.Rounded.DriveFileRenameOutline) { entrySheet = null; renaming = e })
+            add(SheetAction(stringResource(R.string.sftpscreen_delete), Icons.Rounded.Delete, danger = true) {
                 entrySheet = null
                 scope.launch(Dispatchers.IO) {
                     val r = runCatching { client!!.remove(e.path, e.isDir && !e.isSymlink) }
@@ -416,10 +418,10 @@ fun SftpPane(
             }
             ActionSheet(
                 onDismiss = { copySource = null },
-                title = "Copy to…",
+                title = stringResource(R.string.sftpscreen_copy_to),
                 subtitle = e.name,
                 actions = if (targets.isEmpty()) {
-                    listOf(SheetAction("No other SSH hosts saved", Icons.Rounded.Dns) { copySource = null })
+                    listOf(SheetAction(stringResource(R.string.sftpscreen_no_other_ssh_hosts_saved), Icons.Rounded.Dns) { copySource = null })
                 } else {
                     targets.map { h -> SheetAction(h.displayName, iconFor(h.icon), subtitle = h.target) { copyHost = h } }
                 },
@@ -442,20 +444,20 @@ fun SftpPane(
     if (addSheet) {
         ActionSheet(
             onDismiss = { addSheet = false },
-            title = "Add",
+            title = stringResource(R.string.sftpscreen_add),
             actions = listOf(
-                SheetAction("Upload files", Icons.Rounded.Upload, subtitle = "Into $path") { addSheet = false; pickUpload.launch(arrayOf("*/*")) },
-                SheetAction("New folder", Icons.Rounded.CreateNewFolder) { addSheet = false; newFolder = true },
-                SheetAction("Go to path…", Icons.Rounded.FolderOpen) { addSheet = false; goTo = true },
+                SheetAction(stringResource(R.string.sftpscreen_upload_files), Icons.Rounded.Upload, subtitle = stringResource(R.string.sftpscreen_into_fmt, path)) { addSheet = false; pickUpload.launch(arrayOf("*/*")) },
+                SheetAction(stringResource(R.string.sftpscreen_new_folder), Icons.Rounded.CreateNewFolder) { addSheet = false; newFolder = true },
+                SheetAction(stringResource(R.string.sftpscreen_go_to_path), Icons.Rounded.FolderOpen) { addSheet = false; goTo = true },
             ),
         )
     }
     if (sortSheet) {
         ActionSheet(
             onDismiss = { sortSheet = false },
-            title = "Sort by",
+            title = stringResource(R.string.sftpscreen_sort_by),
             actions = SortBy.entries.map { s -> SheetAction(s.label + if (s == sortBy) "   ✓" else "") { sortBy = s; sortSheet = false } } +
-                SheetAction(if (settings.showHiddenFiles) "Hide dotfiles" else "Show dotfiles", Icons.Rounded.Visibility) {
+                SheetAction(if (settings.showHiddenFiles) stringResource(R.string.sftpscreen_hide_dotfiles) else stringResource(R.string.sftpscreen_show_dotfiles), Icons.Rounded.Visibility) {
                     app.store.updateSettings { it.copy(showHiddenFiles = !it.showHiddenFiles) }; sortSheet = false
                 },
         )
@@ -464,8 +466,8 @@ fun SftpPane(
         var target by remember { mutableStateOf(path) }
         AlertDialog(
             onDismissRequest = { goTo = false },
-            title = { Text("Go to path") },
-            text = { Field(target, { target = it }, "Remote path", mono = true) },
+            title = { Text(stringResource(R.string.sftpscreen_go_to_path_2)) },
+            text = { Field(target, { target = it }, stringResource(R.string.sftpscreen_remote_path), mono = true) },
             confirmButton = {
                 Button(enabled = target.isNotBlank(), onClick = {
                     goTo = false
@@ -476,14 +478,14 @@ fun SftpPane(
                     }
                 }) { Text("Go") }
             },
-            dismissButton = { TextButton(onClick = { goTo = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { goTo = false }) { Text(stringResource(R.string.sftpscreen_cancel)) } },
         )
     }
     if (newFolder) {
         var name by remember { mutableStateOf("") }
         AlertDialog(
             onDismissRequest = { newFolder = false },
-            title = { Text("New folder") },
+            title = { Text(stringResource(R.string.sftpscreen_new_folder)) },
             text = { Field(name, { name = it }, "Name") },
             confirmButton = {
                 Button(enabled = name.isNotBlank() && !name.contains('/'), onClick = {
@@ -492,17 +494,17 @@ fun SftpPane(
                         val r = runCatching { client!!.mkdir(join(path, name.trim())) }
                         withContext(Dispatchers.Main) { r.onFailure { toast(it.message ?: "failed") }; refresh() }
                     }
-                }) { Text("Create") }
+                }) { Text(stringResource(R.string.sftpscreen_create)) }
             },
-            dismissButton = { TextButton(onClick = { newFolder = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { newFolder = false }) { Text(stringResource(R.string.sftpscreen_cancel)) } },
         )
     }
     renaming?.let { e ->
         var name by remember { mutableStateOf(e.name) }
         AlertDialog(
             onDismissRequest = { renaming = null },
-            title = { Text("Rename") },
-            text = { Field(name, { name = it }, "New name") },
+            title = { Text(stringResource(R.string.sftpscreen_rename)) },
+            text = { Field(name, { name = it }, stringResource(R.string.sftpscreen_new_name)) },
             confirmButton = {
                 Button(enabled = name.isNotBlank() && name != e.name, onClick = {
                     renaming = null
@@ -510,9 +512,9 @@ fun SftpPane(
                         val r = runCatching { client!!.rename(e.path, join(parent(e.path), name.trim())) }
                         withContext(Dispatchers.Main) { r.onFailure { toast(it.message ?: "failed") }; refresh() }
                     }
-                }) { Text("Rename") }
+                }) { Text(stringResource(R.string.sftpscreen_rename)) }
             },
-            dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { renaming = null }) { Text(stringResource(R.string.sftpscreen_cancel)) } },
         )
     }
     viewing?.let { (name, text) ->
@@ -524,7 +526,7 @@ fun SftpPane(
                     Text(text, style = CodeStyle.copy(fontSize = 12.sp), modifier = Modifier.verticalScroll(rememberScrollState()).horizontalScroll(rememberScrollState()))
                 }
             },
-            confirmButton = { TextButton(onClick = { viewing = null }) { Text("Close") } },
+            confirmButton = { TextButton(onClick = { viewing = null }) { Text(stringResource(R.string.sftpscreen_close)) } },
         )
     }
 }
@@ -646,7 +648,7 @@ private fun DestinationPicker(
     }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Copy to ${host.displayName}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        title = { Text(stringResource(R.string.sftpscreen_copy_to_fmt, host.displayName), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         text = {
             Column(Modifier.fillMaxWidth().height(320.dp)) {
                 Text(
@@ -665,15 +667,15 @@ private fun DestinationPicker(
                     if (path.length > 1) item { UpRow { open(parent(path)) } }
                     items(shown, key = { it.path }) { d -> FileRow(d, onClick = { open(d.path) }, onLong = { open(d.path) }) }
                     if (ready && !busy && shown.isEmpty() && path.length > 1) {
-                        item { Text("No folders here", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(12.dp)) }
+                        item { Text(stringResource(R.string.sftpscreen_no_folders_here), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(12.dp)) }
                     }
                 }
             }
         },
         confirmButton = {
-            Button(enabled = ready && !busy && path.isNotEmpty(), onClick = { onPick(path) }) { Text("Copy here") }
+            Button(enabled = ready && !busy && path.isNotEmpty(), onClick = { onPick(path) }) { Text(stringResource(R.string.sftpscreen_copy_here)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.sftpscreen_cancel)) } },
     )
 }
 
@@ -777,7 +779,7 @@ private fun ShareUploadBar(names: List<String?>, path: String, onUpload: () -> U
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                "into " + path.trimEnd('/').substringAfterLast('/').ifEmpty { path.ifEmpty { "…" } },
+                stringResource(R.string.sftpscreen_into) + path.trimEnd('/').substringAfterLast('/').ifEmpty { path.ifEmpty { "…" } },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f),
                 maxLines = 1,
@@ -785,10 +787,10 @@ private fun ShareUploadBar(names: List<String?>, path: String, onUpload: () -> U
             )
         }
         TextButton(onClick = onUpload) {
-            Text("Upload", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.sftpscreen_upload), color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.SemiBold)
         }
         IconButton(onClick = onCancel) {
-            Icon(Icons.Rounded.Close, "Cancel upload", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            Icon(Icons.Rounded.Close, stringResource(R.string.sftpscreen_cancel_upload), tint = MaterialTheme.colorScheme.onPrimaryContainer)
         }
     }
 }

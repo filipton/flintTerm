@@ -1,5 +1,6 @@
 package dev.flint.term.session
 
+import dev.flint.term.R
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
@@ -20,5 +21,5 @@ fun shareFile(context: Context, file: File, mime: String = "text/plain", title: 
         .putExtra(Intent.EXTRA_STREAM, uri)
         .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     runCatching { context.startActivity(Intent.createChooser(intent, title ?: file.name)) }
-        .onFailure { Toast.makeText(context, "Nothing can take that file", Toast.LENGTH_SHORT).show() }
+        .onFailure { Toast.makeText(context, context.getString(R.string.sharefile_nothing_can_take_that_file), Toast.LENGTH_SHORT).show() }
 }

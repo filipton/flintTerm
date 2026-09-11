@@ -1,5 +1,7 @@
 package dev.flint.term.ui.settings
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -32,18 +34,18 @@ fun FilesSettings(nav: NavController) {
     SettingsSection(nav, "Files") {
         Group("Editing") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Open a text file with", style = MaterialTheme.typography.bodyLarge)
+                Text(stringResource(R.string.filessettings_open_a_text_file_with), style = MaterialTheme.typography.bodyLarge)
                 Segmented(EditorChoice.entries.map { it.label }, settings.editor.ordinal) { i ->
                     app.store.updateSettings { it.copy(editor = EditorChoice.entries[i]) }
                 }
                 Text(
-                    "Anything the built-in editor will not open, because it is too large or not text, is handed to another app.",
+                    stringResource(R.string.filessettings_anything_the_built_in_editor_will_not_open_becau),
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             RowDivider()
             GroupRow(
-                title = "Keep a .bak", subtitle = "Copy the file on the host before saving over it",
+                title = stringResource(R.string.filessettings_keep_a_bak), subtitle = stringResource(R.string.filessettings_copy_the_file_on_the_host_before_saving_over_it),
                 icon = Icons.Rounded.Backup, iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.editorBackup, onCheckedChange = { v -> app.store.updateSettings { it.copy(editorBackup = v) } },
                 enabled = settings.editor == EditorChoice.BUILT_IN,
@@ -52,7 +54,7 @@ fun FilesSettings(nav: NavController) {
 
         Group("Files") {
             GroupRow(
-                title = "Show hidden files", subtitle = "Dotfiles in the SFTP browser", icon = Icons.Rounded.Visibility, iconTint = MaterialTheme.colorScheme.tertiary,
+                title = stringResource(R.string.filessettings_show_hidden_files), subtitle = stringResource(R.string.filessettings_dotfiles_in_the_sftp_browser), icon = Icons.Rounded.Visibility, iconTint = MaterialTheme.colorScheme.tertiary,
                 checked = settings.showHiddenFiles, onCheckedChange = { v -> app.store.updateSettings { it.copy(showHiddenFiles = v) } },
             )
             RowDivider()
@@ -60,10 +62,10 @@ fun FilesSettings(nav: NavController) {
                 Field(
                     settings.terminalUploadDir,
                     { v -> app.store.updateSettings { it.copy(terminalUploadDir = v) } },
-                    "Where files dropped on the terminal go",
+                    stringResource(R.string.filessettings_where_files_dropped_on_the_terminal_go),
                     mono = true,
-                    placeholder = "/tmp",
-                    hint = "Dropping a file on the terminal, or inserting one from the menu, uploads it here and types the path.",
+                    placeholder = stringResource(R.string.filessettings_tmp),
+                    hint = stringResource(R.string.filessettings_dropping_a_file_on_the_terminal_or_inserting_one),
                 )
             }
         }

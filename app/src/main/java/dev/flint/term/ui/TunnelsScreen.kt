@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.widget.Toast
@@ -115,12 +117,12 @@ fun TunnelsScreen(nav: NavController) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(title = "VPN & tunnels", onBack = { nav.popBackStack() }) },
+        topBar = { AppHeader(title = stringResource(R.string.tunnelsscreen_vpn_tunnels), onBack = { nav.popBackStack() }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { if (app.tailscale.available) addSheet = true else editing = Tunnel() },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("Add") },
+                text = { Text(stringResource(R.string.tunnelsscreen_add)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -134,7 +136,7 @@ fun TunnelsScreen(nav: NavController) {
                 // A whole empty state per section turns this screen into three
                 // screens; one line says the same thing and leaves room for the
                 // sections that do have something in them.
-                item { SectionHint("Paste a wg-quick config with Add. Only this app's traffic goes through it, with no system VPN and no root.") }
+                item { SectionHint(stringResource(R.string.tunnelsscreen_paste_a_wg_quick_config_with_add_only_this_app_s)) }
             } else {
                 item {
                     Group {
@@ -165,7 +167,7 @@ fun TunnelsScreen(nav: NavController) {
                                                     testingTunnel = null
                                                 }
                                             },
-                                        ) { Text("Test") }
+                                        ) { Text(stringResource(R.string.tunnelsscreen_test)) }
                                     }
                                 },
                             )
@@ -174,14 +176,14 @@ fun TunnelsScreen(nav: NavController) {
                         }
                     }
                 }
-                item { SectionHint("A tunnel starts by itself when a host that uses it connects.") }
+                item { SectionHint(stringResource(R.string.tunnelsscreen_a_tunnel_starts_by_itself_when_a_host_that_uses)) }
             }
             // Proxies belong here for the same reason tunnels do: one entry, used
             // by whichever hosts need it, instead of retyped into each.
             item { GroupLabel("Proxies") }
             item {
                 if (proxies.isEmpty()) {
-                    SectionHint("A SOCKS5 or HTTP proxy kept here can be picked by any host, so the same one is set up once.")
+                    SectionHint(stringResource(R.string.tunnelsscreen_a_socks5_or_http_proxy_kept_here_can_be_picked_b))
                 } else {
                     Group {
                         proxies.forEachIndexed { i, p ->
@@ -217,16 +219,16 @@ fun TunnelsScreen(nav: NavController) {
     if (addSheet) {
         ActionSheet(
             onDismiss = { addSheet = false },
-            title = "Add",
-            subtitle = "Both route only this app's traffic, with no system VPN and no root.",
+            title = stringResource(R.string.tunnelsscreen_add),
+            subtitle = stringResource(R.string.tunnelsscreen_both_route_only_this_app_s_traffic_with_no_syste),
             actions = listOf(
-                SheetAction("WireGuard tunnel", Icons.Rounded.VpnLock, subtitle = "Paste a wg-quick config") {
+                SheetAction(stringResource(R.string.tunnelsscreen_wireguard_tunnel), Icons.Rounded.VpnLock, subtitle = stringResource(R.string.tunnelsscreen_paste_a_wg_quick_config)) {
                     addSheet = false; editing = Tunnel()
                 },
-                SheetAction("Tailscale account", Icons.Rounded.Hub, subtitle = "Join a tailnet with a browser login or an auth key") {
+                SheetAction(stringResource(R.string.tunnelsscreen_tailscale_account), Icons.Rounded.Hub, subtitle = stringResource(R.string.tunnelsscreen_join_a_tailnet_with_a_browser_login_or_an_auth_k)) {
                     addSheet = false; addTailscale()
                 },
-                SheetAction("Proxy", Icons.Rounded.Lan, subtitle = "A SOCKS5 or HTTP proxy hosts can be dialled through") {
+                SheetAction(stringResource(R.string.tunnelsscreen_proxy), Icons.Rounded.Lan, subtitle = stringResource(R.string.tunnelsscreen_a_socks5_or_http_proxy_hosts_can_be_dialled_thro)) {
                     addSheet = false; editingProxy = SavedProxy()
                 },
             ),
@@ -251,21 +253,21 @@ fun TunnelsScreen(nav: NavController) {
                 if (info != null) {
                     DetailLine("Endpoint", info.endpoint)
                     DetailLine("Addresses", info.addresses.joinToString(", "))
-                    DetailLine("Allowed IPs", info.allowedIps.joinToString(", "))
-                    DetailLine("DNS", info.dns.joinToString(", ").ifBlank { "none, use IP addresses" })
+                    DetailLine(stringResource(R.string.tunnelsscreen_allowed_ips), info.allowedIps.joinToString(", "))
+                    DetailLine("DNS", info.dns.joinToString(", ").ifBlank { stringResource(R.string.tunnelsscreen_none_use_ip_addresses) })
                     DetailLine("MTU", info.mtu.toString())
-                    Text("This device's public key", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+                    Text(stringResource(R.string.tunnelsscreen_this_device_s_public_key), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SelectionContainer(Modifier.weight(1f)) { Text(info.publicKey, style = CodeStyle.copy(fontSize = 12.sp)) }
                         IconButton(onClick = {
                             context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("public key", info.publicKey))
-                            Toast.makeText(context, "Public key copied", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.tunnelsscreen_public_key_copied), Toast.LENGTH_SHORT).show()
                         }) { Icon(Icons.Rounded.ContentCopy, "Copy") }
                     }
                 }
                 st?.let { s ->
                     if (s.running) {
-                        DetailLine("Traffic", "${humanBytes(s.txBytes.toLong())} sent  ·  ${humanBytes(s.rxBytes.toLong())} received")
+                        DetailLine("Traffic", stringResource(R.string.tunnelsscreen_sent_received, humanBytes(s.txBytes.toLong()), humanBytes(s.rxBytes.toLong())))
                     }
                 }
                 Spacer(Modifier.height(18.dp))
@@ -288,9 +290,9 @@ fun TunnelsScreen(nav: NavController) {
                     if (testing) {
                         CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                         Spacer(Modifier.width(10.dp))
-                        Text("Testing…")
+                        Text(stringResource(R.string.tunnelsscreen_testing))
                     } else {
-                        Text("Test connection")
+                        Text(stringResource(R.string.tunnelsscreen_test_connection))
                     }
                 }
                 testResult?.let { r ->
@@ -311,17 +313,17 @@ fun TunnelsScreen(nav: NavController) {
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     if (st?.running == true) {
-                        OutlinedButton(onClick = { scope.launch { app.tunnels.stop(t.id) } }, Modifier.weight(1f)) { Text("Stop") }
+                        OutlinedButton(onClick = { scope.launch { app.tunnels.stop(t.id) } }, Modifier.weight(1f)) { Text(stringResource(R.string.tunnelsscreen_stop)) }
                     } else {
-                        Button(onClick = { scope.launch { app.tunnels.start(t.id).onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() } } }, Modifier.weight(1f)) { Text("Start") }
+                        Button(onClick = { scope.launch { app.tunnels.start(t.id).onFailure { Toast.makeText(context, it.message, Toast.LENGTH_LONG).show() } } }, Modifier.weight(1f)) { Text(stringResource(R.string.tunnelsscreen_start)) }
                     }
-                    OutlinedButton(onClick = { detail = null; editing = t }, Modifier.weight(1f)) { Text("Edit") }
+                    OutlinedButton(onClick = { detail = null; editing = t }, Modifier.weight(1f)) { Text(stringResource(R.string.tunnelsscreen_edit)) }
                 }
                 Spacer(Modifier.height(6.dp))
                 TextButton(onClick = { app.store.deleteTunnel(t.id); detail = null }, Modifier.fillMaxWidth()) {
                     Icon(Icons.Rounded.Delete, null, Modifier.width(18.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
-                    Text("Delete tunnel", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.tunnelsscreen_delete_tunnel), color = MaterialTheme.colorScheme.error)
                 }
             }
         }
@@ -378,7 +380,7 @@ private fun TunnelEditor(initial: Tunnel, onDismiss: () -> Unit) {
             scope.launch(Dispatchers.IO) {
                 val text = runCatching { context.contentResolver.openInputStream(uri)?.bufferedReader()?.readText() }.getOrNull()
                 withContext(Dispatchers.Main) {
-                    if (text == null) Toast.makeText(context, "Could not read file", Toast.LENGTH_SHORT).show()
+                    if (text == null) Toast.makeText(context, context.getString(R.string.tunnelsscreen_could_not_read_file), Toast.LENGTH_SHORT).show()
                     else {
                         config = text
                         if (name.isBlank()) name = uri.lastPathSegment?.substringAfterLast('/')?.removeSuffix(".conf") ?: ""
@@ -390,23 +392,23 @@ private fun TunnelEditor(initial: Tunnel, onDismiss: () -> Unit) {
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(if (initial.config.isBlank()) "Add tunnel" else "Edit tunnel", style = MaterialTheme.typography.titleLarge)
-            Field(name, { name = it }, "Name", placeholder = "Home VPN", keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
+            Text(if (initial.config.isBlank()) stringResource(R.string.tunnelsscreen_add_tunnel) else stringResource(R.string.tunnelsscreen_edit_tunnel), style = MaterialTheme.typography.titleLarge)
+            Field(name, { name = it }, "Name", placeholder = stringResource(R.string.tunnelsscreen_home_vpn), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = { picker.launch(arrayOf("*/*")) }, Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.FileOpen, null, Modifier.width(18.dp)); Spacer(Modifier.width(6.dp)); Text("Import .conf")
+                    Icon(Icons.Rounded.FileOpen, null, Modifier.width(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.tunnelsscreen_import_conf))
                 }
                 OutlinedButton(onClick = {
                     val kp = wgGenerateKeypair()
                     config = TEMPLATE.format(kp.privateKey)
                     publicKey = kp.publicKey
                 }, Modifier.weight(1f)) {
-                    Icon(Icons.Rounded.Key, null, Modifier.width(18.dp)); Spacer(Modifier.width(6.dp)); Text("New key pair")
+                    Icon(Icons.Rounded.Key, null, Modifier.width(18.dp)); Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.tunnelsscreen_new_key_pair))
                 }
             }
             publicKey?.let { pk ->
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceContainerLowest).padding(12.dp)) {
-                    Text("Add this public key as a peer on your WireGuard server:", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.tunnelsscreen_add_this_public_key_as_a_peer_on_your_wireguard), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         SelectionContainer(Modifier.weight(1f)) { Text(pk, style = CodeStyle.copy(fontSize = 12.sp)) }
                         IconButton(onClick = {
@@ -417,13 +419,13 @@ private fun TunnelEditor(initial: Tunnel, onDismiss: () -> Unit) {
                 }
             }
             Field(
-                config, { config = it; error = null }, "wg-quick configuration", mono = true, singleLine = false, minLines = 8,
-                placeholder = "[Interface]\nPrivateKey = …\nAddress = 10.8.0.2/24\n\n[Peer]\nPublicKey = …\nEndpoint = host:51820\nAllowedIPs = 0.0.0.0/0",
+                config, { config = it; error = null }, stringResource(R.string.tunnelsscreen_wg_quick_configuration), mono = true, singleLine = false, minLines = 8,
+                placeholder = stringResource(R.string.tunnelsscreen_interface_nprivatekey_naddress_10_8_0_2_24_n_n_p),
                 keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             )
             error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
             Text(
-                "Endpoint, AllowedIPs and Address are required. DNS is used to resolve host names inside the tunnel. PreUp/PostUp lines are ignored.",
+                stringResource(R.string.tunnelsscreen_endpoint_allowedips_and_address_are_required_dns),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
@@ -435,7 +437,7 @@ private fun TunnelEditor(initial: Tunnel, onDismiss: () -> Unit) {
                     }.onFailure { error = it.message?.removePrefix("Other(")?.trimEnd(')') ?: "invalid config" }
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.tunnelsscreen_save)) }
         }
     }
 }
@@ -453,15 +455,15 @@ private fun ProxySheet(proxy: SavedProxy, onDismiss: () -> Unit) {
             Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp).verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(if (existing) "Proxy" else "New proxy", style = MaterialTheme.typography.titleLarge)
+            Text(if (existing) "Proxy" else stringResource(R.string.tunnelsscreen_new_proxy), style = MaterialTheme.typography.titleLarge)
             Segmented(listOf("SOCKS5", "HTTP"), if (draft.type == ProxyType.HTTP) 1 else 0) {
                 draft = draft.copy(type = if (it == 1) ProxyType.HTTP else ProxyType.SOCKS5)
             }
-            Field(draft.name, { draft = draft.copy(name = it) }, "Name (optional)", placeholder = "Work proxy")
+            Field(draft.name, { draft = draft.copy(name = it) }, "Name (optional)", placeholder = stringResource(R.string.tunnelsscreen_work_proxy))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Field(
                     draft.host, { draft = draft.copy(host = it) }, "Host", Modifier.weight(1f), mono = true,
-                    placeholder = "proxy.example.com",
+                    placeholder = stringResource(R.string.tunnelsscreen_proxy_example_com),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 )
                 Field(
@@ -473,7 +475,7 @@ private fun ProxySheet(proxy: SavedProxy, onDismiss: () -> Unit) {
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Field(
-                    draft.username, { draft = draft.copy(username = it) }, "User (optional)", Modifier.weight(1f),
+                    draft.username, { draft = draft.copy(username = it) }, stringResource(R.string.tunnelsscreen_user_optional), Modifier.weight(1f),
                     autofill = ContentType.Username,
                 )
                 Field(
@@ -484,7 +486,7 @@ private fun ProxySheet(proxy: SavedProxy, onDismiss: () -> Unit) {
                 )
             }
             Text(
-                "Only the first hop goes through the proxy, and a jump chain then continues over SSH. Mosh needs SOCKS5 with UDP ASSOCIATE, which an HTTP proxy cannot do.",
+                stringResource(R.string.tunnelsscreen_only_the_first_hop_goes_through_the_proxy_and_a),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(
@@ -494,12 +496,12 @@ private fun ProxySheet(proxy: SavedProxy, onDismiss: () -> Unit) {
                     onDismiss()
                 },
                 modifier = Modifier.fillMaxWidth(),
-            ) { Text("Save") }
+            ) { Text(stringResource(R.string.tunnelsscreen_save)) }
             if (existing) {
                 TextButton(onClick = { app.store.deleteProxy(draft.id); onDismiss() }, Modifier.fillMaxWidth()) {
                     Icon(Icons.Rounded.Delete, null, Modifier.width(18.dp), tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
-                    Text("Delete this proxy", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.tunnelsscreen_delete_this_proxy), color = MaterialTheme.colorScheme.error)
                 }
             }
         }

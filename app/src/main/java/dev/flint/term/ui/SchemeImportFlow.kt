@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -78,14 +80,14 @@ fun SchemeImportFlow(open: Boolean, onClose: () -> Unit) {
     if (open && step == Step.Idle) {
         ActionSheet(
             onDismiss = onClose,
-            title = "Import a scheme",
-            subtitle = "Ghostty, Alacritty, Windows Terminal, iTerm2 or Xresources",
+            title = stringResource(R.string.schemeimportflow_import_a_scheme),
+            subtitle = stringResource(R.string.schemeimportflow_ghostty_alacritty_windows_terminal_iterm2_or_xre),
             actions = listOf(
-                SheetAction("Pick a file", Icons.Rounded.FolderOpen) {
+                SheetAction(stringResource(R.string.schemeimportflow_pick_a_file), Icons.Rounded.FolderOpen) {
                     step = Step.Picking
                     pick.launch(arrayOf("*/*"))
                 },
-                SheetAction("Paste text", Icons.Rounded.ContentPaste) { step = Step.Pasting("") },
+                SheetAction(stringResource(R.string.schemeimportflow_paste_text), Icons.Rounded.ContentPaste) { step = Step.Pasting("") },
             ),
         )
     }
@@ -94,23 +96,23 @@ fun SchemeImportFlow(open: Boolean, onClose: () -> Unit) {
         Step.Idle, Step.Picking -> Unit
         is Step.Pasting -> AlertDialog(
             onDismissRequest = ::finish,
-            title = { Text("Paste a scheme") },
+            title = { Text(stringResource(R.string.schemeimportflow_paste_a_scheme)) },
             text = {
                 Field(
-                    s.text, { step = Step.Pasting(it) }, "Scheme file contents",
+                    s.text, { step = Step.Pasting(it) }, stringResource(R.string.schemeimportflow_scheme_file_contents),
                     mono = true, singleLine = false, minLines = 6, maxLines = 9,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                 )
             },
-            confirmButton = { TextButton(enabled = s.text.isNotBlank(), onClick = { read(s.text, null) }) { Text("Read") } },
-            dismissButton = { TextButton(onClick = ::finish) { Text("Cancel") } },
+            confirmButton = { TextButton(enabled = s.text.isNotBlank(), onClick = { read(s.text, null) }) { Text(stringResource(R.string.schemeimportflow_read)) } },
+            dismissButton = { TextButton(onClick = ::finish) { Text(stringResource(R.string.schemeimportflow_cancel)) } },
         )
         is Step.Preview -> AlertDialog(
             onDismissRequest = ::finish,
-            title = { Text("Add scheme") },
+            title = { Text(stringResource(R.string.schemeimportflow_add_scheme)) },
             text = {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    Text("Read as a ${s.parsed.format.label} scheme.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(stringResource(R.string.schemeimportflow_read_as_a_scheme, s.parsed.format.label), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(10.dp))
                     Field(s.name, { step = s.copy(name = it) }, "Name")
                     Spacer(Modifier.height(12.dp))
@@ -125,13 +127,13 @@ fun SchemeImportFlow(open: Boolean, onClose: () -> Unit) {
                         app.store.updateSettings { it.copy(customSchemes = it.customSchemes + scheme) }
                         finish()
                     },
-                ) { Text("Add") }
+                ) { Text(stringResource(R.string.schemeimportflow_add)) }
             },
-            dismissButton = { TextButton(onClick = ::finish) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = ::finish) { Text(stringResource(R.string.schemeimportflow_cancel)) } },
         )
         is Step.Failed -> AlertDialog(
             onDismissRequest = ::finish,
-            title = { Text("Not a scheme") },
+            title = { Text(stringResource(R.string.schemeimportflow_not_a_scheme)) },
             text = { Text(s.reason) },
             confirmButton = { TextButton(onClick = ::finish) { Text("OK") } },
         )

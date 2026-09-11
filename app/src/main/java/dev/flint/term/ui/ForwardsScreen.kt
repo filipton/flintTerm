@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -63,12 +65,12 @@ fun ForwardsScreen(nav: NavController, sessionId: String) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(title = "Port forwards", subtitle = session.label, onBack = { nav.popBackStack() }) },
+        topBar = { AppHeader(title = stringResource(R.string.forwardsscreen_port_forwards), subtitle = session.label, onBack = { nav.popBackStack() }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { editing = PortForward() },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("Add forward") },
+                text = { Text(stringResource(R.string.forwardsscreen_add_forward)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -79,8 +81,8 @@ fun ForwardsScreen(nav: NavController, sessionId: String) {
         androidx.compose.foundation.layout.Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("forwards")).padding(bottom = 100.dp)) {
             if (configured.isEmpty()) {
                 EmptyState(
-                    Icons.Rounded.SwapHoriz, "No forwards yet",
-                    "Tunnel a local port to something behind the server (-L), expose a local service on the server (-R), or run a SOCKS proxy through it (-D). Forwards are saved on the host and can start with every session.",
+                    Icons.Rounded.SwapHoriz, stringResource(R.string.forwardsscreen_no_forwards_yet),
+                    stringResource(R.string.forwardsscreen_tunnel_a_local_port_to_something_behind_the_serv),
                 )
             } else {
                 Group {
@@ -88,8 +90,8 @@ fun ForwardsScreen(nav: NavController, sessionId: String) {
                         val running = active.firstOrNull { it.forward.id == f.id }
                         val status = when {
                             running == null -> "Stopped"
-                            running.error != null -> "Error: ${running.error}"
-                            f.bindPort == 0 -> "Listening on port ${running.boundPort}"
+                            running.error != null -> stringResource(R.string.forwardsscreen_error, running.error)
+                            f.bindPort == 0 -> stringResource(R.string.forwardsscreen_listening_on_port, running.boundPort)
                             else -> "Active"
                         }
                         GroupRow(
@@ -109,14 +111,14 @@ fun ForwardsScreen(nav: NavController, sessionId: String) {
                                             val url = "http://${reachableBind(f.bindHost)}:$port/"
                                             runCatching {
                                                 context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                                            }.onFailure { Toast.makeText(context, "Nothing can open $url", Toast.LENGTH_SHORT).show() }
+                                            }.onFailure { Toast.makeText(context, context.getString(R.string.forwardsscreen_nothing_can_open, url), Toast.LENGTH_SHORT).show() }
                                         }) { Icon(Icons.Rounded.OpenInBrowser, "Open") }
                                         // A SOCKS proxy has no page to visit; what other apps need is the address.
                                         ForwardType.DYNAMIC -> IconButton(onClick = {
                                             val address = "socks5://127.0.0.1:$port"
                                             context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("proxy", address))
-                                            Toast.makeText(context, "Copied $address", Toast.LENGTH_SHORT).show()
-                                        }) { Icon(Icons.Rounded.ContentCopy, "Copy proxy address") }
+                                            Toast.makeText(context, context.getString(R.string.forwardsscreen_copied, address), Toast.LENGTH_SHORT).show()
+                                        }) { Icon(Icons.Rounded.ContentCopy, stringResource(R.string.forwardsscreen_copy_proxy_address)) }
                                         ForwardType.REMOTE -> Unit
                                     }
                                     AppSwitch(

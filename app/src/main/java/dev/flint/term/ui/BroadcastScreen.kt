@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -95,8 +97,8 @@ fun BroadcastScreen(nav: NavController) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Run on many hosts",
-                subtitle = if (chosen.isEmpty()) "Pick the hosts" else "${chosen.size} selected",
+                title = stringResource(R.string.broadcastscreen_run_on_many_hosts),
+                subtitle = if (chosen.isEmpty()) stringResource(R.string.broadcastscreen_pick_the_hosts) else stringResource(R.string.broadcastscreen_selected, chosen.size),
                 onBack = { nav.popBackStack() },
                 actions = {
                     if (eligible.isNotEmpty()) {
@@ -110,7 +112,7 @@ fun BroadcastScreen(nav: NavController) {
     ) { padding ->
         if (eligible.isEmpty()) {
             Column(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState(Icons.Rounded.PlayArrow, "No hosts to run on", "Add an SSH host and it can take part in a broadcast.")
+                EmptyState(Icons.Rounded.PlayArrow, stringResource(R.string.broadcastscreen_no_hosts_to_run_on), stringResource(R.string.broadcastscreen_add_an_ssh_host_and_it_can_take_part_in_a_broadc))
             }
             return@Scaffold
         }
@@ -119,11 +121,11 @@ fun BroadcastScreen(nav: NavController) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Field(
                         command, { command = it }, "Command", mono = true, singleLine = false, minLines = 2,
-                        placeholder = "uptime",
+                        placeholder = stringResource(R.string.broadcastscreen_uptime),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                     )
                     Text(
-                        "Runs without a terminal, so nothing interactive: no prompts, no editors, no sudo asking for a password.",
+                        stringResource(R.string.broadcastscreen_runs_without_a_terminal_so_nothing_interactive_n),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Button(
@@ -134,9 +136,9 @@ fun BroadcastScreen(nav: NavController) {
                         if (running) {
                             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
                             Spacer(Modifier.width(10.dp))
-                            Text("Running on ${chosen.size}…")
+                            Text(stringResource(R.string.broadcastscreen_running_on, chosen.size))
                         } else {
-                            Text(if (chosen.isEmpty()) "Pick hosts first" else "Run on ${chosen.size} host${if (chosen.size > 1) "s" else ""}")
+                            Text(if (chosen.isEmpty()) stringResource(R.string.broadcastscreen_pick_hosts_first) else "Run on ${chosen.size} host${if (chosen.size > 1) "s" else ""}")
                         }
                     }
                 }
@@ -177,7 +179,7 @@ private fun BroadcastRow(
             }
         }
         result?.let { r ->
-            val text = r.fold({ it.trimEnd().ifEmpty { "(no output)" } }, { it.message ?: "failed" })
+            val text = r.fold({ it.trimEnd().ifEmpty { stringResource(R.string.broadcastscreen_no_output) } }, { it.message ?: "failed" })
             SelectionContainer {
                 Text(
                     text,

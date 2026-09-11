@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -45,23 +47,23 @@ fun SettingsScreen(nav: NavController) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         // A tab, not a page: the bottom bar is how you got here.
-        topBar = { AppHeader(title = "Settings", onBack = null) },
+        topBar = { AppHeader(title = stringResource(R.string.settingsscreen_settings), onBack = null) },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScreenScroll("settings")).padding(bottom = 40.dp)) {
             val sections = listOf(
-                Section("Appearance", "App theme, font, ligatures, terminal colors", Icons.Rounded.Palette, MaterialTheme.colorScheme.tertiary, Routes.SETTINGS_APPEARANCE),
-                Section("Keyboard & input", "The extra-key bar, the volume keys, and the gestures", Icons.Rounded.Keyboard, MaterialTheme.colorScheme.primary, Routes.SETTINGS_KEYBOARD),
-                Section("Terminal", "Scrollback, predictive echo, completion, recordings", Icons.Rounded.Terminal, MaterialTheme.colorScheme.secondary, Routes.SETTINGS_TERMINAL),
-                Section("Sessions & alerts", "Tabs, the bell, and being told a command finished", Icons.Rounded.Tab, MaterialTheme.colorScheme.tertiary, Routes.SETTINGS_SESSIONS),
-                Section("Connections", "Keepalive, data saver, agent signing, VPN resolver", Icons.Rounded.Link, MaterialTheme.colorScheme.primary, Routes.SETTINGS_CONNECTIONS),
-                Section("Files", "Hidden files, and where a dropped file lands", Icons.Rounded.Folder, MaterialTheme.colorScheme.tertiary, Routes.SETTINGS_FILES),
-                Section("Backup", "Everything in one file, sealed with a passphrase", Icons.Rounded.Archive, MaterialTheme.colorScheme.primary, Routes.SETTINGS_BACKUP),
-                Section("Security", "App lock before hosts and keys open", Icons.Rounded.Lock, MaterialTheme.colorScheme.error, Routes.SETTINGS_SECURITY),
-                Section("Automation", "Whether other apps may drive sessions", Icons.Rounded.Bolt, MaterialTheme.colorScheme.error, Routes.SETTINGS_AUTOMATION),
-                Section("About", "flintTerm ${BuildConfig.VERSION_NAME}, and what it is built from", Icons.Rounded.Info, MaterialTheme.colorScheme.onSurfaceVariant, Routes.SETTINGS_ABOUT),
+                Section("Appearance", stringResource(R.string.settingsscreen_app_theme_font_ligatures_terminal_colors), Icons.Rounded.Palette, MaterialTheme.colorScheme.tertiary, Routes.SETTINGS_APPEARANCE),
+                Section(stringResource(R.string.settingsscreen_keyboard_input), stringResource(R.string.settingsscreen_the_extra_key_bar_the_volume_keys_and_the_gestur), Icons.Rounded.Keyboard, MaterialTheme.colorScheme.primary, Routes.SETTINGS_KEYBOARD),
+                Section("Terminal", stringResource(R.string.settingsscreen_scrollback_predictive_echo_completion_recordings), Icons.Rounded.Terminal, MaterialTheme.colorScheme.secondary, Routes.SETTINGS_TERMINAL),
+                Section(stringResource(R.string.settingsscreen_sessions_alerts), stringResource(R.string.settingsscreen_tabs_the_bell_and_being_told_a_command_finished), Icons.Rounded.Tab, MaterialTheme.colorScheme.tertiary, Routes.SETTINGS_SESSIONS),
+                Section("Connections", stringResource(R.string.settingsscreen_keepalive_data_saver_agent_signing_vpn_resolver), Icons.Rounded.Link, MaterialTheme.colorScheme.primary, Routes.SETTINGS_CONNECTIONS),
+                Section("Files", stringResource(R.string.settingsscreen_hidden_files_and_where_a_dropped_file_lands), Icons.Rounded.Folder, MaterialTheme.colorScheme.tertiary, Routes.SETTINGS_FILES),
+                Section("Backup", stringResource(R.string.settingsscreen_everything_in_one_file_sealed_with_a_passphrase), Icons.Rounded.Archive, MaterialTheme.colorScheme.primary, Routes.SETTINGS_BACKUP),
+                Section("Security", stringResource(R.string.settingsscreen_app_lock_before_hosts_and_keys_open), Icons.Rounded.Lock, MaterialTheme.colorScheme.error, Routes.SETTINGS_SECURITY),
+                Section("Automation", stringResource(R.string.settingsscreen_whether_other_apps_may_drive_sessions), Icons.Rounded.Bolt, MaterialTheme.colorScheme.error, Routes.SETTINGS_AUTOMATION),
+                Section("About", stringResource(R.string.settingsscreen_flintterm_and_what_it_is_built_from, BuildConfig.VERSION_NAME), Icons.Rounded.Info, MaterialTheme.colorScheme.onSurfaceVariant, Routes.SETTINGS_ABOUT),
             )
 
-            SearchField(query, { query = it }, "Search settings", Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            SearchField(query, { query = it }, stringResource(R.string.settingsscreen_search_settings), Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
 
             val hits = remember(query) {
                 if (query.isBlank()) emptyList() else PaletteSearch.rank(PaletteCatalog.settings(), query, limit = 30)
@@ -81,7 +83,7 @@ fun SettingsScreen(nav: NavController) {
                 }
             } else if (hits.isEmpty()) {
                 Text(
-                    "Nothing called that",
+                    stringResource(R.string.settingsscreen_nothing_called_that),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),

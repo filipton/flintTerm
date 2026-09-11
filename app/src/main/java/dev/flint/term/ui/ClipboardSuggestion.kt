@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import androidx.compose.ui.res.stringResource
+import dev.flint.term.R
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.view.ViewTreeObserver
@@ -157,7 +159,7 @@ fun ClipboardSuggestion(view: TerminalView, chrome: Color, onChrome: Color, modi
                 null, Modifier.size(15.dp), tint = onChrome.copy(alpha = 0.75f),
             )
             Text(
-                if (picture) "Send the file you copied" else "Paste what you copied",
+                if (picture) stringResource(R.string.clipboardsuggestion_send_the_file_you_copied) else stringResource(R.string.clipboardsuggestion_paste_what_you_copied),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Medium,
                 color = onChrome.copy(alpha = 0.85f),

@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,12 +57,12 @@ fun SnippetsScreen(nav: NavController) {
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(title = "Snippets", onBack = null, actions = { CommandPaletteButton() }) },
+        topBar = { AppHeader(title = stringResource(R.string.snippetsscreen_snippets), onBack = null, actions = { CommandPaletteButton() }) },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { editing = Snippet() },
                 icon = { Icon(Icons.Rounded.Add, null) },
-                text = { Text("New snippet") },
+                text = { Text(stringResource(R.string.snippetsscreen_new_snippet)) },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(20.dp),
@@ -72,7 +74,7 @@ fun SnippetsScreen(nav: NavController) {
             if (snippets.size > 8) {
                 item {
                     Field(
-                        query, { query = it }, "Search snippets",
+                        query, { query = it }, stringResource(R.string.snippetsscreen_search_snippets),
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                         leading = { Icon(Icons.Rounded.Search, null) },
                     )
@@ -81,9 +83,9 @@ fun SnippetsScreen(nav: NavController) {
             if (snippets.isEmpty()) {
                 item {
                     EmptyState(
-                        Icons.Rounded.AutoAwesome, "No snippets yet",
-                        "Save the commands you type all the time. In the terminal, the ✦ key lists them. You are asked for any {{placeholders}} before they are typed.",
-                        "Add a snippet",
+                        Icons.Rounded.AutoAwesome, stringResource(R.string.snippetsscreen_no_snippets_yet),
+                        stringResource(R.string.snippetsscreen_save_the_commands_you_type_all_the_time_in_the_t),
+                        stringResource(R.string.snippetsscreen_add_a_snippet),
                     ) { editing = Snippet() }
                 }
             } else {
@@ -126,26 +128,26 @@ fun SnippetEditor(initial: Snippet, onDismiss: () -> Unit) {
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainer) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(if (isNew) "New snippet" else "Edit snippet", style = MaterialTheme.typography.titleLarge)
-            Field(name, { name = it }, "Name", placeholder = "Restart nginx", keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
+            Text(if (isNew) stringResource(R.string.snippetsscreen_new_snippet) else stringResource(R.string.snippetsscreen_edit_snippet), style = MaterialTheme.typography.titleLarge)
+            Field(name, { name = it }, "Name", placeholder = stringResource(R.string.snippetsscreen_restart_nginx), keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
             Field(
                 command, { command = it }, "Command", mono = true, singleLine = false, minLines = 2,
-                placeholder = "sudo systemctl restart {{service}}",
+                placeholder = stringResource(R.string.snippetsscreen_sudo_systemctl_restart_service),
                 keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             )
             val ph = Snippet(command = command).placeholders
             Text(
-                if (ph.isEmpty()) "Tip: {{name}} becomes a field you fill in when using the snippet."
-                else "Asks for: ${ph.joinToString(", ")}",
+                if (ph.isEmpty()) stringResource(R.string.snippetsscreen_tip_name_becomes_a_field_you_fill_in_when_using)
+                else stringResource(R.string.snippetsscreen_asks_for, ph.joinToString(", ")),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Press Enter after typing it", Modifier.weight(1f))
+                Text(stringResource(R.string.snippetsscreen_press_enter_after_typing_it), Modifier.weight(1f))
                 AppSwitch(run, { run = it })
             }
-            Text("Show for", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.snippetsscreen_show_for), style = MaterialTheme.typography.titleSmall)
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                FilterChip(selected = hostIds.isEmpty(), onClick = { hostIds = emptyList() }, label = { Text("All hosts") })
+                FilterChip(selected = hostIds.isEmpty(), onClick = { hostIds = emptyList() }, label = { Text(stringResource(R.string.snippetsscreen_all_hosts)) })
                 hosts.forEach { h ->
                     FilterChip(
                         selected = h.id in hostIds,
@@ -162,11 +164,11 @@ fun SnippetEditor(initial: Snippet, onDismiss: () -> Unit) {
                         onDismiss()
                     },
                     modifier = Modifier.weight(1f),
-                ) { Text("Save") }
+                ) { Text(stringResource(R.string.snippetsscreen_save)) }
                 if (!isNew) {
                     TextButton(onClick = { app.store.deleteSnippet(initial.id); onDismiss() }) {
                         Icon(Icons.Rounded.Delete, null, Modifier.width(18.dp), tint = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.width(6.dp)); Text("Delete", color = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(6.dp)); Text(stringResource(R.string.snippetsscreen_delete), color = MaterialTheme.colorScheme.error)
                     }
                 }
             }

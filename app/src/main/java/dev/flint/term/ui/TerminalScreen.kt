@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.os.VibrationEffect
@@ -335,7 +337,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     LaunchedEffect(session) {
         session.clipboard.collectLatest { text ->
             context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("terminal", text))
-            Toast.makeText(context, "Copied from remote", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.terminalscreen_copied_from_remote), Toast.LENGTH_SHORT).show()
         }
     }
     val rootView = LocalView.current
@@ -367,7 +369,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     fun insertFiles(uris: List<android.net.Uri>): Boolean {
         if (session.host == null || uris.isEmpty()) return false
         val dir = settings.terminalUploadDir
-        Toast.makeText(context, if (uris.size == 1) "Sending to $dir…" else "Sending ${uris.size} files to $dir…", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, if (uris.size == 1) context.getString(R.string.terminalscreen_sending_to, dir) else "Sending ${uris.size} files to ${dir}…", Toast.LENGTH_SHORT).show()
         dev.flint.term.transfer.InsertFile.into(
             app.transfers, session, uris, dir,
             onPath = { quoted -> view.sendText("$quoted ") },
@@ -415,7 +417,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                         context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) } != null
                     }.getOrDefault(false)
                 }
-                Toast.makeText(context, if (ok) "Saved the scrollback" else "Could not save the scrollback", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, if (ok) context.getString(R.string.terminalscreen_saved_the_scrollback) else "Could not save the scrollback", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -439,7 +441,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         if (session.recording.value != null) {
             val files = session.stopRecording()
             val where = files.firstOrNull()?.parentFile?.absolutePath
-            val message = if (where == null) "Recording stopped" else "Saved ${files.joinToString(" and ") { it.name }} in $where"
+            val message = if (where == null) "Recording stopped" else "Saved ${files.joinToString(" and ") { it.name }} in ${where}"
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         } else {
             val started = session.startRecording(
@@ -451,7 +453,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             val names = started?.files?.joinToString(" and ") { it.name }
             Toast.makeText(
                 context,
-                if (names == null) "This session has ended" else "Recording to $names",
+                if (names == null) context.getString(R.string.terminalscreen_this_session_has_ended) else "Recording to ${names}",
                 Toast.LENGTH_SHORT,
             ).show()
         }
@@ -716,7 +718,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 Icon(Icons.Rounded.Search, null, tint = onChromeMuted)
                 Spacer(Modifier.width(8.dp))
                 Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Text("Search scrollback", color = onChromeMuted, style = MaterialTheme.typography.bodyMedium)
+                    if (query.isEmpty()) Text(stringResource(R.string.terminalscreen_search_scrollback), color = onChromeMuted, style = MaterialTheme.typography.bodyMedium)
                     BasicTextField(
                         query, { query = it }, singleLine = true,
                         textStyle = MaterialTheme.typography.bodyMedium.copy(color = onChrome),
@@ -727,7 +729,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 Text(if (matches.isEmpty()) (if (query.isBlank()) "" else "0") else "${matchIndex + 1}/${matches.size}", style = MaterialTheme.typography.labelSmall, color = onChromeMuted)
                 IconButton(onClick = { showMatch(matchIndex - 1) }, enabled = matches.isNotEmpty()) { Icon(Icons.Rounded.KeyboardArrowUp, "Previous", tint = onChrome) }
                 IconButton(onClick = { showMatch(matchIndex + 1) }, enabled = matches.isNotEmpty()) { Icon(Icons.Rounded.KeyboardArrowDown, "Next", tint = onChrome) }
-                IconButton(onClick = { searching = false; view.searchHighlight = null }) { Icon(Icons.Rounded.Close, "Close search", tint = onChrome) }
+                IconButton(onClick = { searching = false; view.searchHighlight = null }) { Icon(Icons.Rounded.Close, stringResource(R.string.terminalscreen_close_search), tint = onChrome) }
             }
         }
 
@@ -765,7 +767,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 onOpen = { l ->
                     if (l.isUrl) {
                         runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(l.text)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-                            .onFailure { Toast.makeText(context, "Nothing can open that link", Toast.LENGTH_SHORT).show() }
+                            .onFailure { Toast.makeText(context, context.getString(R.string.terminalscreen_nothing_can_open_that_link), Toast.LENGTH_SHORT).show() }
                     } else {
                         nav.navigate(Routes.sftp(sessionId, l.text.substringBefore(':')))
                     }
@@ -845,21 +847,21 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Session ended", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
-                    val detail = s?.error ?: s?.exitCode?.let { "exit code $it" }
+                    Text(stringResource(R.string.terminalscreen_session_ended), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onErrorContainer)
+                    val detail = s?.error ?: s?.exitCode?.let { stringResource(R.string.terminalscreen_exit_code, it) }
                     if (detail != null) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer, maxLines = 2)
                 }
-                TextButton(onClick = { connectionSheet = true }) { Text("Details") }
+                TextButton(onClick = { connectionSheet = true }) { Text(stringResource(R.string.terminalscreen_details)) }
                 Spacer(Modifier.width(4.dp))
                 session.host?.let { h ->
                     Button(onClick = {
                         val fresh = app.sessions.openSsh(h, view.gridCols.coerceAtLeast(20), view.gridRows.coerceAtLeast(5))
                         app.sessions.remove(sessionId)
                         open(fresh.id)
-                    }) { Text("Reconnect") }
+                    }) { Text(stringResource(R.string.terminalscreen_reconnect)) }
                     Spacer(Modifier.width(8.dp))
                 }
-                OutlinedButton(onClick = { app.sessions.remove(sessionId); nav.popBackStack() }) { Text("Close") }
+                OutlinedButton(onClick = { app.sessions.remove(sessionId); nav.popBackStack() }) { Text(stringResource(R.string.terminalscreen_close)) }
             }
         }
 
@@ -983,7 +985,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             AlertDialog(
                 onDismissRequest = { serverMessage = false },
                 text = { ServerMessage(text) },
-                confirmButton = { TextButton(onClick = { serverMessage = false }) { Text("Close") } },
+                confirmButton = { TextButton(onClick = { serverMessage = false }) { Text(stringResource(R.string.terminalscreen_close)) } },
             )
         }
     }
@@ -993,23 +995,23 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     if (scrollbackSheet) {
         ActionSheet(
             onDismiss = { scrollbackSheet = false },
-            title = "Share the scrollback",
-            subtitle = "Everything the buffer still holds, as plain text",
+            title = stringResource(R.string.terminalscreen_share_the_scrollback),
+            subtitle = stringResource(R.string.terminalscreen_everything_the_buffer_still_holds_as_plain_text),
             actions = listOf(
-                SheetAction("Share", Icons.Rounded.Share, subtitle = "Send it to another app") {
+                SheetAction(stringResource(R.string.terminalscreen_share), Icons.Rounded.Share, subtitle = stringResource(R.string.terminalscreen_send_it_to_another_app)) {
                     scrollbackSheet = false
                     scope.launch {
                         val file = withContext(Dispatchers.IO) {
                             runCatching { Scrollback.write(context, session.label, session.core.allLines()) }.getOrNull()
                         }
                         if (file == null) {
-                            Toast.makeText(context, "Could not write the scrollback", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.terminalscreen_could_not_write_the_scrollback), Toast.LENGTH_SHORT).show()
                         } else {
                             shareFile(context, file)
                         }
                     }
                 },
-                SheetAction("Save to a file", Icons.Rounded.Save, subtitle = "Choose where it goes") {
+                SheetAction(stringResource(R.string.terminalscreen_save_to_a_file), Icons.Rounded.Save, subtitle = stringResource(R.string.terminalscreen_choose_where_it_goes)) {
                     scrollbackSheet = false
                     saveScrollback.launch(Scrollback.fileName(session.label))
                 },
@@ -1019,7 +1021,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     if (switcher) {
         ActionSheet(
             onDismiss = { switcher = false },
-            title = "Sessions",
+            title = stringResource(R.string.terminalscreen_sessions),
             actions = sessions.map { s ->
                 val st = s.state.value
                 SheetAction(
@@ -1034,16 +1036,16 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                     },
                 ) { switcher = false; if (s.id != sessionId) open(s.id) }
             } + listOfNotNull(
-                SheetAction("Rename", Icons.Rounded.Edit, subtitle = "What this session is called in the strip") {
+                SheetAction(stringResource(R.string.terminalscreen_rename), Icons.Rounded.Edit, subtitle = stringResource(R.string.terminalscreen_what_this_session_is_called_in_the_strip)) {
                     switcher = false
                     renaming = session
                 },
-                SheetAction("New local shell", Icons.Rounded.Add) {
+                SheetAction(stringResource(R.string.terminalscreen_new_local_shell), Icons.Rounded.Add) {
                     switcher = false
                     open(app.sessions.openLocal(view.gridCols.coerceAtLeast(20), view.gridRows.coerceAtLeast(5)).id)
                 },
                 session.host?.let { h ->
-                    SheetAction("New session to ${h.displayName}", Icons.Rounded.Add) {
+                    SheetAction(stringResource(R.string.terminalscreen_new_session_to, h.displayName), Icons.Rounded.Add) {
                         switcher = false
                         open(app.sessions.openSsh(h, view.gridCols.coerceAtLeast(20), view.gridRows.coerceAtLeast(5)).id)
                     }
@@ -1058,10 +1060,10 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         val others = live.filter { it.id != sessionId }
         ActionSheet(
             onDismiss = { splitPicker = false },
-            title = "Show beside this one",
+            title = stringResource(R.string.terminalscreen_show_beside_this_one),
             actions = listOfNotNull(
                 session.host?.let { h ->
-                    SheetAction("Files", Icons.Rounded.Folder, subtitle = h.displayName) {
+                    SheetAction(stringResource(R.string.terminalscreen_files), Icons.Rounded.Folder, subtitle = h.displayName) {
                         splitPicker = false
                         Workspace.openFiles(sessionId)
                         Workspace.beside = Pane.Files(sessionId)
@@ -1070,7 +1072,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 // Watching the load while the command that is moving it runs in
                 // the other half is the whole reason this pane can be split.
                 session.host?.let { h ->
-                    SheetAction("Server", Icons.Rounded.Speed, subtitle = h.displayName) {
+                    SheetAction(stringResource(R.string.terminalscreen_server), Icons.Rounded.Speed, subtitle = h.displayName) {
                         splitPicker = false
                         Workspace.openServer(sessionId)
                         Workspace.beside = Pane.Server(sessionId)
@@ -1082,7 +1084,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                     Workspace.beside = Pane.Term(s.id)
                 }
             } + others.filter { it.host != null }.map { s ->
-                SheetAction("Files · ${s.label}", Icons.Rounded.Folder, subtitle = s.host?.target) {
+                SheetAction(stringResource(R.string.terminalscreen_files_fmt, s.label), Icons.Rounded.Folder, subtitle = s.host?.target) {
                     splitPicker = false
                     Workspace.openFiles(s.id)
                     Workspace.beside = Pane.Files(s.id)
@@ -1096,14 +1098,14 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             actions = menuGroup(
                 "Session",
                 sessions.count { !it.isFinished }.takeIf { it > 1 }?.let { live ->
-                    SheetAction("Sessions", Icons.Rounded.Layers, subtitle = "$live open") { menu = false; switcher = true }
+                    SheetAction(stringResource(R.string.terminalscreen_sessions), Icons.Rounded.Layers, subtitle = stringResource(R.string.terminalscreen_open, live)) { menu = false; switcher = true }
                 },
                 // A second terminal on this host is usually wanted for the work
                 // already in front of you, and walking it back down the tree by
                 // hand is the part worth skipping.
                 cwd?.takeIf { WorkingDirectory.isUsable(it) }?.let { where ->
                     session.host?.let { h ->
-                        SheetAction("New session here", Icons.Rounded.Terminal, subtitle = dir) {
+                        SheetAction(stringResource(R.string.terminalscreen_new_session_here), Icons.Rounded.Terminal, subtitle = dir) {
                             menu = false
                             view.hideKeyboard()
                             val fresh = app.sessions.openSsh(
@@ -1118,29 +1120,29 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 },
                 recording.let { rec ->
                     if (rec == null) {
-                        SheetAction("Record session", Icons.Rounded.FiberManualRecord, subtitle = settings.recordingFormat.help) {
+                        SheetAction(stringResource(R.string.terminalscreen_record_session), Icons.Rounded.FiberManualRecord, subtitle = settings.recordingFormat.help) {
                             menu = false; toggleRecording()
                         }
                     } else {
-                        SheetAction("Stop recording", Icons.Rounded.StopCircle, subtitle = "${humanBytes(rec.bytes())} written so far") {
+                        SheetAction(stringResource(R.string.terminalscreen_stop_recording), Icons.Rounded.StopCircle, subtitle = stringResource(R.string.terminalscreen_written_so_far, humanBytes(rec.bytes()))) {
                             menu = false; toggleRecording()
                         }
                     }
                 },
-                SheetAction("Float this terminal", Icons.Rounded.PictureInPictureAlt, subtitle = "Keeps it in view while you use another app") {
+                SheetAction(stringResource(R.string.terminalscreen_float_this_terminal), Icons.Rounded.PictureInPictureAlt, subtitle = stringResource(R.string.terminalscreen_keeps_it_in_view_while_you_use_another_app)) {
                     menu = false
                     view.hideKeyboard()
-                    if (!Pip.float(context)) Toast.makeText(context, "This device cannot float a window", Toast.LENGTH_SHORT).show()
+                    if (!Pip.float(context)) Toast.makeText(context, context.getString(R.string.terminalscreen_this_device_cannot_float_a_window), Toast.LENGTH_SHORT).show()
                 },
                 session.host?.let {
-                    SheetAction("Port forwards", Icons.Rounded.SwapHoriz) {
+                    SheetAction(stringResource(R.string.terminalscreen_port_forwards), Icons.Rounded.SwapHoriz) {
                         menu = false; view.hideKeyboard(); nav.navigate(Routes.forwards(sessionId))
                     }
                 },
                 // A session opened from the search field or a link is to a host
                 // nothing knows about yet; this is where it stops being one-off.
                 session.host?.takeIf { app.store.host(it.id) == null }?.let { h ->
-                    SheetAction("Save host", Icons.Rounded.Add, subtitle = "Keep ${h.target} in the host list") {
+                    SheetAction(stringResource(R.string.terminalscreen_save_host), Icons.Rounded.Add, subtitle = stringResource(R.string.terminalscreen_keep_in_the_host_list, h.target)) {
                         menu = false
                         App.hostDraft = h
                         nav.navigate(Routes.hostEdit("new"))
@@ -1149,7 +1151,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 // The connection drawer is gone by the time most people read a
                 // banner properly, and a login URL in one may still be wanted.
                 banner?.takeIf { settings.showAuthBanners }?.let {
-                    SheetAction("Server message", Icons.Rounded.Campaign, subtitle = "What the server printed before login") {
+                    SheetAction(stringResource(R.string.terminalscreen_server_message), Icons.Rounded.Campaign, subtitle = stringResource(R.string.terminalscreen_what_the_server_printed_before_login)) {
                         menu = false; serverMessage = true
                     }
                 },
@@ -1163,86 +1165,86 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 },
             ) + menuGroup(
                 "View",
-                SheetAction("Search scrollback", Icons.Rounded.Search) { menu = false; searching = true },
+                SheetAction(stringResource(R.string.terminalscreen_search_scrollback), Icons.Rounded.Search) { menu = false; searching = true },
                 // Only a shell that marks its prompts has these; see the
                 // README on OSC 133.
-                SheetAction("Previous prompt", Icons.Rounded.KeyboardArrowUp, subtitle = "Back up to where the last command was typed") {
+                SheetAction(stringResource(R.string.terminalscreen_previous_prompt), Icons.Rounded.KeyboardArrowUp, subtitle = stringResource(R.string.terminalscreen_back_up_to_where_the_last_command_was_typed)) {
                     menu = false
-                    if (!jumpToPrompt(previous = true)) Toast.makeText(context, "No prompt further up", Toast.LENGTH_SHORT).show()
+                    if (!jumpToPrompt(previous = true)) Toast.makeText(context, context.getString(R.string.terminalscreen_no_prompt_further_up), Toast.LENGTH_SHORT).show()
                 }.takeIf { marksPrompts },
-                SheetAction("Next prompt", Icons.Rounded.KeyboardArrowDown) {
+                SheetAction(stringResource(R.string.terminalscreen_next_prompt), Icons.Rounded.KeyboardArrowDown) {
                     menu = false
-                    if (!jumpToPrompt(previous = false)) Toast.makeText(context, "No prompt further down", Toast.LENGTH_SHORT).show()
+                    if (!jumpToPrompt(previous = false)) Toast.makeText(context, context.getString(R.string.terminalscreen_no_prompt_further_down), Toast.LENGTH_SHORT).show()
                 }.takeIf { marksPrompts },
-                SheetAction("Share the scrollback", Icons.Rounded.Share, subtitle = "The whole buffer as plain text") {
+                SheetAction(stringResource(R.string.terminalscreen_share_the_scrollback), Icons.Rounded.Share, subtitle = stringResource(R.string.terminalscreen_the_whole_buffer_as_plain_text)) {
                     menu = false; scrollbackSheet = true
                 },
                 session.host?.let {
-                    SheetAction("Server", Icons.Rounded.Speed, subtitle = "Load, memory, disks and what is running") {
+                    SheetAction(stringResource(R.string.terminalscreen_server), Icons.Rounded.Speed, subtitle = stringResource(R.string.terminalscreen_load_memory_disks_and_what_is_running)) {
                         menu = false
                         view.hideKeyboard()
                         nav.navigate(Routes.server(sessionId))
                     }
                 },
                 if (Workspace.beside == null) {
-                    SheetAction("Split screen", Icons.Rounded.Splitscreen, subtitle = "Work in two panes at once") {
+                    SheetAction(stringResource(R.string.terminalscreen_split_screen), Icons.Rounded.Splitscreen, subtitle = stringResource(R.string.terminalscreen_work_in_two_panes_at_once)) {
                         menu = false; splitPicker = true
                     }
                 } else {
-                    SheetAction("Close the second pane", Icons.Rounded.Splitscreen) { menu = false; Workspace.closeBeside() }
+                    SheetAction(stringResource(R.string.terminalscreen_close_the_second_pane), Icons.Rounded.Splitscreen) { menu = false; Workspace.closeBeside() }
                 },
                 Workspace.beside?.let {
                     val stacked = splitStacked()
                     SheetAction(
-                        if (stacked) "Put the panes side by side" else "Put one pane above the other",
+                        if (stacked) stringResource(R.string.terminalscreen_put_the_panes_side_by_side) else stringResource(R.string.terminalscreen_put_one_pane_above_the_other),
                         Icons.Rounded.SwapHoriz,
                     ) { menu = false; Workspace.stacked = !stacked }
                 },
                 // Mosh has left SSH behind and has no channel to ask over, so
                 // there is nothing to list; the chords still work there.
                 session.host?.takeIf { it.usesTmuxControls(settings) && !it.mosh }?.let {
-                    SheetAction("tmux windows", Icons.Rounded.Tab, subtitle = "Switch to a window on the other end") {
+                    SheetAction(stringResource(R.string.terminalscreen_tmux_windows), Icons.Rounded.Tab, subtitle = stringResource(R.string.terminalscreen_switch_to_a_window_on_the_other_end)) {
                         menu = false; tmuxWindows = true
                     }
                 },
-                SheetAction("Recordings", Icons.Rounded.Movie, subtitle = "Play back a recorded session") {
+                SheetAction(stringResource(R.string.terminalscreen_recordings), Icons.Rounded.Movie, subtitle = stringResource(R.string.terminalscreen_play_back_a_recorded_session)) {
                     menu = false
                     view.hideKeyboard()
                     nav.navigate(Routes.RECORDINGS)
                 },
             ) + menuGroup(
                 "Type",
-                SheetAction("Compose a line", Icons.Rounded.EditNote, subtitle = "Write it with autocorrect and voice, then send the lot") {
+                SheetAction(stringResource(R.string.terminalscreen_compose_a_line), Icons.Rounded.EditNote, subtitle = stringResource(R.string.terminalscreen_write_it_with_autocorrect_and_voice_then_send_th)) {
                     menu = false; softKeys = false; compose.open = true
                 },
                 other?.let {
                     SheetAction(
-                        "Type in both panes",
+                        stringResource(R.string.terminalscreen_type_in_both_panes),
                         Icons.Rounded.Keyboard,
-                        subtitle = if (Workspace.broadcast) "On: keys go to this terminal and the one beside it" else "Send what you type to the other terminal as well",
+                        subtitle = if (Workspace.broadcast) stringResource(R.string.terminalscreen_on_keys_go_to_this_terminal_and_the_one_beside_i) else stringResource(R.string.terminalscreen_send_what_you_type_to_the_other_terminal_as_well),
                     ) { menu = false; Workspace.broadcast = !Workspace.broadcast }
                 },
                 session.host?.let {
-                    SheetAction("Insert a file", Icons.Rounded.AttachFile, subtitle = "Sends it to ${settings.terminalUploadDir} and types the path") {
+                    SheetAction(stringResource(R.string.terminalscreen_insert_a_file), Icons.Rounded.AttachFile, subtitle = stringResource(R.string.terminalscreen_sends_it_to_and_types_the_path, settings.terminalUploadDir)) {
                         menu = false
                         pickToInsert.launch(arrayOf("*/*"))
                     }
                 },
-                SheetAction("Paste", Icons.Rounded.ContentPaste) { menu = false; view.paste() },
-                SheetAction("Select all", Icons.Rounded.SelectAll) { menu = false; view.selectAll() },
+                SheetAction(stringResource(R.string.terminalscreen_paste), Icons.Rounded.ContentPaste) { menu = false; view.paste() },
+                SheetAction(stringResource(R.string.terminalscreen_select_all), Icons.Rounded.SelectAll) { menu = false; view.selectAll() },
                 // The output between the last two marks, however far up the
                 // scrollback it starts and whether or not it has finished.
-                SheetAction("Copy the last output", Icons.Rounded.ContentCopy, subtitle = "Everything the last command printed") {
+                SheetAction(stringResource(R.string.terminalscreen_copy_the_last_output), Icons.Rounded.ContentCopy, subtitle = stringResource(R.string.terminalscreen_everything_the_last_command_printed)) {
                     menu = false
-                    if (!copyLastOutput()) Toast.makeText(context, "The last command printed nothing", Toast.LENGTH_SHORT).show()
+                    if (!copyLastOutput()) Toast.makeText(context, context.getString(R.string.terminalscreen_the_last_command_printed_nothing), Toast.LENGTH_SHORT).show()
                 }.takeIf { marksPrompts },
-                SheetAction("Snippets", Icons.Rounded.AutoAwesome) { menu = false; snippets = true },
+                SheetAction(stringResource(R.string.terminalscreen_snippets), Icons.Rounded.AutoAwesome) { menu = false; snippets = true },
                 // A control byte rather than a keypress, unless the setting says
                 // otherwise: see Settings.rawControlKeys for why the faithful
                 // encoding is the wrong answer here.
-                SheetAction("Send Ctrl+C", null) { menu = false; view.sendKey(KeyCode.Char('c'.code.toUInt()), ctrl = true) },
-                SheetAction("Send Ctrl+D", null) { menu = false; view.sendKey(KeyCode.Char('d'.code.toUInt()), ctrl = true) },
-                SheetAction("Hide keyboard", Icons.Rounded.KeyboardHide) { menu = false; view.hideKeyboard() },
+                SheetAction(stringResource(R.string.terminalscreen_send_ctrl_c), null) { menu = false; view.sendKey(KeyCode.Char('c'.code.toUInt()), ctrl = true) },
+                SheetAction(stringResource(R.string.terminalscreen_send_ctrl_d), null) { menu = false; view.sendKey(KeyCode.Char('d'.code.toUInt()), ctrl = true) },
+                SheetAction(stringResource(R.string.terminalscreen_hide_keyboard), Icons.Rounded.KeyboardHide) { menu = false; view.hideKeyboard() },
             ),
         )
     }
@@ -1288,7 +1290,7 @@ private fun PromptChevrons(onJump: (Boolean) -> Unit, modifier: Modifier = Modif
             ) {
                 Icon(
                     icon,
-                    if (previous) "Previous prompt" else "Next prompt",
+                    if (previous) stringResource(R.string.terminalscreen_previous_prompt) else stringResource(R.string.terminalscreen_next_prompt),
                     Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.inverseOnSurface,
                 )
@@ -1333,7 +1335,7 @@ private fun LinkChip(
                     Text(if (l.isUrl) "Open" else "Files")
                 }
             }
-            TextButton(onClick = { onCopy(l) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.inversePrimary)) { Text("Copy") }
+            TextButton(onClick = { onCopy(l) }, colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.inversePrimary)) { Text(stringResource(R.string.terminalscreen_copy)) }
         }
     }
 }

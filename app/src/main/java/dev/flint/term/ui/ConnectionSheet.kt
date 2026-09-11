@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -71,7 +73,7 @@ fun ConnectionSheet(
             Text(
                 when {
                     connecting -> "Connecting"
-                    failed != null -> "Connection ended"
+                    failed != null -> stringResource(R.string.connectionsheet_connection_ended)
                     else -> "Connection"
                 },
                 style = MaterialTheme.typography.titleLarge,
@@ -91,7 +93,7 @@ fun ConnectionSheet(
             Spacer(Modifier.height(18.dp))
             if (steps.isEmpty()) {
                 Text(
-                    "Nothing to show. This session did not have to go through anything.",
+                    stringResource(R.string.connectionsheet_nothing_to_show_this_session_did_not_have_to_go),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -115,7 +117,7 @@ fun ConnectionSheet(
                 StepRow(step.text, status, showLine = !last)
             }
             failed?.let { s ->
-                val why = s.error ?: s.exitCode?.let { "exit code $it" }
+                val why = s.error ?: s.exitCode?.let { stringResource(R.string.connectionsheet_exit_code, it) }
                 if (why != null) {
                     Spacer(Modifier.height(14.dp))
                     SelectionContainer {
@@ -149,7 +151,7 @@ fun ServerMessage(text: String, modifier: Modifier = Modifier) {
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
         Text(
-            "Message from the server",
+            stringResource(R.string.connectionsheet_message_from_the_server),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

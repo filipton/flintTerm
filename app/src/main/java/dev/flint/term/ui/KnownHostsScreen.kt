@@ -1,5 +1,7 @@
 package dev.flint.term.ui
 
+import dev.flint.term.R
+import androidx.compose.ui.res.stringResource
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.widget.Toast
@@ -58,19 +60,19 @@ fun KnownHostsScreen(nav: NavController) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             AppHeader(
-                title = "Trusted host keys",
-                subtitle = "${known.size} server${if (known.size == 1) "" else "s"}",
+                title = stringResource(R.string.knownhostsscreen_trusted_host_keys),
+                subtitle = stringResource(R.string.knownhostsscreen_server, known.size, if (known.size == 1) "" else "s"),
                 onBack = { nav.popBackStack() },
-                actions = { if (known.isNotEmpty()) IconButton(onClick = { confirmAll = true }) { Icon(Icons.Rounded.Delete, "Forget all") } },
+                actions = { if (known.isNotEmpty()) IconButton(onClick = { confirmAll = true }) { Icon(Icons.Rounded.Delete, stringResource(R.string.knownhostsscreen_forget_all)) } },
             )
         },
     ) { padding ->
         LazyColumn(state = rememberScreenListState("knownhosts"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
             if (known.isEmpty()) {
-                item { EmptyState(Icons.Rounded.Security, "Nothing trusted yet", "Server keys are stored here after you accept them on first connection. If a key changes later you are warned.") }
+                item { EmptyState(Icons.Rounded.Security, stringResource(R.string.knownhostsscreen_nothing_trusted_yet), stringResource(R.string.knownhostsscreen_server_keys_are_stored_here_after_you_accept_the)) }
             } else {
                 if (known.size > 6) {
-                    item { Field(query, { query = it }, "Search host or fingerprint", Modifier.padding(horizontal = 16.dp, vertical = 6.dp), leading = { Icon(Icons.Rounded.Search, null) }) }
+                    item { Field(query, { query = it }, stringResource(R.string.knownhostsscreen_search_host_or_fingerprint), Modifier.padding(horizontal = 16.dp, vertical = 6.dp), leading = { Icon(Icons.Rounded.Search, null) }) }
                 }
                 item {
                     Group {
@@ -90,7 +92,7 @@ fun KnownHostsScreen(nav: NavController) {
                 }
                 item {
                     Text(
-                        "Forgetting a key means the next connection asks you to verify the fingerprint again.",
+                        stringResource(R.string.knownhostsscreen_forgetting_a_key_means_the_next_connection_asks),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 32.dp, vertical = 14.dp),
                     )
@@ -105,11 +107,11 @@ fun KnownHostsScreen(nav: NavController) {
             title = titleFor(k),
             subtitle = "${k.keyType}  ${k.fingerprint}",
             actions = listOf(
-                SheetAction("Copy fingerprint", Icons.Rounded.ContentCopy) {
+                SheetAction(stringResource(R.string.knownhostsscreen_copy_fingerprint), Icons.Rounded.ContentCopy) {
                     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("fingerprint", k.fingerprint))
-                    Toast.makeText(context, "Fingerprint copied", Toast.LENGTH_SHORT).show(); detail = null
+                    Toast.makeText(context, context.getString(R.string.knownhostsscreen_fingerprint_copied), Toast.LENGTH_SHORT).show(); detail = null
                 },
-                SheetAction("Copy known_hosts line", Icons.Rounded.ContentCopy, subtitle = "Paste into ~/.ssh/known_hosts elsewhere") {
+                SheetAction(stringResource(R.string.knownhostsscreen_copy_known_hosts_line), Icons.Rounded.ContentCopy, subtitle = stringResource(R.string.knownhostsscreen_paste_into_ssh_known_hosts_elsewhere)) {
                     // A hashed entry copies out as its hash, which is the host field OpenSSH itself wrote.
                     val hostPart = when {
                         k.isHashed -> k.identity
@@ -119,17 +121,17 @@ fun KnownHostsScreen(nav: NavController) {
                     context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("known_hosts", "$hostPart ${k.keyType} ${k.keyBase64}"))
                     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show(); detail = null
                 },
-                SheetAction("Forget this key", Icons.Rounded.Delete, danger = true) { app.store.forgetHostKey(k); detail = null },
+                SheetAction(stringResource(R.string.knownhostsscreen_forget_this_key), Icons.Rounded.Delete, danger = true) { app.store.forgetHostKey(k); detail = null },
             ),
         )
     }
     if (confirmAll) {
         AlertDialog(
             onDismissRequest = { confirmAll = false },
-            title = { Text("Forget all host keys?") },
-            text = { Text("Every server will ask you to verify its fingerprint again on the next connection.") },
-            confirmButton = { Button(onClick = { known.forEach { app.store.forgetHostKey(it) }; confirmAll = false }) { Text("Forget all") } },
-            dismissButton = { TextButton(onClick = { confirmAll = false }) { Text("Cancel") } },
+            title = { Text(stringResource(R.string.knownhostsscreen_forget_all_host_keys)) },
+            text = { Text(stringResource(R.string.knownhostsscreen_every_server_will_ask_you_to_verify_its_fingerpr)) },
+            confirmButton = { Button(onClick = { known.forEach { app.store.forgetHostKey(it) }; confirmAll = false }) { Text(stringResource(R.string.knownhostsscreen_forget_all)) } },
+            dismissButton = { TextButton(onClick = { confirmAll = false }) { Text(stringResource(R.string.knownhostsscreen_cancel)) } },
         )
     }
 }
