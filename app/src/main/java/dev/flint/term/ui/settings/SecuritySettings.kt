@@ -62,7 +62,7 @@ fun SecuritySettings(nav: NavController) {
         Group("Privacy") {
             GroupRow(
                 title = "Block screenshots",
-                subtitle = "Stops Android capturing the app, the recents thumbnail included",
+                subtitle = "Stops Android taking screenshots of the app, including the preview in recent apps",
                 icon = Icons.Rounded.Visibility,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.blockScreenshots,
@@ -73,7 +73,7 @@ fun SecuritySettings(nav: NavController) {
         Group("Servers") {
             GroupRow(
                 title = "Trusted host keys",
-                subtitle = "The server keys this phone has accepted, and forgetting one",
+                subtitle = "The server keys this phone has accepted. You can remove one here",
                 icon = Icons.Rounded.VerifiedUser,
                 iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { nav.navigate(Routes.KNOWN_HOSTS) },

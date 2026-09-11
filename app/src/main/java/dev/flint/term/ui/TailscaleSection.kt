@@ -66,7 +66,7 @@ private fun statusLine(p: TailscaleProfile, st: TailscaleStatus): Pair<String, a
     st.state == "needs-login" -> "Waiting for login" to Status.busy
     st.state == "error" -> "Error: ${st.error ?: "unknown"}" to MaterialTheme.colorScheme.error
     // Idle is the normal resting state: the node comes up when a host needs it.
-    p.joined -> "Idle — starts when a host needs it" to MaterialTheme.colorScheme.onSurfaceVariant
+    p.joined -> "Idle, starts when a host needs it" to MaterialTheme.colorScheme.onSurfaceVariant
     else -> "Not joined to a tailnet yet" to Status.busy
 }
 
@@ -110,7 +110,7 @@ fun TailscaleSection(onOpen: (TailscaleProfile) -> Unit) {
     if (profiles.isEmpty()) {
         EmptyState(
             Icons.Rounded.Hub, "No Tailscale accounts yet",
-            "Add one and this app becomes a machine on your tailnet — hosts can then be dialled by MagicDNS name, with no system VPN. Several accounts can be added; each is its own machine.",
+            "Add one and this app becomes a machine on your tailnet. Hosts can then be reached by MagicDNS name, with no system VPN. You can add several accounts, and each is its own machine.",
         )
         return
     }
@@ -196,7 +196,7 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
 
             if (!p.joined) {
                 Text(
-                    "This account is not on a tailnet yet. Log in with your browser, or paste a pre-auth key — either way it only has to happen once.",
+                    "This account is not on a tailnet yet. Log in with your browser, or paste a pre-auth key. Either way it only has to happen once.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -257,7 +257,7 @@ fun TailscaleSheet(profile: TailscaleProfile, nav: NavController, onDismiss: () 
                 if (st.state != "running") {
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Connecting is only needed to browse the tailnet from here; a host that uses this account brings the node up on its own.",
+                        "Connecting is only needed to browse the tailnet from here. A host that uses this account brings the node up on its own.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

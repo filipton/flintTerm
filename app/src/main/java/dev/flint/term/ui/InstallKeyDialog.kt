@@ -99,7 +99,7 @@ fun InstallKeyDialog(raw: Host, preselected: Identity? = null, onDismiss: () -> 
                 )
                 GroupRow(
                     title = identity?.name ?: "Choose a key",
-                    subtitle = identity?.fingerprint ?: "No keys yet — generate one in Keys",
+                    subtitle = identity?.fingerprint ?: "No keys yet. Generate one in Keys",
                     subtitleMono = identity != null,
                     icon = Icons.Rounded.Key,
                     onClick = { if (identities.size > 1) pickKey = true },
@@ -113,7 +113,7 @@ fun InstallKeyDialog(raw: Host, preselected: Identity? = null, onDismiss: () -> 
                     )
                 } else {
                     Text(
-                        "Connects the way this host is set up now (${host.authType.name.lowercase()}) — handy for adding a second key.",
+                        "Connects the way this host is set up now (${host.authType.name.lowercase()}). Useful for adding a second key.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }

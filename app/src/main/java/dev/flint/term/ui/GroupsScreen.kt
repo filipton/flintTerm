@@ -81,7 +81,7 @@ fun GroupsScreen(nav: NavController) {
                     EmptyState(
                         Icons.Rounded.Folder,
                         "No groups yet",
-                        "A group files hosts together and carries what they share — a jump host, a VPN, a proxy, an account. Hosts you give a group to appear here.",
+                        "A group files hosts together and carries what they share: a jump host, a VPN, a proxy, an account. Hosts you give a group to appear here.",
                     )
                 }
             }

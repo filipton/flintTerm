@@ -37,7 +37,7 @@ fun FilesSettings(nav: NavController) {
                     app.store.updateSettings { it.copy(editor = EditorChoice.entries[i]) }
                 }
                 Text(
-                    "Anything the built-in editor will not open — too large, or not text — is still handed to another app.",
+                    "Anything the built-in editor will not open, because it is too large or not text, is handed to another app.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -63,7 +63,7 @@ fun FilesSettings(nav: NavController) {
                     "Where files dropped on the terminal go",
                     mono = true,
                     placeholder = "/tmp",
-                    hint = "Dropping a file on the terminal, or inserting one from the menu, sends it here and types the path",
+                    hint = "Dropping a file on the terminal, or inserting one from the menu, uploads it here and types the path.",
                 )
             }
         }

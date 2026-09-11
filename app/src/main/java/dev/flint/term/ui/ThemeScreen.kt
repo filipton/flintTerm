@@ -241,7 +241,7 @@ fun ThemePicker(
             }
             if (sections.isEmpty()) {
                 item(key = "none") {
-                    EmptyState(Icons.Rounded.Search, "No scheme called \"${query.trim()}\"", "Names are all there is to search; try a shorter one.")
+                    EmptyState(Icons.Rounded.Search, "No scheme called \"${query.trim()}\"", "Names are all there is to search. Try a shorter one.")
                 }
             }
             sections.forEach { section ->

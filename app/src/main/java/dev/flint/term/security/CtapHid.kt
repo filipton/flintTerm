@@ -124,7 +124,7 @@ object CtapHid {
         0x04 -> "The security key lost part of the request."
         0x05 -> "The security key stopped answering."
         0x06 -> "The security key is busy with another app."
-        0x0B -> "The security key closed the channel — unplug it and plug it back in."
+        0x0B -> "The security key closed the channel. Unplug it and plug it back in."
         else -> "The security key reported HID error 0x%02x.".format(code)
     }
 

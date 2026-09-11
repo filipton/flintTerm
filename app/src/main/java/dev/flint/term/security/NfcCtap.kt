@@ -82,7 +82,7 @@ object NfcCtap {
     /** What a status word other than success means, where it is worth saying. */
     fun statusMessage(status: Int): String = when (status) {
         0x6A82 -> "This card answered, but it is not a security key."
-        0x6982, 0x6985 -> "The security key would not run that — hold it still against the phone."
+        0x6982, 0x6985 -> "The security key would not run that. Hold it still against the phone."
         0x6700 -> "The security key rejected the length of the request."
         0x6D00 -> "This security key does not speak FIDO2 over NFC."
         else -> "The security key answered with status 0x%04X.".format(status)
@@ -149,7 +149,7 @@ class NfcCtapTransport(private val channel: ApduChannel) : CtapTransport {
     private fun send(apdu: ByteArray): ByteArray = try {
         channel.transceive(apdu)
     } catch (e: Exception) {
-        throw CtapException("The security key was moved away — hold it against the back of the phone until it is done.", recoverable = true)
+        throw CtapException("The security key was moved away. Hold it against the back of the phone until it is done.", recoverable = true)
     }
 }
 

@@ -91,7 +91,7 @@ fun ConnectionSheet(
             Spacer(Modifier.height(18.dp))
             if (steps.isEmpty()) {
                 Text(
-                    "Nothing to show — this session did not have to go through anything.",
+                    "Nothing to show. This session did not have to go through anything.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

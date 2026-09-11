@@ -231,7 +231,7 @@ fun HostsScreen(nav: NavController) {
                     Group {
                         GroupRow(
                             title = "Connect to ${target.target}",
-                            subtitle = "Not saved — the session can save it afterwards",
+                            subtitle = "Not saved. The session can save it afterwards",
                             icon = Icons.Rounded.Bolt,
                             iconTint = MaterialTheme.colorScheme.tertiary,
                             onClick = { query = ""; connect(target) },
@@ -433,7 +433,7 @@ fun HostsScreen(nav: NavController) {
                 if (host.wol.enabled) SheetAction(
                     "Wake up",
                     Icons.Rounded.Bolt,
-                    subtitle = "Send the magic packet — " + dev.flint.term.session.Wol.decide(host, host.jumpHostId != null).reason,
+                    subtitle = "Send the magic packet. " + dev.flint.term.session.Wol.decide(host, host.jumpHostId != null).reason,
                 ) {
                     sheetHost = null
                     val jump = host.jumpHostId?.let { id -> hosts.firstOrNull { it.id == id } }

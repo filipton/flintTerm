@@ -751,7 +751,7 @@ class SessionManager(
             if (waitingForTailnet) {
                 val up = ts!!.awaitUp(tailscaleId!!)
                 if (session.destroyed) return@launch
-                if (!up) runCatching { session.core.note("Tailscale is not up; trying anyway") }
+                if (!up) runCatching { session.core.note("Tailscale is not up, trying anyway") }
             }
             // The knock is the last thing before the dial on purpose: it opens
             // the firewall for a moment, and anything waited for after it would

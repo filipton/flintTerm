@@ -229,7 +229,7 @@ fun EditorScreen(nav: NavController, sessionId: String, path: String) {
                 oversized -> EmptyState(
                     Icons.Rounded.OpenInNew,
                     "Too large to edit here",
-                    "$name is ${humanBytes(entry?.size?.toLong() ?: 0)}. The editor stops at 2 MB so typing stays quick; another app can take it from here.",
+                    "$name is ${humanBytes(entry?.size?.toLong() ?: 0)}. The editor stops at 2 MB so typing stays quick. Another app can open it instead.",
                     actionLabel = "Open in…",
                     onAction = { entry?.let { ExternalEdit.open(context, app.transfers, session, it, edit = true) { m -> toast(m) } } },
                 )

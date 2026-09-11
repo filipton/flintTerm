@@ -181,7 +181,7 @@ fun KeysScreen(nav: NavController) {
                 item {
                     EmptyState(
                         Icons.Rounded.VpnKey, "No keys yet",
-                        "Generate a key on this device — the private half never leaves it — import an existing OpenSSH / PEM key, or add a security key you plug in or tap.",
+                        "Generate a key on this device, where the private half never leaves it. You can also import an OpenSSH or PEM key, or add a security key you plug in or tap.",
                         "Add a key",
                     ) { showAdd = true }
                 }
@@ -276,7 +276,7 @@ fun KeysScreen(nav: NavController) {
                         Text(
                             "The private half is on the security key, not on this phone. Every login asks you to " +
                                 "${if (SecurityKeyIdentity.transportOf(id) == KeyTransport.NFC) "hold the key to the back of the phone" else "plug the key in"} " +
-                                "and touch it. Lose the key and this identity is gone — keep a second key authorized on your servers.",
+                                "and touch it. If you lose the key this identity is gone, so keep a second key authorized on your servers.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
@@ -291,7 +291,7 @@ fun KeysScreen(nav: NavController) {
                         Spacer(Modifier.width(10.dp))
                         Text(
                             if (id.requireAuth) {
-                                "Every signature asks for your fingerprint, face or screen lock. The keystore decided that when the key was made, so it cannot be turned off — make another key without it instead."
+                                "Every signature asks for your fingerprint, face or screen lock. The keystore decided that when the key was made, so it cannot be turned off. Make another key without it instead."
                             } else {
                                 "Signs without asking. Only a key generated with “Ask before every use” can require it, and that cannot be added afterwards."
                             },
@@ -396,10 +396,10 @@ fun KeysScreen(nav: NavController) {
                     when (alg) {
                         0 -> "Modern, fast and small. Use this unless the server is very old."
                         1 -> "NIST P-256. Broad compatibility."
-                        2 -> "Largest keys; works with legacy servers."
+                        2 -> "Largest keys. Works with older servers."
                         // The honest trade: safest against a stolen phone, and
                         // impossible to move to another one.
-                        else -> "Made inside this device's keystore and never readable by this app — not by a backup or a sync either. It cannot leave this phone, so give each device its own and authorise them all on the server. ECDSA P-256, the only kind the keystore does."
+                        else -> "Made inside this device's keystore and never readable by this app, a backup or a sync. It cannot leave this phone, so give each device its own key and authorise them all on the server. ECDSA P-256, the only kind the keystore makes."
                     },
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -452,7 +452,7 @@ fun KeysScreen(nav: NavController) {
                                         withContext(Dispatchers.Main) {
                                             Toast.makeText(
                                                 context,
-                                                "This device cannot bind a key to your fingerprint — set up a screen lock first. The key was made without it.",
+                                                "This device cannot tie a key to your fingerprint. Set up a screen lock first. The key was made without it.",
                                                 Toast.LENGTH_LONG,
                                             ).show()
                                         }
@@ -527,13 +527,13 @@ fun KeysScreen(nav: NavController) {
             Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("Certificate for ${id.name}", style = MaterialTheme.typography.titleLarge)
                 Text(
-                    "Paste the certificate your CA issued for this key — a single line ending in -cert-v01@openssh.com. Servers that trust the CA then let this key in without ever having seen it, until the certificate expires.",
+                    "Paste the certificate your CA issued for this key. It is a single line ending in -cert-v01@openssh.com. Servers that trust the CA then accept this key without having seen it before, until the certificate expires.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Field(
                     certText, { certText = it }, "Certificate",
                     mono = true, singleLine = false, minLines = 3,
-                    error = error ?: parsed?.let { if (it.host) "that is a host certificate — it identifies a server, not you" else null },
+                    error = error ?: parsed?.let { if (it.host) "that is a host certificate, which identifies a server and not you" else null },
                 )
                 OutlinedButton(onClick = { certPicker.launch(arrayOf("*/*")) }, Modifier.fillMaxWidth()) {
                     Icon(Icons.Rounded.FileOpen, null, Modifier.width(18.dp)); Spacer(Modifier.width(8.dp)); Text("Load from a file…")
@@ -621,7 +621,7 @@ internal fun certPrincipals(info: CertificateInfo): String =
 /** Its validity window, in the terms that matter: is it usable now, and until when. */
 internal fun certValidity(info: CertificateInfo): String = when (info.validity) {
     CertValidity.EXPIRED -> "Expired ${stamp(info.validBefore)}"
-    CertValidity.NOT_YET_VALID -> "Not valid until ${stamp(info.validAfter)} — check this device's clock"
+    CertValidity.NOT_YET_VALID -> "Not valid until ${stamp(info.validAfter)}. Check this device's clock"
     // Certificates issued without an expiry carry a time no calendar can print,
     // and OpenSSH's own "forever" is up there too.
     CertValidity.CURRENT -> if (info.validBefore >= NO_EXPIRY) "No expiry" else "Valid until ${stamp(info.validBefore)}"
@@ -676,7 +676,7 @@ private fun SecurityKeySheet(onDismiss: () -> Unit, onEnrolled: (Identity) -> Un
             Segmented(algorithms.map { it.label }, algorithms.indexOf(algorithm)) { algorithm = algorithms[it] }
             Text(
                 if (algorithm == SecurityKeyAlgorithm.Ed25519) {
-                    "Smaller and faster. Not every key can do it — one that cannot will make an ECDSA key instead and say so."
+                    "Smaller and faster. Not every key supports it, and one that does not will make an ECDSA key instead and tell you."
                 } else {
                     "NIST P-256. Every FIDO2 key can do this one."
                 },

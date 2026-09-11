@@ -284,7 +284,7 @@ class CtapPinTest {
         val info = Ctap.getInfo(transport)
 
         assertTrue(Ctap.unlock(transport, info, CtapPermission.GET_ASSERTION, Ctap.DEFAULT_APPLICATION, asked) != null)
-        assertEquals(listOf(null, "Wrong PIN — 7 attempts left."), asked.problems)
+        assertEquals(listOf(null, "Wrong PIN. 7 attempts left."), asked.problems)
     }
 
     @Test
@@ -293,7 +293,7 @@ class CtapPinTest {
         val transport = HidCtapTransport(FakeHidDevice(token)).apply { open() }
         val asked = Asker("9999", "1234")
         Ctap.unlock(transport, Ctap.getInfo(transport), CtapPermission.GET_ASSERTION, Ctap.DEFAULT_APPLICATION, asked)
-        assertEquals("Wrong PIN — 1 attempt left before the key locks.", asked.problems.last())
+        assertEquals("Wrong PIN. 1 attempt left before the key locks.", asked.problems.last())
     }
 
     /** A token out of attempts is finished, and saying anything softer would be a lie. */

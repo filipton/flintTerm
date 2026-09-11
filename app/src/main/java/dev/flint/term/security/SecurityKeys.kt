@@ -129,7 +129,7 @@ object SecurityKeys {
             Thread.sleep(POLL_MS)
         }
         throw lastFailure
-            ?: CtapException("No security key found — plug one in, or hold it to the back of the phone to use NFC.", recoverable = true)
+            ?: CtapException("No security key found. Plug one in, or hold it to the back of the phone to use NFC.", recoverable = true)
     }
 
     /** The system permission dialog, waited out on this thread. */
@@ -150,7 +150,7 @@ object SecurityKeys {
 
     private fun openNfc(prompt: SecurityKeyPrompt): CtapTransport {
         val activity = App.foregroundActivity
-            ?: throw CtapException("Open flintTerm and try again — NFC only works while the app is on screen.")
+            ?: throw CtapException("Open flintTerm and try again. NFC only works while the app is on screen.")
         val adapter = NfcAdapter.getDefaultAdapter(activity)
             ?: throw CtapException("This phone has no NFC, so a security key has to be plugged in over USB.")
         if (!adapter.isEnabled) {
@@ -223,7 +223,7 @@ class SecurityKeyPrompt(val title: String, val transport: KeyTransport) {
 class SecurityKeyPinRequest(
     /** The token's own name, when the transport knows one. */
     val tokenName: String?,
-    /** What was wrong with the last attempt — "Wrong PIN — 2 attempts left". */
+    /** What was wrong with the last attempt — "Wrong PIN. 2 attempts left". */
     val problem: String?,
 ) {
     private val answered = ArrayBlockingQueue<CharArray>(1)

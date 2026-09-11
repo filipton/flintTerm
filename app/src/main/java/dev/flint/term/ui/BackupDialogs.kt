@@ -116,7 +116,7 @@ fun BackupDialog(onDismiss: () -> Unit) {
                     Column {
                         Text("Include passwords, private keys and tunnel configs", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "Off leaves a file safe to hand to someone else; keys in the phone's keystore never leave it either way",
+                            "Off leaves a file safe to hand to someone else. Keys in the phone's keystore never leave it either way",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }

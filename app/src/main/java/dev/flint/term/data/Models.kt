@@ -598,7 +598,7 @@ enum class AppTheme(val label: String) { SYSTEM("System"), DARK("Dark"), LIGHT("
 /** How hard to work at not spending mobile data. */
 enum class DataSaver(val label: String, val help: String) {
     METERED("On mobile data", "Hold transfers and ease off keepalives when the connection is metered"),
-    ALWAYS("Always", "Ease off keepalives on any connection; transfers still only wait on mobile data"),
+    ALWAYS("Always", "Ease off keepalives on any connection. Transfers still only wait on mobile data"),
     OFF("Off", "Behave the same on any connection"),
 }
 

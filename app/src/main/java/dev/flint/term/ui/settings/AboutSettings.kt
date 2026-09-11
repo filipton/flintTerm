@@ -138,7 +138,7 @@ class BuildFacts private constructor(
             val strongBox = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
                 context.packageManager.hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE)
             val keystore = "Encrypted with a key the Android Keystore holds  ·  " +
-                if (strongBox) "StrongBox available for keys generated on this phone" else "no StrongBox on this phone; keys stay in the trusted environment"
+                if (strongBox) "StrongBox available for keys generated on this phone" else "no StrongBox on this phone, so keys stay in the trusted environment"
 
             val bridge = "Rust core reached through uniffi${v("uniffi")} on tokio${v("tokio")}  ·  Kotlin and Jetpack Compose on top"
             return BuildFacts(build, terminal, ssh, transports, keystore, bridge)

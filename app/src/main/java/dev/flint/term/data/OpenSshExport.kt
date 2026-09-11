@@ -172,12 +172,12 @@ object OpenSshExport {
 
     /** What this host carries that no ssh_config line can express. */
     private fun unsayable(host: Host): List<String> = buildList {
-        if (host.tunnelId != null) add("it is reached through a WireGuard tunnel; bring the tunnel up before connecting")
+        if (host.tunnelId != null) add("it is reached through a WireGuard tunnel, so bring the tunnel up before connecting")
         if (host.tailscaleId != null) add("its address is on a tailnet, so this machine has to be on that tailnet too")
-        if (host.mosh) add("this app runs the session over Mosh; `mosh ${host.hostname}` is the equivalent here")
+        if (host.mosh) add("this app runs the session over Mosh, and `mosh ${host.hostname}` is the equivalent here")
         if (host.wol.enabled) add("it is woken with a wake-on-LAN packet first")
         if (host.knock.enabled) add("a port-knock sequence opens the firewall for it first")
-        if (host.proxyId != null || host.proxy.enabled) add("it is dialed through a saved proxy; ssh needs a ProxyCommand for that")
+        if (host.proxyId != null || host.proxy.enabled) add("it is reached through a saved proxy, and ssh needs a ProxyCommand for that")
         if (host.preConnectCommand.isNotBlank()) add("a command runs on the jump host before it is dialed")
         if (host.persistent) add("this app attaches to tmux on login and reconnects by itself")
         if (host.startupSnippetIds.isNotEmpty()) add("snippets are typed after login, and they are not in this file")
@@ -198,7 +198,7 @@ object OpenSshExport {
             appendLine("# An OpenSSH config for the hosts saved in flintTerm.")
             appendLine("#")
             appendLine("# No secret is in this file and none can be put in one. Passwords are never")
-            appendLine("# written; a key is named only by the path it would have on this machine, so")
+            appendLine("# written. A key is named only by the path it would have on this machine, so")
             appendLine("# put the key there yourself or export the keys alongside this config.")
             if (needKey.isNotEmpty() || needPassword.isNotEmpty() || onDevice.isNotEmpty()) appendLine("#")
             if (needKey.isNotEmpty()) appendLine("# Wants a key at the path named below: ${needKey.joinToString(", ")}")

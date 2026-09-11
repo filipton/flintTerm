@@ -39,16 +39,16 @@ fun AutomationSettings(nav: NavController) {
             if (settings.automation) {
                 Text(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                        "An app that Android names is turned away until you allow it here. Not every caller is " +
-                            "named — adb and some system senders arrive anonymous, and those get through while " +
-                            "this is on. Anything that gets through reaches every saved host with the keys kept " +
-                            "here, so leave it off unless something is using it."
+                        "An app that Android can name is refused until you allow it here. Not every caller can be " +
+                            "named. adb and some system senders arrive without a name, and those get through " +
+                            "while this is on. Anything that gets through can reach every saved host with the " +
+                            "keys kept here, so leave it off unless you are using it."
                     } else {
                         // Below Android 14 the platform will not say which
                         // app sent a broadcast, so there is nobody to allow
                         // or refuse and the switch is the whole gate.
-                        "This version of Android does not say which app sent a call, so anything on the phone can " +
-                            "use this while it is on — and reach every saved host with the keys kept here."
+                        "This version of Android does not say which app sent a call. While this is on, anything on " +
+                            "the phone can use it, and reach every saved host with the keys kept here."
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

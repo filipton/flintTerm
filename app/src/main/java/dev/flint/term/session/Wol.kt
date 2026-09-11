@@ -63,7 +63,7 @@ object Wol {
                 when {
                     lan != null -> Decision(WolSource.PHONE, "this phone is on $lan, broadcasting from here")
                     hasJump -> Decision(WolSource.JUMP_HOST, "this phone is not on the target's network, sending from the jump host")
-                    else -> Decision(WolSource.PHONE, "no jump host and not on the target's network — trying a broadcast from this phone anyway")
+                    else -> Decision(WolSource.PHONE, "no jump host and not on the target's network, so trying a broadcast from this phone anyway")
                 }
             }
         }

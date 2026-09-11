@@ -221,7 +221,7 @@ class TailscaleManager(private val context: Context, private val store: Store) {
     suspend fun test(id: String): Result<String> {
         if (!available) return Result.failure(Exception(unavailableReason ?: "Tailscale is not available"))
         val p = store.tailscaleProfile(id) ?: return Result.failure(Exception("unknown account"))
-        if (!p.joined) return Result.failure(Exception("Not joined to a tailnet yet — log in or paste an auth key first."))
+        if (!p.joined) return Result.failure(Exception("Not joined to a tailnet yet. Log in or paste an auth key first."))
         val wasRunning = status(id).state == "running"
         val started = System.currentTimeMillis()
         try {

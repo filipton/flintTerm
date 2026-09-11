@@ -21,6 +21,6 @@ object Tmux {
         }
         return "command -v tmux >/dev/null 2>&1 && { " + pick +
             "exec tmux new -A -s \"\${S:-$name}\"; } || " +
-            "echo 'tmux is not installed on this host; session will not persist'"
+            "echo 'tmux is not installed on this host, so the session will not persist'"
     }
 }

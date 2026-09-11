@@ -251,7 +251,7 @@ fun ExtraKeysScreen(nav: NavController) {
             )
             rows().forEachIndexed { r, tokens ->
                 val hidden = r == 1 && settings.extraKeysRows < 2
-                Group(if (r == 0) "Row 1 — fixed" else "Row 2 — scrolls") {
+                Group(if (r == 0) "Row 1, fixed" else "Row 2, scrolls") {
                     KeyRow(
                         tokens = tokens,
                         grouped = settings.groupArrowKeys,
@@ -307,7 +307,7 @@ fun ExtraKeysScreen(nav: NavController) {
                 RowDivider()
                 GroupRow(
                     title = "Show the bar at all",
-                    subtitle = if (settings.extraKeysRows == 0) "Off — the terminal has the whole screen" else "The bar sits above the keyboard",
+                    subtitle = if (settings.extraKeysRows == 0) "Off, the terminal has the whole screen" else "The bar sits above the keyboard",
                     icon = Icons.Rounded.Keyboard,
                     iconTint = MaterialTheme.colorScheme.secondary,
                     checked = settings.extraKeysRows > 0,
@@ -462,7 +462,7 @@ fun KeyPickerSheet(
             }
             if (allowNone) {
                 Spacer(Modifier.height(6.dp))
-                FilterChip(selected = "NONE" in selected, onClick = { onPick("NONE") }, label = { Text("Nothing — normal volume button") })
+                FilterChip(selected = "NONE" in selected, onClick = { onPick("NONE") }, label = { Text("Nothing, normal volume button") })
             }
             section("Modifiers") { chips(listOf("CTRL", "ALT", "SHIFT")) }
             if (modifierMode != null && onModifierMode != null && selected.any { byToken[it]?.action is ExtraKeys.Action.Modifier }) {

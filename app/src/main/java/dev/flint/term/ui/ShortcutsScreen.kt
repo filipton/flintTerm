@@ -102,9 +102,9 @@ fun ShortcutsScreen(onBack: () -> Unit) {
         LazyColumn(state = rememberScreenListState("shortcuts"), modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 40.dp)) {
             item {
                 Text(
-                    "Chords a hardware keyboard gives to the app instead of to the host. Every one of them is a key " +
-                        "press the remote never sees, so they all hold Ctrl and nearly all hold Shift as well — that " +
-                        "is the range a shell leaves free.",
+                    "Key combinations a hardware keyboard gives to the app instead of to the host. The host never " +
+                        "sees them, so they all use Ctrl and nearly all use Shift as well, which is the range a " +
+                        "shell leaves free.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),

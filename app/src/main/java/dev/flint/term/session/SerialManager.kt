@@ -141,7 +141,7 @@ class SerialManager(private val context: Context) {
         val raw = rawDevice(device.deviceId) ?: error("${device.name} is no longer attached")
         val driver = UsbSerialProber.getDefaultProber().probeDevice(raw) ?: error("no driver for ${device.ids}")
         val port = driver.ports.getOrNull(device.portNumber) ?: error("port ${device.portNumber} is gone")
-        val connection = manager.openDevice(raw) ?: error("could not open ${device.name} — permission denied?")
+        val connection = manager.openDevice(raw) ?: error("could not open ${device.name}, permission denied?")
         port.open(connection)
         runCatching { port.setParameters(settings.baudRate, settings.dataBits, settings.stopBits, settings.parity) }
             .onFailure {

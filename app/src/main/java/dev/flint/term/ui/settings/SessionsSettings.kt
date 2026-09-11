@@ -40,7 +40,7 @@ fun SessionsSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Reopen sessions",
-                subtitle = "Dial again what was open when the app was killed",
+                subtitle = "Open again the sessions that were running when the app closed",
                 icon = Icons.Rounded.Restore,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.restoreSessions,
@@ -48,7 +48,7 @@ fun SessionsSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Float when leaving",
+                title = "Keep floating when you leave",
                 subtitle = "Leave the terminal in a small window over other apps",
                 icon = Icons.Rounded.PictureInPictureAlt,
                 iconTint = MaterialTheme.colorScheme.secondary,
@@ -86,7 +86,7 @@ fun SessionsSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Long command finished",
-                subtitle = "A notification when a command over 30 seconds ends while the app is in the background",
+                subtitle = "A notification when a command that took over 30 seconds finishes while the app is in the background",
                 icon = Icons.Rounded.Timer, iconTint = MaterialTheme.colorScheme.tertiary,
                 checked = settings.notifyOnCommandFinish,
                 onCheckedChange = { v -> app.store.updateSettings { it.copy(notifyOnCommandFinish = v) } },

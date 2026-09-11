@@ -52,7 +52,7 @@ fun ConnectionsSettings(nav: NavController) {
         ActionSheet(
             onDismiss = { dataSheet = false },
             title = "Data saver",
-            subtitle = "Holds transfers for Wi-Fi and spaces out keepalives. Typing is never held up.",
+            subtitle = "Waits for Wi-Fi before transferring files, and sends keepalives less often. Typing is never delayed.",
             actions = DataSaver.entries.map { mode ->
                 SheetAction(mode.label + if (mode == settings.dataSaver) "   ✓" else "", subtitle = mode.help) {
                     app.store.updateSettings { it.copy(dataSaver = mode) }
@@ -81,7 +81,7 @@ fun ConnectionsSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Data saver",
-                subtitle = "Holds transfers and spaces out keepalives",
+                subtitle = "Waits for Wi-Fi to transfer files, and sends keepalives less often",
                 icon = Icons.Rounded.DataSaverOn,
                 iconTint = MaterialTheme.colorScheme.tertiary,
                 onClick = { dataSheet = true },
@@ -99,7 +99,7 @@ fun ConnectionsSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Find hosts on this network",
-                subtitle = "Servers announcing SSH over mDNS appear under Nearby",
+                subtitle = "Servers that announce SSH on this network appear under Nearby",
                 icon = Icons.Rounded.Wifi,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.discoverNearbyHosts,
@@ -117,7 +117,7 @@ fun ConnectionsSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Learn the host's shell history",
-                subtitle = "Read its shell history once a week, so what you ran there completes what you type",
+                subtitle = "Reads the host's shell history once a week, so commands you ran there can complete what you type",
                 icon = Icons.Rounded.History,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.importShellHistory,
@@ -136,9 +136,9 @@ fun ConnectionsSettings(nav: NavController) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
                 )
                 Text(
-                    "Used while a host acts as a VPN. Queries are asked over TCP from that host, so an " +
-                        "internal resolver here is what makes internal names resolve to internal addresses — " +
-                        "127.0.0.1 works too, and means the resolver the server itself runs.",
+                    "Used while a host acts as a VPN. Lookups are sent over TCP from that host, so " +
+                        "putting an internal DNS server here is what makes internal names work. " +
+                        "127.0.0.1 means the server's own resolver.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

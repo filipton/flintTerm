@@ -150,7 +150,7 @@ fun HighlightScreen(nav: NavController) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                         Text(
-                            "Tried from the top; the first rule to claim a piece of a line keeps it.",
+                            "Tried from the top. The first rule to claim a piece of a line keeps it.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         val missing = remember(rules) {
@@ -249,7 +249,7 @@ fun HighlightRuleEditor(
                 when {
                     error != null -> "Nothing is highlighted while the pattern is broken."
                     pattern.isBlank() -> "Type a pattern to see what it would do."
-                    matched -> if (wholeLine) "Matches, so the whole line is colored." else "Matches; only what matched is colored."
+                    matched -> if (wholeLine) "Matches, so the whole line is colored." else "Matches. Only what matched is colored."
                     else -> "Nothing matched this line."
                 },
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -106,7 +106,7 @@ fun ImportSheet(onDismiss: () -> Unit) {
     }
     val pickConnectBot = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val text = uri?.let(::readText) ?: return@rememberLauncherForActivityResult
-        if (!ConnectBotImport.looksLikeExport(text)) say("That is not a ConnectBot export — use Export hosts in ConnectBot first")
+        if (!ConnectBotImport.looksLikeExport(text)) say("That is not a ConnectBot export. Use Export hosts in ConnectBot first")
         else offer("ConnectBot", ConnectBotImport.parse(text))
     }
     val pickCsv = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -130,7 +130,7 @@ fun ImportSheet(onDismiss: () -> Unit) {
             title = "Import",
             subtitle = "Copy the file off your computer or other phone first",
             actions = listOf(
-                SheetAction("ssh config", Icons.Rounded.Description, subtitle = "Host blocks become hosts; ProxyJump becomes a jump host, IdentityFile is matched to a key with the same name") { pickConfig.launch(arrayOf("*/*")) },
+                SheetAction("ssh config", Icons.Rounded.Description, subtitle = "Host blocks become hosts. ProxyJump becomes a jump host, and IdentityFile is matched to a key with the same name") { pickConfig.launch(arrayOf("*/*")) },
                 SheetAction("known_hosts", Icons.Rounded.Security, subtitle = "Trust the server keys your computer already trusts") { pickKnown.launch(arrayOf("*/*")) },
                 SheetAction(
                     "ConnectBot export", Icons.Rounded.Description,
@@ -311,7 +311,7 @@ fun ImportSheet(onDismiss: () -> Unit) {
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(
-                        "The key is converted to the OpenSSH format and saved here; the .ppk file is left alone.",
+                        "The key is converted to the OpenSSH format and saved here. The .ppk file is left alone.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Field(name, { name = it }, "Name")

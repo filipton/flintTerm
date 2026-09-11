@@ -112,8 +112,8 @@ fun SshConfigExportDialog(onDismiss: () -> Unit) {
                     )
                     Spacer(Modifier.padding(4.dp))
                     Text(
-                        "Put them somewhere you control, and set their permissions to 600 once they are there — " +
-                            "ssh refuses a private key the rest of the machine can read.",
+                        "Put them somewhere you control, and set their permissions to 600 once they are there. " +
+                            "ssh refuses a private key that the rest of the machine can read.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -136,7 +136,7 @@ fun SshConfigExportDialog(onDismiss: () -> Unit) {
                 )
                 Spacer(Modifier.padding(4.dp))
                 Text(
-                    "No password is written, and anything ssh has no word for — a tunnel, Mosh, wake-on-LAN — is named in a comment.",
+                    "No password is written. Anything ssh has no setting for, such as a tunnel, Mosh or wake-on-LAN, is named in a comment.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (keys.isNotEmpty()) {
@@ -146,7 +146,7 @@ fun SshConfigExportDialog(onDismiss: () -> Unit) {
                         Column {
                             Text("Write the private keys beside it", style = MaterialTheme.typography.bodyMedium)
                             Text(
-                                "${keys.size} of your keys can be copied; keystore and security-key identities cannot leave the device",
+                                "${keys.size} of your keys can be copied. Keystore and security-key identities cannot leave the device",
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }

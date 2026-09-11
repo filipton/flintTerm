@@ -75,7 +75,7 @@ fun TerminalSettings(nav: NavController) {
         ActionSheet(
             onDismiss = { termSheet = false },
             title = "Terminal type",
-            subtitle = "What a session claims to be. Applies to new sessions.",
+            subtitle = "What a session tells the server it is. Applies to new sessions.",
             actions = TERM_PRESETS.map { (name, help) ->
                 SheetAction(name + if (name == current) "   ✓" else "", subtitle = help) {
                     app.store.updateSettings { it.copy(termName = name) }
@@ -156,7 +156,7 @@ fun TerminalSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Redraw limit",
-                subtitle = "Saves battery under heavy output; off means as smooth as the screen allows",
+                subtitle = "Saves battery when output arrives very fast. Off is as smooth as the screen allows",
                 icon = Icons.Rounded.Speed,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.maxFps > 0,
@@ -174,11 +174,9 @@ fun TerminalSettings(nav: NavController) {
                         valueRange = 15f..120f,
                     )
                     Text(
-                        "Off, a terminal repaints whenever something on it changes, up to the screen's own " +
-                            "refresh rate — nothing redraws while the screen is still. A limit only bites " +
-                            "when output is pouring in faster than that: a flood costs about a fifth less " +
-                            "battery at 30 than uncapped, on output scrolling past far too fast to read " +
-                            "either way. It makes no difference to anything slower, down to a shell.",
+                        "Without a limit the terminal redraws only when something changes, and not at " +
+                            "all while the screen is still. A limit only matters when output arrives very " +
+                            "fast, and there it saves about a fifth of the battery.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -202,7 +200,7 @@ fun TerminalSettings(nav: NavController) {
                     app.store.updateSettings { it.copy(terminalImages = TerminalImages.entries[i]) }
                 }
                 Text(
-                    "Off leaves both protocols unanswered, so a program that asks falls back to text. A host can turn images off on its own.",
+                    "Off means the app answers neither protocol, so a program that asks will use text instead. A host can turn images off on its own.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -229,7 +227,7 @@ fun TerminalSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Tab takes the suggestion",
-                subtitle = "Only while one is showing; otherwise Tab is the shell's own completion",
+                subtitle = "Only while one is showing. Otherwise Tab is the shell's own completion",
                 icon = Icons.Rounded.KeyboardTab,
                 iconTint = MaterialTheme.colorScheme.primary,
                 checked = settings.tabAcceptsSuggestion,
@@ -259,7 +257,7 @@ fun TerminalSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Recordings",
-                subtitle = "Watch a cast play back, read a log, share or delete one",
+                subtitle = "Play back a recording, read a log, share or delete one",
                 icon = Icons.Rounded.Movie,
                 iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { nav.navigate(Routes.RECORDINGS) },

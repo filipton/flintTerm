@@ -291,7 +291,7 @@ object Ctap {
      * are reported by number, which is at least searchable.
      */
     fun statusMessage(status: Int, transport: KeyTransport? = null): String = when (status) {
-        0x27 -> "The security key refused this — the touch was declined."
+        0x27 -> "The security key refused this. The touch was declined."
         0x2D -> "The security key request was canceled."
         0x2E -> "This security key does not hold that credential. It may be a different key from the one this identity was made with."
         0x2F, 0x3A -> "Nobody touched the security key in time."
@@ -310,7 +310,7 @@ object Ctap {
         0x35 -> "This security key has no PIN set, so there is nothing to unlock it with."
         0x36 -> "This security key needs its PIN."
         0x37 -> "This security key wants a longer PIN than it has. Change its PIN on a computer, then try again."
-        0x28 -> "The security key is full — delete a credential on it and try again."
+        0x28 -> "The security key is full. Delete a credential on it and try again."
         0x19 -> "This security key already holds a credential for this identity."
         0x11, 0x12, 0x14 -> "The security key did not understand the request."
         else -> "The security key answered with error 0x%02x.".format(status)
@@ -364,14 +364,14 @@ object Ctap {
         }
     }
 
-    /** "Wrong PIN — 2 attempts left", when the token will say how many. */
+    /** "Wrong PIN. 2 attempts left", when the token will say how many. */
     private fun wrongPin(failure: CtapStatusException, transport: CtapTransport): String {
         val left = runCatching { ClientPin.retries(transport) }.getOrNull()
         return when {
             left == null -> failure.message ?: "Wrong PIN."
-            left <= 0 -> "Wrong PIN — this security key is now locked."
-            left == 1 -> "Wrong PIN — 1 attempt left before the key locks."
-            else -> "Wrong PIN — $left attempts left."
+            left <= 0 -> "Wrong PIN. This security key is now locked."
+            left == 1 -> "Wrong PIN. 1 attempt left before the key locks."
+            else -> "Wrong PIN. $left attempts left."
         }
     }
 }

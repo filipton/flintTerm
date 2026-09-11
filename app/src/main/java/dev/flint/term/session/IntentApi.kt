@@ -220,7 +220,7 @@ class AutomationReceiver : BroadcastReceiver() {
                 val work = scope.async(Dispatchers.IO) { runCatching { handle(context, app, request) } }
                 withTimeoutOrNull(WORK_TIMEOUT_MS) { work.await() }
                     ?.getOrElse { Answer(1, it.message ?: "the call failed") }
-                    ?: Answer(1, "Still running after ${WORK_TIMEOUT_MS / 1000}s; flintTerm has not given up on it")
+                    ?: Answer(1, "Still running after ${WORK_TIMEOUT_MS / 1000}s. flintTerm has not given up on it")
             }
             record(app, caller, request, answer)
             pending.setResult(
@@ -272,7 +272,7 @@ class AutomationReceiver : BroadcastReceiver() {
 
     private fun run(app: App, query: String, command: String): Answer = withHost(app, query) { host ->
         if (host.isTelnet || host.hostname.isBlank()) {
-            return@withHost Answer(1, "${host.displayName} has no command channel; RUN needs an SSH host")
+            return@withHost Answer(1, "${host.displayName} has no command channel. RUN needs an SSH host")
         }
         val outcome = IntentApi.outcome(app.sessions.runCommand(host, command))
         Answer(outcome.status, outcome.output)
@@ -295,7 +295,7 @@ class AutomationReceiver : BroadcastReceiver() {
         } else {
             live.singleOrNull() ?: return Answer(
                 1,
-                if (live.isEmpty()) "No session is open" else "${live.size} sessions are open; say which with the host extra",
+                if (live.isEmpty()) "No session is open" else "${live.size} sessions are open. Say which one with the host extra",
             )
         }
         val found = IntentApi.resolveSnippet(app.store.snippets.value, query)

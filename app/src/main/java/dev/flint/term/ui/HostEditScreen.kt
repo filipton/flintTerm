@@ -237,8 +237,8 @@ fun HostEditScreen(nav: NavController, id: String) {
         if (wol.broadcast.isNotBlank()) null
         else (listOf(hostname) + addresses.map { it.hostname })
             .firstNotNullOfOrNull { Wol.autoBroadcast(it) }
-            ?.let { "Auto — $it on your current network" }
-            ?: "Auto — one packet per interface, since no address is on a network this phone is on"
+            ?.let { "Auto, $it on your current network" }
+            ?: "Auto, one packet per interface, because no address is on a network this phone is on"
     }
 
     /** Enough to reach the machine — what "Detect MAC" needs, and never gated on the MAC itself. */
@@ -511,7 +511,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                 GroupRow(
                     title = "VPN",
                     subtitle = when {
-                        tailnet != null -> "${tailnet.name.ifBlank { "Tailscale" }}  ·  Tailscale — the host can be a MagicDNS name"
+                        tailnet != null -> "${tailnet.name.ifBlank { "Tailscale" }}  ·  Tailscale, so the host can be a MagicDNS name"
                         jump != null && tunnel != null -> "${tunnel.name}  ·  ignored while a jump host is set (its tunnel is used)"
                         tunnel != null -> "${tunnel.name}  ·  WireGuard"
                         else -> "Direct network"
@@ -524,7 +524,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Segmented(TunnelMode.entries.map { it.label }, tunnelMode.ordinal) { tunnelMode = TunnelMode.entries[it] }
                         Text(
-                            if (tunnelMode == TunnelMode.WHEN_NEEDED) "Connect directly when the host is on the phone's current network (or answers directly); use ${tunnel.name} otherwise. Good for a home server you also reach over Wi-Fi."
+                            if (tunnelMode == TunnelMode.WHEN_NEEDED) "Connect directly when the host is on the phone's current network, or when it answers directly. Otherwise use ${tunnel.name}. Good for a home server you also reach over Wi-Fi."
                             else "Every connection goes through ${tunnel.name}.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -534,7 +534,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                 GroupRow(
                     title = "Other addresses",
                     subtitle = if (addresses.isEmpty()) {
-                        "The same machine somewhere else — a LAN address, a tailnet name — tried in order"
+                        "The same machine at another address, such as a LAN address or a tailnet name. Tried in order"
                     } else {
                         "${addresses.size} more, tried in order after ${hostname.ifBlank { "the address above" }}"
                     },
@@ -651,7 +651,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                                 }
                                 Text(
                                     if (address.tunnelMode == TunnelMode.WHEN_NEEDED) {
-                                        "Dialled directly while this phone is on the same network as it (or while it answers directly); ${t.name} otherwise."
+                                        "Reached directly while this phone is on the same network as it, or while it answers directly. Otherwise ${t.name} is used."
                                     } else {
                                         "This address always goes through ${t.name}."
                                     },
@@ -704,7 +704,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, autoCorrectEnabled = false),
                         )
                         Text(
-                            "Output is shown in the connection log. Afterwards the tunnel to ${hostname.ifBlank { "the host" }} is retried until it answers — handy for waking a machine up.",
+                            "Output is shown in the connection log. Afterwards the tunnel to ${hostname.ifBlank { "the host" }} is retried until it answers. This is useful for waking a machine up.",
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -740,7 +740,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                         // to hold the agent socket, which is worth saying: it is a
                         // connection that does not survive a network change.
                         forwardAgent && mosh -> "Kept alive beside Mosh, and ends if the network changes"
-                        forwardAgent -> "ssh and git on the host may use your keys; signing happens here"
+                        forwardAgent -> "ssh and git on the host may use your keys. The signing happens on this phone"
                         else -> "Off  ·  like ssh -A"
                     },
                     icon = Icons.Rounded.Key,
@@ -866,11 +866,11 @@ fun HostEditScreen(nav: NavController, id: String) {
                         Segmented(WolSource.entries.map { it.label }, wol.sendFrom.ordinal) { wol = wol.copy(sendFrom = WolSource.entries[it]) }
                         Text(
                             when (wol.sendFrom) {
-                                WolSource.AUTO -> "Decided at connect time: when this phone is on the machine's network (same subnet as the broadcast address or the host IP) it broadcasts itself; otherwise " +
-                                    (if (jump != null) "${jump.displayName} sends the packet." else "it still tries from the phone — add a jump host to cover the away-from-home case.")
-                                WolSource.PHONE -> "The phone broadcasts on its current network — this only reaches the machine when you are on the same LAN or the broadcast is routed."
-                                WolSource.JUMP_HOST -> if (jump != null) "The jump host ${jump.displayName} sends the packet (wakeonlan, python3, etherwake or bash — whatever it has). Its output shows in the connection log."
-                                    else "Pick a jump host above first; until then the phone sends the packet."
+                                WolSource.AUTO -> "Decided when you connect. If this phone is on the machine's network (the same subnet as the broadcast address or the host IP) the phone broadcasts. If it is not, " +
+                                    (if (jump != null) "${jump.displayName} sends the packet." else "it still tries from the phone. Add a jump host so it also works when you are away.")
+                                WolSource.PHONE -> "The phone broadcasts on the network it is on now. This only reaches the machine when you are on the same network."
+                                WolSource.JUMP_HOST -> if (jump != null) "The jump host ${jump.displayName} sends the packet (wakeonlan, python3, etherwake or bash, whichever it has). Its output shows in the connection log."
+                                    else "Pick a jump host above first. Until then the phone sends the packet."
                             },
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1008,7 +1008,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     icon = Icons.Rounded.Image,
                     value = terminalImages,
                     subtitle = if (terminalImages ?: (settings.terminalImages != TerminalImages.OFF)) {
-                        "Programs here may draw pictures in the terminal; the protocol is the app's choice"
+                        "Programs here may draw pictures in the terminal. The app picks the protocol"
                     } else {
                         "Image escapes from this host are ignored"
                     },
@@ -1101,7 +1101,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                 RowDivider()
                 GroupRow(
                     title = "Persistent session",
-                    subtitle = "Attach to tmux on login; reconnect and re-attach automatically when the link drops",
+                    subtitle = "Attach to tmux at login, and attach again automatically when the connection drops",
                     icon = Icons.Rounded.Power,
                     iconTint = MaterialTheme.colorScheme.primary,
                     trailing = { AppSwitch(persistent, { persistent = it }) },
@@ -1162,8 +1162,8 @@ fun HostEditScreen(nav: NavController, id: String) {
                     GroupRow(
                         title = "Environment variables",
                         subtitle = when {
-                            env.isEmpty() && mosh -> "Passed to mosh-server, which sets them itself — no AcceptEnv to get past"
-                            env.isEmpty() -> "Asked for when the shell opens; most servers accept only LANG and LC_*"
+                            env.isEmpty() && mosh -> "Passed to mosh-server, which sets them itself. The server's AcceptEnv does not apply"
+                            env.isEmpty() -> "Asked for when the shell opens. Most servers accept only LANG and LC_*"
                             else -> "${env.size} set on connect"
                         },
                         icon = Icons.Rounded.DataObject,
@@ -1195,9 +1195,9 @@ fun HostEditScreen(nav: NavController, id: String) {
                     if (env.isNotEmpty()) {
                         Text(
                             if (mosh) {
-                                "Mosh takes these as mosh-server arguments, so they are set for the session whatever the server's AcceptEnv says. Names must look like variable names; anything else is left out."
+                                "Mosh takes these as mosh-server arguments, so they are set for the session whatever the server's AcceptEnv says. Names must look like variable names, and anything else is left out."
                             } else {
-                                "sshd only passes on the names its AcceptEnv lists, and by default that is LANG and LC_* alone. Anything else is dropped without a word, so the connection log says how many were asked for — not how many arrived. Turning Mosh on avoids that limit entirely."
+                                "sshd only passes the names its AcceptEnv lists, and by default that is LANG and LC_* only. Anything else is dropped silently, so the connection log shows how many were asked for, not how many arrived. Turning Mosh on avoids this limit."
                             },
                             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
@@ -1344,7 +1344,7 @@ fun HostEditScreen(nav: NavController, id: String) {
             onDismiss = { vpnSheet = false; vpnFor = null },
             title = "VPN",
             subtitle = if (target == null) {
-                "Only this host's traffic goes through it; no system VPN needed."
+                "Only this host's traffic goes through it. No system VPN needed."
             } else {
                 "Used for this address only, so a LAN address can stay direct."
             },
@@ -1355,7 +1355,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     SheetAction(t.name.ifBlank { "Tunnel" }, Icons.Rounded.VpnLock, subtitle = "WireGuard tunnel") { choose(t.id, null) }
                 } +
                 tailnets.map { p ->
-                    SheetAction(p.name.ifBlank { "Tailscale" }, Icons.Rounded.Hub, subtitle = if (p.joined) "Tailscale" else "Tailscale — not joined yet") { choose(null, p.id) }
+                    SheetAction(p.name.ifBlank { "Tailscale" }, Icons.Rounded.Hub, subtitle = if (p.joined) "Tailscale" else "Tailscale, not joined yet") { choose(null, p.id) }
                 } +
                 SheetAction("Manage VPN & tunnels…", Icons.Rounded.Add) { vpnSheet = false; vpnFor = null; nav.navigate(Routes.TUNNELS) },
         )
@@ -1405,7 +1405,7 @@ fun HostEditScreen(nav: NavController, id: String) {
         ActionSheet(
             onDismiss = { jumpSheet = false },
             title = "Connect through",
-            subtitle = "The jump host is connected first; this host is reached through it.",
+            subtitle = "The jump host is connected first, then this host is reached through it.",
             actions = listOf(SheetAction("Direct connection", Icons.Rounded.SwapHoriz) { jumpHostId = null; jumpSheet = false }) +
                 jumpCandidates.map { h ->
                     SheetAction(h.displayName, iconFor(h.icon), subtitle = h.target + (h.jumpHostId?.let { " (itself via a jump host)" } ?: "")) { jumpHostId = h.id; jumpSheet = false }
@@ -1443,8 +1443,8 @@ fun ForwardDialog(initial: PortForward, onDismiss: () -> Unit, onSave: (PortForw
                 Segmented(listOf("Local -L", "Remote -R", "SOCKS -D"), type.ordinal) { type = ForwardType.entries[it] }
                 Text(
                     when (type) {
-                        ForwardType.LOCAL -> "Listen on this device; connections go to the target through the server."
-                        ForwardType.REMOTE -> "The server listens; connections are delivered to the target from this device."
+                        ForwardType.LOCAL -> "This device listens, and connections go to the target through the server."
+                        ForwardType.REMOTE -> "The server listens, and connections are delivered to the target from this device."
                         ForwardType.DYNAMIC -> "A SOCKS5 proxy on this device. Point a browser or app at it and its traffic leaves from the server."
                     },
                     style = MaterialTheme.typography.bodySmall,

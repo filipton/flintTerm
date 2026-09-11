@@ -134,7 +134,7 @@ fun TunnelsScreen(nav: NavController) {
                 // A whole empty state per section turns this screen into three
                 // screens; one line says the same thing and leaves room for the
                 // sections that do have something in them.
-                item { SectionHint("Paste a wg-quick config with Add — only this app's traffic goes through it, no system VPN and no root.") }
+                item { SectionHint("Paste a wg-quick config with Add. Only this app's traffic goes through it, with no system VPN and no root.") }
             } else {
                 item {
                     Group {
@@ -218,7 +218,7 @@ fun TunnelsScreen(nav: NavController) {
         ActionSheet(
             onDismiss = { addSheet = false },
             title = "Add",
-            subtitle = "Both route only this app's traffic — no system VPN, no root.",
+            subtitle = "Both route only this app's traffic, with no system VPN and no root.",
             actions = listOf(
                 SheetAction("WireGuard tunnel", Icons.Rounded.VpnLock, subtitle = "Paste a wg-quick config") {
                     addSheet = false; editing = Tunnel()
@@ -252,7 +252,7 @@ fun TunnelsScreen(nav: NavController) {
                     DetailLine("Endpoint", info.endpoint)
                     DetailLine("Addresses", info.addresses.joinToString(", "))
                     DetailLine("Allowed IPs", info.allowedIps.joinToString(", "))
-                    DetailLine("DNS", info.dns.joinToString(", ").ifBlank { "none — use IP addresses" })
+                    DetailLine("DNS", info.dns.joinToString(", ").ifBlank { "none, use IP addresses" })
                     DetailLine("MTU", info.mtu.toString())
                     Text("This device's public key", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -484,7 +484,7 @@ private fun ProxySheet(proxy: SavedProxy, onDismiss: () -> Unit) {
                 )
             }
             Text(
-                "Only the first hop goes through the proxy; a jump chain then continues over SSH. Mosh needs SOCKS5 with UDP ASSOCIATE — an HTTP proxy cannot carry it.",
+                "Only the first hop goes through the proxy, and a jump chain then continues over SSH. Mosh needs SOCKS5 with UDP ASSOCIATE, which an HTTP proxy cannot do.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Button(

@@ -183,7 +183,7 @@ fun CommandPalette(nav: NavController) {
                     if (sections.isEmpty()) {
                         item {
                             Text(
-                                if (query.isBlank()) "Nothing here yet — add a host to start." else "Nothing matches.",
+                                if (query.isBlank()) "Nothing here yet. Add a host to start." else "Nothing matches.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(24.dp),

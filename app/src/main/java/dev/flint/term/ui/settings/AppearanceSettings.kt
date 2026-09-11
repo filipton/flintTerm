@@ -177,7 +177,7 @@ fun AppearanceSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Bold text is bright",
-                subtitle = "Draw bold in the light half of the palette, the way xterm does",
+                subtitle = "Draw bold text in the brighter colors, the way xterm does",
                 icon = Icons.Rounded.FormatBold,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.boldIsBright, onCheckedChange = { v -> app.store.updateSettings { it.copy(boldIsBright = v) } },
@@ -195,7 +195,7 @@ fun AppearanceSettings(nav: NavController) {
                     app.store.updateSettings { it.copy(cursorStyle = CursorStyle.entries[i]) }
                 }
                 Text(
-                    "A program that picks its own shape keeps it — vim's insert-mode bar still works.",
+                    "A program that picks its own shape keeps it, so vim's insert-mode bar still works.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

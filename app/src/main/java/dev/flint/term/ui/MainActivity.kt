@@ -699,7 +699,7 @@ private fun HostKeyDialog(prompt: HostKeyPrompt) {
                 if (changed) {
                     Text(
                         "The key for ${prompt.key.host}:${prompt.key.port} is different from the one you trusted before. " +
-                            "That happens after a reinstall — or when someone is intercepting the connection.",
+                            "That happens after a reinstall, or when someone is intercepting the connection.",
                         color = MaterialTheme.colorScheme.error,
                     )
                     Spacer(Modifier.height(12.dp))

@@ -175,7 +175,7 @@ private fun TmuxWindowsSheet(session: TerminalSession, onDismiss: () -> Unit, on
                     Spacer(Modifier.size(12.dp))
                     Text("Asking tmux…", style = MaterialTheme.typography.bodyMedium)
                 }
-                list.isEmpty() -> Message("No windows — this session is not inside tmux.")
+                list.isEmpty() -> Message("No windows. This session is not inside tmux.")
                 else -> Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     Group {
                         list.forEachIndexed { i, w ->

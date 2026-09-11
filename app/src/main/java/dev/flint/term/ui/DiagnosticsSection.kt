@@ -136,7 +136,7 @@ fun DiagnosticsSection(
         }
         Text(
             if (canPing) {
-                "Sent inside the tunnel, not from the phone's ordinary network — a ping from anywhere else would not go through it."
+                "Sent inside the tunnel, not from the phone's ordinary network. A ping from anywhere else would not go through it."
             } else {
                 "Dialled through the node, so it answers for the tailnet rather than for this phone's network."
             },

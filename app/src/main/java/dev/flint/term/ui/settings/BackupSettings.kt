@@ -32,14 +32,14 @@ fun BackupSettings(nav: NavController) {
         Group("Backup") {
             GroupRow(
                 title = "Back up to a file",
-                subtitle = "Hosts, keys, snippets, tunnels and settings, sealed with a passphrase",
+                subtitle = "Hosts, keys, snippets, tunnels and settings, protected with a passphrase",
                 icon = Icons.Rounded.Archive, iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { backup = true },
             )
             RowDivider()
             GroupRow(
                 title = "Restore from a file",
-                subtitle = "Adds what the file has; nothing here is deleted",
+                subtitle = "Adds what the file has. Nothing here is deleted",
                 icon = Icons.Rounded.Unarchive, iconTint = MaterialTheme.colorScheme.primary,
                 onClick = { restore = true },
             )

@@ -167,7 +167,7 @@ fun AccountSheet(
             if (draft.authType == AuthType.KEY) {
                 if (identities.isEmpty()) {
                     Text(
-                        "No keys yet — generate or import one on the SSH keys screen.",
+                        "No keys yet. Generate or import one on the SSH keys screen.",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 } else {

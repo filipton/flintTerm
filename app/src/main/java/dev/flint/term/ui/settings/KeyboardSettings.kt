@@ -66,14 +66,14 @@ fun KeyboardSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Shortcuts",
-                subtitle = "What Ctrl+Shift+C and the rest do in the app",
+                subtitle = "What Ctrl+Shift+C and the other app shortcuts do",
                 icon = Icons.Rounded.KeyboardCommandKey,
                 onClick = { shortcuts = true },
             )
             RowDivider()
             GroupRow(
                 title = "Keyboard protocol",
-                subtitle = "Let a program tell Ctrl+[ from Escape, and see Shift+Enter",
+                subtitle = "Lets a program see the difference between Ctrl+[ and Escape, and see Shift+Enter",
                 icon = Icons.Rounded.Terminal,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.keyboardProtocol,
@@ -81,8 +81,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Ctrl+[, Ctrl+I and Ctrl+M are keys",
-                subtitle = "Sent as keys of their own rather than as the Escape, Tab and Enter bytes, even when nothing asked — what ghostty does, and what makes a tmux binding on Ctrl+[ fire. The Escape, Tab and Enter keys are unaffected.",
+                title = "Send Ctrl+[, Ctrl+I and Ctrl+M as their own keys",
+                subtitle = "Normally these three send the same bytes as Escape, Tab and Enter. On, they are sent as separate keys, so a tmux binding on Ctrl+[ works. The Escape, Tab and Enter keys do not change.",
                 icon = Icons.Rounded.Terminal,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.fixtermsCtrlKeys,
@@ -92,7 +92,7 @@ fun KeyboardSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Type with the app's keyboard",
-                subtitle = "A plain layout drawn in the app, with Ctrl and Alt on the bottom row. It has no dictionary, no autocorrect and no swiping, so leave it off unless the missing Ctrl is what bothers you.",
+                subtitle = "A simple keyboard drawn by the app, with Ctrl and Alt on the bottom row. It has no dictionary, no autocorrect and no swiping. Use it if you mainly need a Ctrl key.",
                 icon = Icons.Rounded.Keyboard,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.builtInKeyboard,
@@ -101,7 +101,7 @@ fun KeyboardSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Offer to paste what you copied",
-                subtitle = "A strip above the keys, for a minute or so after something is copied in another app. Only the clipboard's description is read, never its contents.",
+                subtitle = "A strip above the keys, for about a minute after you copy something in another app. Only the clipboard's description is read, never its contents.",
                 icon = Icons.Rounded.ContentPaste,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.clipboardSuggestion,
@@ -109,8 +109,8 @@ fun KeyboardSettings(nav: NavController) {
             )
             RowDivider()
             GroupRow(
-                title = "Ctrl keys stay a control byte",
-                subtitle = "Ctrl+C from the key bar or the menu sends the byte itself, so it still interrupts a program that has taken the keyboard over. Tab, Enter, Backspace and Escape are never affected.",
+                title = "Ctrl keys always send control bytes",
+                subtitle = "Ctrl+C from the key bar or the menu sends the byte itself, so it still stops a program that has taken over the keyboard. Tab, Enter, Backspace and Escape never change.",
                 icon = Icons.Rounded.Bolt,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.rawControlKeys,
@@ -119,7 +119,7 @@ fun KeyboardSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Keep the compose line open",
-                subtitle = "The ✎ field and its draft survive leaving the session",
+                subtitle = "The ✎ field and what you typed in it stay when you leave the session",
                 icon = Icons.Rounded.EditNote,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.composeRemembersState,
@@ -134,7 +134,7 @@ fun KeyboardSettings(nav: NavController) {
                     app.store.updateSettings { it.copy(capsLockAs = CapsLockAction.entries[i]) }
                 }
                 Text(
-                    "Escape sends it on the way down; Control is held for as long as the key is.",
+                    "Escape sends it on the way down. Control is held for as long as the key is.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -152,7 +152,7 @@ fun KeyboardSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Double tap sends Tab",
-                subtitle = "The key a phone keyboard hides, two taps away — inside a program reading the mouse as well, which then sees single taps but no double click",
+                subtitle = "Phone keyboards have no Tab key, so two taps send it. This works inside programs that read the mouse too.",
                 icon = Icons.Rounded.TouchApp,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.doubleTapSendsTab,
@@ -161,7 +161,7 @@ fun KeyboardSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = "Two-finger drag sends arrows",
-                subtitle = "Slide two fingers to walk the cursor; pinch still zooms",
+                subtitle = "Slide two fingers to walk the cursor. Pinch still zooms",
                 icon = Icons.Rounded.Swipe,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 checked = settings.twoFingerDragArrows,

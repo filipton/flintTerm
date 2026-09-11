@@ -82,7 +82,7 @@ fun SnippetsScreen(nav: NavController) {
                 item {
                     EmptyState(
                         Icons.Rounded.AutoAwesome, "No snippets yet",
-                        "Save the commands you type all the time. In the terminal, the ✦ key lists them; {{placeholders}} are asked for before typing.",
+                        "Save the commands you type all the time. In the terminal, the ✦ key lists them. You are asked for any {{placeholders}} before they are typed.",
                         "Add a snippet",
                     ) { editing = Snippet() }
                 }
