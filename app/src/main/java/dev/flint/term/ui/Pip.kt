@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -165,8 +166,8 @@ fun FloatingTerminal(sessionId: String?) {
     }
     LaunchedEffect(settings.fontFamily, settings.ligatures) { view.setFont(settings.fontFamily, settings.ligatures) }
     LaunchedEffect(chrome) {
-        view.backgroundColorInt = chrome.terminal.value.toLong().toInt()
-        view.foregroundColorInt = chrome.on.value.toLong().toInt()
+        view.backgroundColorInt = chrome.terminal.toArgb()
+        view.foregroundColorInt = chrome.on.toArgb()
     }
     // The session outlives the window: only this view of it is let go.
     DisposableEffect(view) { onDispose { view.session = null } }

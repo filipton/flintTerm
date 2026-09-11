@@ -1,5 +1,6 @@
 package dev.flint.term.ui
 
+import androidx.compose.ui.graphics.toArgb
 import dev.flint.term.R
 import androidx.compose.ui.res.stringResource
 import android.app.Activity
@@ -491,8 +492,8 @@ private fun SecondaryTerminal(
     LaunchedEffect(fontSp) { if (view.fontSizeSp != fontSp) view.fontSizeSp = fontSp }
     LaunchedEffect(settings.fontFamily, settings.ligatures) { view.setFont(settings.fontFamily, settings.ligatures) }
     LaunchedEffect(chrome) {
-        view.backgroundColorInt = chrome.terminal.value.toLong().toInt()
-        view.foregroundColorInt = chrome.on.value.toLong().toInt()
+        view.backgroundColorInt = chrome.terminal.toArgb()
+        view.foregroundColorInt = chrome.on.toArgb()
     }
     DisposableEffect(view) { onDispose { view.session = null } }
     AndroidView(factory = { view }, modifier = modifier)

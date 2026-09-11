@@ -1,5 +1,6 @@
 package dev.flint.term.ui
 
+import androidx.compose.ui.graphics.toArgb
 import dev.flint.term.R
 import androidx.compose.ui.res.stringResource
 import android.content.ClipData
@@ -210,8 +211,8 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     LaunchedEffect(fontSp) { if (view.fontSizeSp != fontSp) view.fontSizeSp = fontSp }
     LaunchedEffect(settings.fontFamily, settings.ligatures) { view.setFont(settings.fontFamily, settings.ligatures) }
     LaunchedEffect(palette) {
-        view.backgroundColorInt = termBg.value.toLong().toInt()
-        view.foregroundColorInt = termFg.value.toLong().toInt()
+        view.backgroundColorInt = termBg.toArgb()
+        view.foregroundColorInt = termFg.toArgb()
         view.accentColor = 0xFF000000.toInt() or palette.cursor.toInt()
         session.setPalette(palette)
     }
