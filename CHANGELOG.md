@@ -6,6 +6,33 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-09-11
+
+### Added
+
+- Pick a terminal type, and allow or block screenshots
+- The app's text lives in strings.xml, ready to translate
+- A battery page that points at what to change
+
+### Changed
+
+- Settings descriptions are shorter and in plainer English
+
+### Fixed
+
+- A huge recording opens at its end instead of crashing
+- The terminal's own colours reach the view
+- History suggestions read what was typed, not the prompt
+
+### Performance
+
+- Nothing polls or lingers while the screen is off
+- An open terminal costs far less CPU, idle or streaming
+
+### Documentation
+
+- Terminal type, screenshot block and battery page
+
 ## [0.1.2] - 2026-09-11
 
 ### Changed
