@@ -525,7 +525,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                 )
                 if (tunnel != null && jump == null) {
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, bottom = 14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Segmented(TunnelMode.entries.map { it.label }, tunnelMode.ordinal) { tunnelMode = TunnelMode.entries[it] }
+                        Segmented(TunnelMode.entries.map { stringResource(it.label) }, tunnelMode.ordinal) { tunnelMode = TunnelMode.entries[it] }
                         Text(
                             if (tunnelMode == TunnelMode.WHEN_NEEDED) stringResource(R.string.hosteditscreen_connect_directly_when_the_host_is_on_the_phone_s, tunnel.name)
                             else stringResource(R.string.hosteditscreen_every_connection_goes_through, tunnel.name),
@@ -649,7 +649,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                             // Tailscale has no "try it directly first": the node is
                             // the route, and there is nothing to fall back from.
                             if (t != null && ts == null) {
-                                Segmented(TunnelMode.entries.map { it.label }, address.tunnelMode.ordinal) { m ->
+                                Segmented(TunnelMode.entries.map { stringResource(it.label) }, address.tunnelMode.ordinal) { m ->
                                     change { it.copy(tunnelMode = TunnelMode.entries[m]) }
                                 }
                                 Text(
@@ -866,7 +866,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                             Field(wol.port.toString(), { v -> v.filter { it.isDigit() }.take(5).toIntOrNull()?.let { wol = wol.copy(port = it) } }, "Port", Modifier.width(96.dp), mono = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                         }
                         Text(stringResource(R.string.hosteditscreen_send_from), style = MaterialTheme.typography.titleSmall)
-                        Segmented(WolSource.entries.map { it.label }, wol.sendFrom.ordinal) { wol = wol.copy(sendFrom = WolSource.entries[it]) }
+                        Segmented(WolSource.entries.map { stringResource(it.label) }, wol.sendFrom.ordinal) { wol = wol.copy(sendFrom = WolSource.entries[it]) }
                         Text(
                             when (wol.sendFrom) {
                                 WolSource.AUTO -> stringResource(R.string.hosteditscreen_decided_when_you_connect_if_this_phone_is_on_the) +
@@ -1112,7 +1112,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                 GroupRow(
                     title = stringResource(R.string.hosteditscreen_record_every_session_2),
                     subtitle = if (recordSessions) {
-                        stringResource(R.string.hosteditscreen_saved_as_login_to_logout, settings.recordingFormat.label.lowercase())
+                        stringResource(R.string.hosteditscreen_saved_as_login_to_logout, stringResource(settings.recordingFormat.label).lowercase())
                     } else {
                         stringResource(R.string.hosteditscreen_off_record_by_hand_from_the_terminal_s_menu)
                     },
@@ -1272,7 +1272,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                                 .background(if (sel) accent.copy(alpha = 0.22f) else MaterialTheme.colorScheme.surfaceContainerHigh)
                                 .clickable { icon = hi },
                             contentAlignment = Alignment.Center,
-                        ) { Icon(iconFor(hi), hi.label, Modifier.size(22.dp), tint = if (sel) accent else MaterialTheme.colorScheme.onSurfaceVariant) }
+                        ) { Icon(iconFor(hi), stringResource(hi.label), Modifier.size(22.dp), tint = if (sel) accent else MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }

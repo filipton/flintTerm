@@ -1216,4 +1216,81 @@
     <string name="palette_the_host_keys_this_phone_has_trusted">The host keys this phone has trusted</string>
     <string name="palette_preview_every_scheme_as_a_real_session">Preview every scheme as a real session</string>
     <string name="palette_the_index_of_all_of_it">The index of all of it</string>
+    <string name="battery_title">Battery</string>
+    <string name="battery_section_subtitle">What to change to make the app cost less</string>
+    <string name="battery_group_now">Where you are</string>
+    <string name="battery_group_settings">Settings</string>
+    <string name="battery_group_hosts">Your hosts</string>
+    <string name="battery_group_phone">On the phone itself</string>
+    <string name="battery_all_set">Everything here is already set the cheap way.</string>
+    <string name="battery_intro">Tap any row to go straight to the setting. A green tick means it is already the cheaper choice.</string>
+    <string name="battery_why_keep_screen_on">A screen held awake costs more than everything else in this app put together.</string>
+    <string name="battery_why_redraw_limit">Under a flood of output a limit saves about a fifth of the battery, on text going past too fast to read.</string>
+    <string name="battery_why_data_saver">Waits for Wi-Fi to transfer files and sends keepalives less often.</string>
+    <string name="battery_keepalive">Keepalive interval</string>
+    <string name="battery_why_keepalive">Every %1$d seconds each open session sends a packet, which wakes the radio. Sixty seconds or more is easier on it.</string>
+    <string name="battery_why_blink">A blinking cursor redraws the screen twice a second while the terminal is in front.</string>
+    <string name="battery_why_discovery">Listens for servers announcing themselves whenever the host list is open.</string>
+    <string name="battery_mosh">Use Mosh where you can</string>
+    <string name="battery_why_mosh">%1$d of %2$d hosts use it. Mosh sends the screen as differences, which measured about sixteen times fewer bytes than SSH for the same output, at a third of the processor.</string>
+    <string name="battery_recording">Recording sessions</string>
+    <string name="battery_recording_none">No host records every session.</string>
+    <string name="battery_recording_some">%1$d hosts record every session, which keeps writing to storage in the background.</string>
+    <string name="battery_phone_note">Android decides the rest. Leaving flintTerm out of the phone\'s battery optimisation list is not needed and does not help: the session stays open because of the notification it already shows.</string>
+    <!--
+      A count needs a plural, not a format string: English has two forms, Polish
+      three, Arabic six. Translators add or remove <item quantity> as their
+      language needs.
+    -->
+    <plurals name="battery_n_to_change">
+        <item quantity="one">%1$d setting here would cost less changed.</item>
+        <item quantity="other">%1$d settings here would cost less changed.</item>
+    </plurals>
+    <string name="enum_wolsource_this_phone">This phone</string>
+    <string name="enum_tunnelmode_only_when_needed">Only when needed</string>
+    <string name="enum_tunnelmode_always">Always</string>
+    <string name="enum_hosticon_cloud">Cloud</string>
+    <string name="enum_hosticon_single_board">Single-board</string>
+    <string name="enum_hosticon_laptop">Laptop</string>
+    <string name="enum_hosticon_desktop">Desktop</string>
+    <string name="enum_hosticon_router">Router</string>
+    <string name="enum_hosticon_database">Database</string>
+    <string name="enum_hosticon_container">Container</string>
+    <string name="enum_hosticon_storage">Storage</string>
+    <string name="enum_hosticon_home">Home</string>
+    <string name="enum_volumemodifiermode_sticky">Sticky</string>
+    <string name="enum_volumemodifiermode_press_once_it_applies_to_the_next_key">Press once, it applies to the next key</string>
+    <string name="enum_volumemodifiermode_hold">Hold</string>
+    <string name="enum_volumemodifiermode_active_only_while_the_button_is_held_down">Active only while the button is held down</string>
+    <string name="enum_volumemodifiermode_toggle">Toggle</string>
+    <string name="enum_volumemodifiermode_press_to_lock_press_again_to_release">Press to lock, press again to release</string>
+    <string name="enum_apptheme_system">System</string>
+    <string name="enum_apptheme_dark">Dark</string>
+    <string name="enum_apptheme_light">Light</string>
+    <string name="enum_datasaver_on_mobile_data">On mobile data</string>
+    <string name="enum_datasaver_hold_transfers_and_ease_off_keepalives_when">Hold transfers and ease off keepalives when the connection is metered</string>
+    <string name="enum_datasaver_ease_off_keepalives_on_any_connection_transf">Ease off keepalives on any connection. Transfers still only wait on mobile data</string>
+    <string name="enum_datasaver_off">Off</string>
+    <string name="enum_datasaver_behave_the_same_on_any_connection">Behave the same on any connection</string>
+    <string name="enum_predictiveecho_when_the_link_is_slow">When the link is slow</string>
+    <string name="enum_predictiveecho_only_once_the_round_trip_is_long_enough_to_n">Only once the round trip is long enough to notice</string>
+    <string name="enum_predictiveecho_even_on_a_fast_link">Even on a fast link</string>
+    <string name="enum_predictiveecho_never">Never</string>
+    <string name="enum_predictiveecho_wait_for_the_server_every_time">Wait for the server every time</string>
+    <string name="enum_recordingformat_text">Text</string>
+    <string name="enum_recordingformat_one_log_file_escape_sequences_stripped_reada">One .log file, escape sequences stripped, readable anywhere</string>
+    <string name="enum_recordingformat_asciinema">asciinema</string>
+    <string name="enum_recordingformat_one_cast_file_for_asciinema_play_with_the_or">One .cast file for asciinema play, with the original timing</string>
+    <string name="enum_recordingformat_both">Both</string>
+    <string name="enum_recordingformat_a_log_to_read_and_a_cast_to_replay">A .log to read and a .cast to replay</string>
+    <string name="enum_capslockaction_caps_lock">Caps Lock</string>
+    <string name="enum_capslockaction_escape">Escape</string>
+    <string name="enum_capslockaction_control">Control</string>
+    <string name="enum_cursorstyle_block">Block</string>
+    <string name="enum_cursorstyle_underline">Underline</string>
+    <string name="enum_cursorstyle_bar">Bar</string>
+    <string name="enum_terminalimages_kitty_graphics">Kitty graphics</string>
+    <string name="enum_terminalimages_sixel">Sixel</string>
+    <string name="enum_editorchoice_built_in_editor">Built-in editor</string>
+    <string name="enum_editorchoice_another_app">Another app</string>
 </resources>

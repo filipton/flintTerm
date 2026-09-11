@@ -130,6 +130,7 @@ object Routes {
     const val SETTINGS_SECURITY = "settings/security"
     const val SETTINGS_AUTOMATION = "settings/automation"
     const val SETTINGS_ABOUT = "settings/about"
+    const val SETTINGS_BATTERY = "settings/battery"
     const val LICENSES = "settings/about/licenses"
     const val HIGHLIGHTS = "settings/appearance/highlighting"
     const val THEME = "theme"
@@ -421,6 +422,7 @@ class MainActivity : FragmentActivity() {
                         composable(Routes.SETTINGS_TERMINAL) { TerminalSettings(nav) }
                         composable(Routes.SETTINGS_SESSIONS) { SessionsSettings(nav) }
                         composable(Routes.SETTINGS_CONNECTIONS) { ConnectionsSettings(nav) }
+                        composable(Routes.SETTINGS_BATTERY) { dev.flint.term.ui.settings.BatterySettings(nav) }
                         composable(Routes.SETTINGS_FILES) { FilesSettings(nav) }
                         composable(Routes.SETTINGS_BACKUP) { BackupSettings(nav) }
                         composable(Routes.SETTINGS_SECURITY) { SecuritySettings(nav) }

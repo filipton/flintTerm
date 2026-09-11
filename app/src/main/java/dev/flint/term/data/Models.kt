@@ -1,5 +1,8 @@
 package dev.flint.term.data
 
+import androidx.annotation.StringRes
+import dev.flint.term.R
+
 import java.util.UUID
 
 enum class AuthType { PASSWORD, KEY, NONE }
@@ -196,7 +199,7 @@ fun Host?.fontSize(settings: Settings): Float =
 fun Host.usesTmuxControls(settings: Settings): Boolean =
     settings.tmuxControls && (tmuxControls ?: persistent)
 
-enum class WolSource(val label: String) { AUTO("Auto"), PHONE("This phone"), JUMP_HOST("Jump host") }
+enum class WolSource(@StringRes val label: Int) { AUTO(R.string.hosteditscreen_auto), PHONE(R.string.enum_wolsource_this_phone), JUMP_HOST(R.string.groupsscreen_jump_host) }
 
 /** Wake-on-LAN settings for a host. */
 data class WolSettings(
@@ -267,7 +270,7 @@ fun List<EnvEntry>.requestable(): List<EnvEntry> =
         .toList()
 
 /** How a host uses its WireGuard tunnel. */
-enum class TunnelMode(val label: String) { WHEN_NEEDED("Only when needed"), ALWAYS("Always") }
+enum class TunnelMode(@StringRes val label: Int) { WHEN_NEEDED(R.string.enum_tunnelmode_only_when_needed), ALWAYS(R.string.enum_tunnelmode_always) }
 
 /**
  * One Tailscale identity: its own tsnet node, state directory and machine name,
@@ -324,9 +327,9 @@ data class HostAddress(
 )
 
 /** Icons a host can show on its card; keys are stored, so keep them stable. */
-enum class HostIcon(val label: String) {
-    SERVER("Server"), CLOUD("Cloud"), PI("Single-board"), LAPTOP("Laptop"), DESKTOP("Desktop"),
-    ROUTER("Router"), DATABASE("Database"), CONTAINER("Container"), NAS("Storage"), HOME("Home"),
+enum class HostIcon(@StringRes val label: Int) {
+    SERVER(R.string.terminalscreen_server), CLOUD(R.string.enum_hosticon_cloud), PI(R.string.enum_hosticon_single_board), LAPTOP(R.string.enum_hosticon_laptop), DESKTOP(R.string.enum_hosticon_desktop),
+    ROUTER(R.string.enum_hosticon_router), DATABASE(R.string.enum_hosticon_database), CONTAINER(R.string.enum_hosticon_container), NAS(R.string.enum_hosticon_storage), HOME(R.string.enum_hosticon_home),
 }
 
 /** What we speak to a host. Telnet has no auth of its own — the device prompts. */
@@ -587,26 +590,26 @@ data class KnownHost(
     }
 }
 
-enum class VolumeModifierMode(val label: String, val help: String) {
-    STICKY("Sticky", "Press once, it applies to the next key"),
-    HOLD("Hold", "Active only while the button is held down"),
-    TOGGLE("Toggle", "Press to lock, press again to release"),
+enum class VolumeModifierMode(@StringRes val label: Int, @StringRes val help: Int) {
+    STICKY(R.string.enum_volumemodifiermode_sticky, R.string.enum_volumemodifiermode_press_once_it_applies_to_the_next_key),
+    HOLD(R.string.enum_volumemodifiermode_hold, R.string.enum_volumemodifiermode_active_only_while_the_button_is_held_down),
+    TOGGLE(R.string.enum_volumemodifiermode_toggle, R.string.enum_volumemodifiermode_press_to_lock_press_again_to_release),
 }
 
-enum class AppTheme(val label: String) { SYSTEM("System"), DARK("Dark"), LIGHT("Light") }
+enum class AppTheme(@StringRes val label: Int) { SYSTEM(R.string.enum_apptheme_system), DARK(R.string.enum_apptheme_dark), LIGHT(R.string.enum_apptheme_light) }
 
 /** How hard to work at not spending mobile data. */
-enum class DataSaver(val label: String, val help: String) {
-    METERED("On mobile data", "Hold transfers and ease off keepalives when the connection is metered"),
-    ALWAYS("Always", "Ease off keepalives on any connection. Transfers still only wait on mobile data"),
-    OFF("Off", "Behave the same on any connection"),
+enum class DataSaver(@StringRes val label: Int, @StringRes val help: Int) {
+    METERED(R.string.enum_datasaver_on_mobile_data, R.string.enum_datasaver_hold_transfers_and_ease_off_keepalives_when),
+    ALWAYS(R.string.enum_tunnelmode_always, R.string.enum_datasaver_ease_off_keepalives_on_any_connection_transf),
+    OFF(R.string.enum_datasaver_off, R.string.enum_datasaver_behave_the_same_on_any_connection),
 }
 
 /** When Mosh should draw a keystroke before the server confirms it. */
-enum class PredictiveEcho(val label: String, val help: String) {
-    ADAPTIVE("When the link is slow", "Only once the round trip is long enough to notice"),
-    ALWAYS("Always", "Even on a fast link"),
-    NEVER("Never", "Wait for the server every time"),
+enum class PredictiveEcho(@StringRes val label: Int, @StringRes val help: Int) {
+    ADAPTIVE(R.string.enum_predictiveecho_when_the_link_is_slow, R.string.enum_predictiveecho_only_once_the_round_trip_is_long_enough_to_n),
+    ALWAYS(R.string.enum_tunnelmode_always, R.string.enum_predictiveecho_even_on_a_fast_link),
+    NEVER(R.string.enum_predictiveecho_never, R.string.enum_predictiveecho_wait_for_the_server_every_time),
 }
 
 /**
@@ -616,10 +619,10 @@ enum class PredictiveEcho(val label: String, val help: String) {
  * timing, so `asciinema play` (or asciinema.org) replays the session as it
  * happened. Wanting both is common enough to be a choice of its own.
  */
-enum class RecordingFormat(val label: String, val help: String) {
-    TEXT("Text", "One .log file, escape sequences stripped, readable anywhere"),
-    CAST("asciinema", "One .cast file for asciinema play, with the original timing"),
-    BOTH("Both", "A .log to read and a .cast to replay");
+enum class RecordingFormat(@StringRes val label: Int, @StringRes val help: Int) {
+    TEXT(R.string.enum_recordingformat_text, R.string.enum_recordingformat_one_log_file_escape_sequences_stripped_reada),
+    CAST(R.string.enum_recordingformat_asciinema, R.string.enum_recordingformat_one_cast_file_for_asciinema_play_with_the_or),
+    BOTH(R.string.enum_recordingformat_both, R.string.enum_recordingformat_a_log_to_read_and_a_cast_to_replay);
 
     val text: Boolean get() = this != CAST
     val cast: Boolean get() = this != TEXT
@@ -642,21 +645,21 @@ data class AutomationCall(
 )
 
 /** What the Caps Lock key does on a hardware keyboard instead of locking caps. */
-enum class CapsLockAction(val label: String) { NONE("Caps Lock"), ESC("Escape"), CTRL("Control") }
+enum class CapsLockAction(@StringRes val label: Int) { NONE(R.string.enum_capslockaction_caps_lock), ESC(R.string.enum_capslockaction_escape), CTRL(R.string.enum_capslockaction_control) }
 
 /** The shape the cursor is drawn as, unless the program asks for another (DECSCUSR). */
-enum class CursorStyle(val label: String) { BLOCK("Block"), UNDERLINE("Underline"), BAR("Bar") }
+enum class CursorStyle(@StringRes val label: Int) { BLOCK(R.string.enum_cursorstyle_block), UNDERLINE(R.string.enum_cursorstyle_underline), BAR(R.string.enum_cursorstyle_bar) }
 
 /** Which inline-image protocols a session answers to. */
-enum class TerminalImages(val label: String) {
-    OFF("Off"), KITTY("Kitty graphics"), SIXEL("Sixel"), BOTH("Both");
+enum class TerminalImages(@StringRes val label: Int) {
+    OFF(R.string.enum_datasaver_off), KITTY(R.string.enum_terminalimages_kitty_graphics), SIXEL(R.string.enum_terminalimages_sixel), BOTH(R.string.enum_recordingformat_both);
 
     val kitty: Boolean get() = this == KITTY || this == BOTH
     val sixel: Boolean get() = this == SIXEL || this == BOTH
 }
 
 /** What opens when a remote text file is tapped. */
-enum class EditorChoice(val label: String) { BUILT_IN("Built-in editor"), EXTERNAL("Another app") }
+enum class EditorChoice(@StringRes val label: Int) { BUILT_IN(R.string.enum_editorchoice_built_in_editor), EXTERNAL(R.string.enum_editorchoice_another_app) }
 
 /**
  * A key sequence on the chords sheet: a label to tap and the keys it sends.

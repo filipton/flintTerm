@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.BatteryFull
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Info
@@ -57,6 +58,7 @@ fun SettingsScreen(nav: NavController) {
                 Section("Terminal", stringResource(R.string.settingsscreen_scrollback_predictive_echo_completion_recordings), Icons.Rounded.Terminal, MaterialTheme.colorScheme.secondary, Routes.SETTINGS_TERMINAL),
                 Section(stringResource(R.string.settingsscreen_sessions_alerts), stringResource(R.string.settingsscreen_tabs_the_bell_and_being_told_a_command_finished), Icons.Rounded.Tab, MaterialTheme.colorScheme.tertiary, Routes.SETTINGS_SESSIONS),
                 Section("Connections", stringResource(R.string.settingsscreen_keepalive_data_saver_agent_signing_vpn_resolver), Icons.Rounded.Link, MaterialTheme.colorScheme.primary, Routes.SETTINGS_CONNECTIONS),
+                Section(stringResource(R.string.battery_title), stringResource(R.string.battery_section_subtitle), Icons.Rounded.BatteryFull, MaterialTheme.colorScheme.primary, Routes.SETTINGS_BATTERY),
                 Section("Files", stringResource(R.string.settingsscreen_hidden_files_and_where_a_dropped_file_lands), Icons.Rounded.Folder, MaterialTheme.colorScheme.tertiary, Routes.SETTINGS_FILES),
                 Section("Backup", stringResource(R.string.settingsscreen_everything_in_one_file_sealed_with_a_passphrase), Icons.Rounded.Archive, MaterialTheme.colorScheme.primary, Routes.SETTINGS_BACKUP),
                 Section("Security", stringResource(R.string.settingsscreen_app_lock_before_hosts_and_keys_open), Icons.Rounded.Lock, MaterialTheme.colorScheme.error, Routes.SETTINGS_SECURITY),

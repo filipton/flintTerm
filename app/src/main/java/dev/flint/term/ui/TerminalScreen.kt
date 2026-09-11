@@ -1129,7 +1129,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 },
                 recording.let { rec ->
                     if (rec == null) {
-                        SheetAction(stringResource(R.string.terminalscreen_record_session), Icons.Rounded.FiberManualRecord, subtitle = settings.recordingFormat.help) {
+                        SheetAction(stringResource(R.string.terminalscreen_record_session), Icons.Rounded.FiberManualRecord, subtitle = stringResource(settings.recordingFormat.help)) {
                             menu = false; toggleRecording()
                         }
                     } else {

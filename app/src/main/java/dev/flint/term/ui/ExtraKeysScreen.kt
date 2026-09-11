@@ -337,20 +337,23 @@ fun ExtraKeysScreen(nav: NavController) {
             }
 
             Group(stringResource(R.string.extrakeysscreen_volume_buttons)) {
-                fun describe(t: String, mode: VolumeModifierMode): String {
+                // Takes the mode's name already resolved: this is a plain
+                // function, and a string resource can only be read from a
+                // composable one.
+                fun describe(t: String, modeName: String): String {
                     if (t == "NONE" || t.isBlank()) return "Nothing (volume as usual)"
                     val d = ExtraKeys.resolve(t)
                     val name = if (d.label == t && ExtraKeys.catalog.none { it.token == t }) "Types \"${t}\"" else (ExtraKeys.catalog.firstOrNull { it.token == t }?.token?.lowercase()?.replaceFirstChar { c -> c.uppercase() } ?: d.label)
-                    return if (d.action is ExtraKeys.Action.Modifier) "$name  ·  ${mode.label.lowercase()}" else name
+                    return if (d.action is ExtraKeys.Action.Modifier) "$name  ·  " + modeName.lowercase() else name
                 }
                 GroupRow(
-                    title = stringResource(R.string.extrakeysscreen_volume_down), subtitle = describe(settings.volumeDownAction, settings.volumeDownMode),
+                    title = stringResource(R.string.extrakeysscreen_volume_down), subtitle = describe(settings.volumeDownAction, stringResource(settings.volumeDownMode.label)),
                     icon = Icons.Rounded.VolumeUp, iconTint = MaterialTheme.colorScheme.secondary,
                     onClick = { picking = 0 },
                 )
                 RowDivider()
                 GroupRow(
-                    title = stringResource(R.string.extrakeysscreen_volume_up), subtitle = describe(settings.volumeUpAction, settings.volumeUpMode),
+                    title = stringResource(R.string.extrakeysscreen_volume_up), subtitle = describe(settings.volumeUpAction, stringResource(settings.volumeUpMode.label)),
                     icon = Icons.Rounded.VolumeUp, iconTint = MaterialTheme.colorScheme.secondary,
                     onClick = { picking = 1 },
                 )
@@ -469,8 +472,8 @@ fun KeyPickerSheet(
             section("Modifiers") { chips(listOf("CTRL", "ALT", "SHIFT")) }
             if (modifierMode != null && onModifierMode != null && selected.any { byToken[it]?.action is ExtraKeys.Action.Modifier }) {
                 Spacer(Modifier.height(8.dp))
-                Segmented(VolumeModifierMode.entries.map { it.label }, modifierMode.ordinal) { i -> onModifierMode(VolumeModifierMode.entries[i]) }
-                Text(modifierMode.help, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
+                Segmented(VolumeModifierMode.entries.map { stringResource(it.label) }, modifierMode.ordinal) { i -> onModifierMode(VolumeModifierMode.entries[i]) }
+                Text(stringResource(modifierMode.help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
             }
             section("Navigation") { chips(listOf("UP", "DOWN", "LEFT", "RIGHT", "NAV", "HOME", "END", "PGUP", "PGDN")) }
             section("Editing") { chips(listOf("ESC", "TAB", "STAB", "ENTER", "BKSP", "DEL", "INS")) }

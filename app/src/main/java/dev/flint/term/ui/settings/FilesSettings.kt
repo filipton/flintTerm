@@ -35,7 +35,7 @@ fun FilesSettings(nav: NavController) {
         Group("Editing") {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.filessettings_open_a_text_file_with), style = MaterialTheme.typography.bodyLarge)
-                Segmented(EditorChoice.entries.map { it.label }, settings.editor.ordinal) { i ->
+                Segmented(EditorChoice.entries.map { stringResource(it.label) }, settings.editor.ordinal) { i ->
                     app.store.updateSettings { it.copy(editor = EditorChoice.entries[i]) }
                 }
                 Text(

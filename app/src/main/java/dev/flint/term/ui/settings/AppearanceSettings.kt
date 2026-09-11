@@ -110,7 +110,7 @@ fun AppearanceSettings(nav: NavController) {
                     Spacer(Modifier.width(14.dp))
                     Text(stringResource(R.string.appearancesettings_app_theme), style = MaterialTheme.typography.bodyLarge)
                 }
-                Segmented(AppTheme.entries.map { it.label }, settings.appTheme.ordinal) { i ->
+                Segmented(AppTheme.entries.map { stringResource(it.label) }, settings.appTheme.ordinal) { i ->
                     app.store.updateSettings { it.copy(appTheme = AppTheme.entries[i]) }
                 }
             }
@@ -193,7 +193,7 @@ fun AppearanceSettings(nav: NavController) {
                     Spacer(Modifier.width(14.dp))
                     Text(stringResource(R.string.appearancesettings_shape), style = MaterialTheme.typography.bodyLarge)
                 }
-                Segmented(CursorStyle.entries.map { it.label }, settings.cursorStyle.ordinal) { i ->
+                Segmented(CursorStyle.entries.map { stringResource(it.label) }, settings.cursorStyle.ordinal) { i ->
                     app.store.updateSettings { it.copy(cursorStyle = CursorStyle.entries[i]) }
                 }
                 Text(

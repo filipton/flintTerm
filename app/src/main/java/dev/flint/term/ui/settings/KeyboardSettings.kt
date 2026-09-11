@@ -132,7 +132,7 @@ fun KeyboardSettings(nav: NavController) {
         Group(stringResource(R.string.keyboardsettings_hardware_keyboard)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(stringResource(R.string.keyboardsettings_caps_lock_acts_as), style = MaterialTheme.typography.bodyLarge)
-                Segmented(CapsLockAction.entries.map { it.label }, settings.capsLockAs.ordinal) { i ->
+                Segmented(CapsLockAction.entries.map { stringResource(it.label) }, settings.capsLockAs.ordinal) { i ->
                     app.store.updateSettings { it.copy(capsLockAs = CapsLockAction.entries[i]) }
                 }
                 Text(

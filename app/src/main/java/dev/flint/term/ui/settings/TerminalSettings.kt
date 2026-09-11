@@ -122,8 +122,8 @@ fun TerminalSettings(nav: NavController) {
             subtitle = stringResource(R.string.terminalsettings_mosh_draws_a_keystroke_before_the_server_confirm),
             actions = PredictiveEcho.entries.map { mode ->
                 SheetAction(
-                    mode.label + if (mode == settings.predictiveEcho) "   ✓" else "",
-                    subtitle = mode.help,
+                    stringResource(mode.label) + if (mode == settings.predictiveEcho) "   ✓" else "",
+                    subtitle = stringResource(mode.help),
                 ) {
                     app.store.updateSettings { it.copy(predictiveEcho = mode) }
                     predictSheet = false
@@ -198,7 +198,7 @@ fun TerminalSettings(nav: NavController) {
                         )
                     }
                 }
-                Segmented(TerminalImages.entries.map { it.label }, settings.terminalImages.ordinal) { i ->
+                Segmented(TerminalImages.entries.map { stringResource(it.label) }, settings.terminalImages.ordinal) { i ->
                     app.store.updateSettings { it.copy(terminalImages = TerminalImages.entries[i]) }
                 }
                 Text(
@@ -213,7 +213,7 @@ fun TerminalSettings(nav: NavController) {
                 icon = Icons.Rounded.Bolt,
                 iconTint = MaterialTheme.colorScheme.secondary,
                 onClick = { predictSheet = true },
-                trailing = { Text(settings.predictiveEcho.label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) },
+                trailing = { Text(stringResource(settings.predictiveEcho.label), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary) },
             )
         }
 
@@ -245,10 +245,10 @@ fun TerminalSettings(nav: NavController) {
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(stringResource(R.string.terminalsettings_session_recordings), style = MaterialTheme.typography.bodyLarge)
-                        Text(settings.recordingFormat.help, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(stringResource(settings.recordingFormat.help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-                Segmented(RecordingFormat.entries.map { it.label }, settings.recordingFormat.ordinal) { i ->
+                Segmented(RecordingFormat.entries.map { stringResource(it.label) }, settings.recordingFormat.ordinal) { i ->
                     app.store.updateSettings { it.copy(recordingFormat = RecordingFormat.entries[i]) }
                 }
                 Text(
