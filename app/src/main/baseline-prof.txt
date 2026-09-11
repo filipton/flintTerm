@@ -1,0 +1,34 @@
+# Which of our own classes ART should compile ahead of time, rather than
+# interpreting until the JIT catches up.
+#
+# The APK already carries baseline profiles for the AndroidX and Compose
+# libraries, because those ship their own; nothing covered ours, so every
+# method here started out interpreted on a fresh install. Compiling the whole
+# package by hand (`cmd package compile -m speed`) measured about 12% off the
+# CPU of a streaming session, which is the ceiling this is reaching for.
+#
+# H hot, S startup, P post-startup. The wildcards are expanded by AGP and then
+# rewritten through R8's mapping, so these stay readable as source names.
+
+# Everything on the frame path: the renderer, the fonts, the input handling.
+HSPLdev/flint/term/terminal/**;->**(**)**
+
+# The generated bridge to the Rust core. Every frame crosses it.
+HSPLdev/flint/term/core/**;->**(**)**
+
+# JNA, which that bridge is built on. It is a library with no profile of its
+# own, so it was running interpreted or JIT-compiled under every call across:
+# profiling showed Structure.calculateSize, getFieldList and friends in the
+# JIT cache on every frame.
+HSPLcom/sun/jna/**;->**(**)**
+
+# Sessions, transports and the flows the screens collect from.
+HSPLdev/flint/term/session/**;->**(**)**
+
+# The store, the settings and the models they hand around.
+HSPLdev/flint/term/data/**;->**(**)**
+
+# The screens themselves, which are Compose and so are lambda-heavy.
+HSPLdev/flint/term/ui/**;->**(**)**
+
+HSPLdev/flint/term/App;->**(**)**

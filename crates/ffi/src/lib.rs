@@ -13,6 +13,8 @@ mod highlight;
 mod links;
 mod emulator;
 mod external;
+mod frame;
+mod input;
 mod mosh;
 mod putty;
 mod runtime;
@@ -205,4 +207,14 @@ pub fn snapshot_header_bytes() -> u32 {
 #[uniffi::export]
 pub fn snapshot_cell_bytes() -> u32 {
     term_core::CELL_BYTES as u32
+}
+
+#[uniffi::export]
+pub fn snapshot_generation_offset() -> u32 {
+    term_core::GENERATION_OFFSET as u32
+}
+
+#[uniffi::export]
+pub fn snapshot_links_offset() -> u32 {
+    term_core::LINKS_OFFSET as u32
 }

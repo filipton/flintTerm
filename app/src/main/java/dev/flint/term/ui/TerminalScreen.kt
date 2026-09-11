@@ -257,8 +257,16 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     }
     LaunchedEffect(sessionId, hostHistory.isEmpty(), settings.completeFromHistory, suggesting) {
         if (hostHistory.isEmpty() || !settings.completeFromHistory || !suggesting) return@LaunchedEffect
+        // The screen has to have changed for the answer to change, and the core
+        // counts that for the renderer already. Somebody reading their terminal
+        // without typing is the normal case, and it used to cost two trips over
+        // the bridge and a pass over the history two and a half times a second.
+        var seen = -1
         while (true) {
             kotlinx.coroutines.delay(400)
+            val generation = view.snapGeneration
+            if (generation == seen) continue
+            seen = generation
             // The line the cursor is on is a command at a shell prompt and
             // something else everywhere else, and matching a file being edited
             // against the history puts a ghost in the middle of vim. A shell

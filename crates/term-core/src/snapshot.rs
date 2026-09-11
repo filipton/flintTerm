@@ -10,7 +10,7 @@
 //!   u8  mode_flags (bit0 alt_screen, bit1 mouse_reporting, bit2 bracketed_paste)
 //!   u32 display_offset, u32 history_size
 //!   i16 sel_start_col, i16 sel_start_row, i16 sel_end_col, i16 sel_end_row (i16::MIN when none)
-//!   u8  sel_is_block, u8 reserved x5
+//!   u8  sel_is_block, u32 generation, u8 links_changed
 //! cells (rows * cols * CELL_BYTES):
 //!   u32 codepoint, u32 fg (0x00RRGGBB), u32 bg (0x00RRGGBB), u16 flags
 //! ```
@@ -20,6 +20,19 @@
 //! the glyph with `WIDE`, the second is a `WIDE_SPACER` with codepoint 0.
 
 pub const HEADER_BYTES: usize = 32;
+/// Where the content counter sits in the header.
+///
+/// The writer leaves it zero; the session fills it in on the way out, because
+/// it is the session and not the emulator that knows what has changed. A
+/// renderer compares it with the last frame's to find out whether anything on
+/// the grid actually moved.
+pub const GENERATION_OFFSET: usize = 27;
+/// A counter that moves only when the set of links on the grid changed.
+///
+/// Also filled in by the session. Output with no links in it streams past
+/// without this ever moving, so the renderer only asks for the links when it
+/// does. It wraps, which is fine: it is compared frame to frame, never kept.
+pub const LINKS_OFFSET: usize = 31;
 pub const CELL_BYTES: usize = 14;
 
 pub mod CellFlags {

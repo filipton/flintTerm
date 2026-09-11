@@ -9,7 +9,8 @@ use tokio::sync::mpsc;
 use ssh_core::{LocalForward, RemoteForward, SshClient};
 use term_core::{
     encode_key, encode_mouse, encode_paste, Emulator, EmulatorEvent, InterceptOptions, Key, KeyEvent, KeyKind,
-    Modifiers, MouseButton, MouseEvent, Palette, PromptMark, SelectionKind, ViewPoint, CELL_BYTES, HEADER_BYTES,
+    Modifiers, MouseButton, MouseEvent, Palette, PromptMark, SelectionKind, ViewPoint, CELL_BYTES, GENERATION_OFFSET,
+    HEADER_BYTES, LINKS_OFFSET,
 };
 
 use crate::emulator;
@@ -346,6 +347,29 @@ pub enum PromptKind {
     Finished,
 }
 
+/// The line the cursor is on, as [`Session::input_line`] reads it.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct InputLine {
+    /// The line up to the cursor, prompt and all: the rows it wrapped from are
+    /// joined on, and the blanks before the cursor kept.
+    pub line: String,
+    /// Only what was typed after the prompt, when the core saw where the
+    /// prompt ended; null when that has to be worked out from `line`.
+    pub typed: Option<String>,
+    /// Nothing is written at the cursor or just after it, so something drawn
+    /// there covers nothing: false when the cursor was moved back into the
+    /// line, or the shell shows a suggestion of its own after it.
+    pub at_end: bool,
+    /// Nothing is written on any row below the cursor's line: a shell's prompt
+    /// rather than a full-screen program, even on the alt screen, where a
+    /// program killed without cleaning up leaves the shell.
+    pub nothing_below: bool,
+    /// The cursor's viewport row and the column the next character goes in,
+    /// even while the cursor is hidden, which the snapshot reports as nowhere.
+    pub row: i32,
+    pub col: u16,
+}
+
 /// A prompt mark and where it currently is, for jumping between prompts and
 /// for selecting the output of one command.
 ///
@@ -631,6 +655,13 @@ struct Inner {
     emu: Mutex<Box<dyn Emulator>>,
     palette: Mutex<Palette>,
     dirty: AtomicBool,
+    /// Bumped every time the visible grid changes.
+    ///
+    /// Rides along in the snapshot header so the renderer can tell a frame that
+    /// has new content from one drawn for the blinking cursor, and skip the
+    /// per-frame work — link scanning, keyword colouring, reading the line
+    /// being typed — that can only give the same answer twice.
+    generation: AtomicU64,
     state: Mutex<SessionState>,
     title: Mutex<Option<String>>,
     size: Mutex<(u16, u16)>,
@@ -661,6 +692,21 @@ struct Inner {
     highlight: Mutex<crate::highlight::Highlighter>,
     /// Links found on the visible grid, kept against the rows they came from.
     link_cache: Mutex<crate::links::LinkCache>,
+    /// The text of every visible row, as of the generation it was read at.
+    ///
+    /// Links and keyword colours are matched against the same rows on the same
+    /// frame, and each used to walk the grid and build its own set of strings.
+    /// Held here, the strings are reused frame after frame and the walk happens
+    /// once, or not at all when nothing has changed.
+    rows_text: Mutex<(u32, Vec<String>)>,
+    /// The links last found, the generation they were found at, and a count
+    /// of the times the set changed; see [`Session::refresh_links`].
+    links_last: Mutex<LinksState>,
+    /// The frontend's wake-up descriptor, once it asked for one; see
+    /// [`Session::open_damage_fd`].
+    wake: Mutex<Option<std::os::fd::OwnedFd>>,
+    /// Where the command being typed begins; see [`crate::input`].
+    input_start: Mutex<crate::input::InputStart>,
     /// Endpoint for `Backend::External`; unused by the other backends.
     external: Arc<ExternalPipe>,
     /// Which tunnel the first hop actually went through, once decided. "Only
@@ -699,6 +745,14 @@ struct WatchLine {
     esc: u8,
 }
 
+/// What [`Session::refresh_links`] last worked out.
+#[derive(Default)]
+struct LinksState {
+    generation: u32,
+    changes: u8,
+    links: Vec<crate::links::LinkSpan>,
+}
+
 /// Where a packed grid sits in memory, for a caller that will read it directly.
 #[derive(Debug, Clone, Copy, uniffi::Record)]
 pub struct SnapshotSpan {
@@ -722,6 +776,14 @@ impl SnapshotBuffer {
     #[uniffi::constructor]
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+}
+
+impl SnapshotBuffer {
+    /// Where the packed grid starts. It only moves when the buffer has to
+    /// grow, and growing changes its length.
+    pub(crate) fn address(&self) -> u64 {
+        self.data.lock().as_ptr() as u64
     }
 }
 
@@ -777,6 +839,125 @@ impl ssh_core::HostKeyVerifier for Verifier {
     }
 }
 
+impl Session {
+    /// Packs the grid into `out`, and with `want_links`, works out the links
+    /// first so the header can say whether they changed.
+    ///
+    /// The one piece of work done for every frame, from either way across:
+    /// uniffi's [`Session::snapshot_into`], or the JNI path in [`crate::frame`].
+    pub(crate) fn fill_snapshot(&self, out: &SnapshotBuffer, want_links: bool) -> SnapshotSpan {
+        // Before the buffer and palette are locked, so this takes none of the
+        // locks the grid does while holding theirs.
+        let links = if want_links { self.refresh_links() } else { self.inner.links_last.lock().changes };
+        self.inner.dirty.store(false, Ordering::Release);
+        let (cols, rows) = *self.inner.size.lock();
+        let mut buf = out.data.lock();
+        buf.clear();
+        buf.reserve(HEADER_BYTES + cols as usize * rows as usize * CELL_BYTES);
+        let palette = self.inner.palette.lock();
+        self.inner.emu.lock().snapshot(&palette, &mut buf);
+        self.stamp_generation(&mut buf[..]);
+        if buf.len() >= HEADER_BYTES {
+            buf[LINKS_OFFSET] = links;
+        }
+        // Read after filling: growing the buffer moves it.
+        SnapshotSpan { ptr: buf.as_ptr() as u64, len: buf.len() as u64 }
+    }
+
+    /// Finds the visible links if the grid moved since the last look, and
+    /// returns how many times the set of them has changed.
+    ///
+    /// Scrolling text that holds no links leaves the set empty frame after
+    /// frame, so the count stays put and the renderer never asks for them.
+    fn refresh_links(&self) -> u8 {
+        let generation = self.inner.generation.load(Ordering::Acquire) as u32;
+        {
+            let state = self.inner.links_last.lock();
+            if state.generation == generation {
+                return state.changes;
+            }
+        }
+        let found = self.with_rows(|texts, cols| self.inner.link_cache.lock().scan(texts, cols));
+        let mut state = self.inner.links_last.lock();
+        state.generation = generation;
+        if state.links != found {
+            state.links = found;
+            state.changes = state.changes.wrapping_add(1);
+        }
+        state.changes
+    }
+
+    /// An eventfd that turns readable whenever the grid changes, and from then
+    /// on the only way this session says so; -1 where there are no eventfds.
+    ///
+    /// The caller owns the descriptor returned. See `damage_fd` in
+    /// [`crate::frame`] for why it exists.
+    pub(crate) fn open_damage_fd(&self) -> i32 {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        {
+            use std::os::fd::FromRawFd;
+            // SAFETY: plain syscalls; every descriptor is either kept or closed.
+            let theirs = unsafe {
+                let fd = libc::eventfd(0, libc::EFD_NONBLOCK | libc::EFD_CLOEXEC);
+                if fd < 0 {
+                    return -1;
+                }
+                let theirs = libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 0);
+                if theirs < 0 {
+                    libc::close(fd);
+                    return -1;
+                }
+                *self.inner.wake.lock() = Some(std::os::fd::OwnedFd::from_raw_fd(fd));
+                theirs
+            };
+            // A change that came in before this has already used up its call,
+            // and the next one will not come until that frame is drawn.
+            if self.inner.dirty.load(Ordering::Acquire) {
+                self.inner.wake_frontend();
+            }
+            return theirs;
+        }
+        #[allow(unreachable_code)]
+        -1
+    }
+
+    /// Hands the visible rows' text to `f`, reading them only if they moved.
+    fn with_rows<R>(&self, f: impl FnOnce(&[String], u16) -> R) -> R {
+        let (cols, rows) = *self.inner.size.lock();
+        let generation = self.inner.generation.load(Ordering::Acquire) as u32;
+        let mut cache = self.inner.rows_text.lock();
+        if cache.0 != generation || cache.1.len() != rows as usize {
+            cache.1.resize(rows as usize, String::new());
+            let emu = self.inner.emu.lock();
+            for (row, slot) in cache.1.iter_mut().enumerate() {
+                slot.clear();
+                emu.row_text_into(row as u16, slot);
+            }
+            cache.0 = generation;
+        }
+        f(&cache.1, cols)
+    }
+
+    /// Let the input tracker see keystrokes before they leave, while the
+    /// screen still shows where they will land.
+    fn note_typing(&self, bytes: &[u8]) {
+        self.inner.input_start.lock().typing(bytes, || self.inner.emu.lock().cursor_line());
+    }
+
+    /// Puts [`Inner::generation`] in the header's spare bytes.
+    ///
+    /// The header keeps five spare bytes; four of them hold the
+    /// low half of the counter, which wraps after four billion changes to one
+    /// screen and would cost one redundant rescan if it ever did.
+    fn stamp_generation(&self, buf: &mut [u8]) {
+        if buf.len() < HEADER_BYTES {
+            return;
+        }
+        let generation = self.inner.generation.load(Ordering::Acquire) as u32;
+        buf[GENERATION_OFFSET..GENERATION_OFFSET + 4].copy_from_slice(&generation.to_le_bytes());
+    }
+}
+
 #[uniffi::export]
 impl Session {
     #[uniffi::constructor]
@@ -803,6 +984,7 @@ impl Session {
                 emu: Mutex::new(emu),
                 palette: Mutex::new(Palette::default()),
                 dirty: AtomicBool::new(true),
+                generation: AtomicU64::new(1),
                 state: Mutex::new(SessionState::Connecting),
                 title: Mutex::new(None),
                 size: Mutex::new((cols.max(2), rows.max(1))),
@@ -820,6 +1002,10 @@ impl Session {
                 command_watch: Mutex::new(None),
                 highlight: Mutex::new(Default::default()),
                 link_cache: Mutex::new(Default::default()),
+                rows_text: Mutex::new((0, Vec::new())),
+                links_last: Mutex::new(LinksState::default()),
+                wake: Mutex::new(None),
+                input_start: Mutex::new(Default::default()),
                 external: Arc::new(ExternalPipe::new()),
                 used_tunnel: Mutex::new(None),
                 used_endpoint: Mutex::new(None),
@@ -962,15 +1148,7 @@ impl Session {
     /// session, because a session can be destroyed from another thread while a
     /// frame that is already reading the pointer is still on its way out.
     pub fn snapshot_into(&self, out: Arc<SnapshotBuffer>) -> SnapshotSpan {
-        self.inner.dirty.store(false, Ordering::Release);
-        let (cols, rows) = *self.inner.size.lock();
-        let mut buf = out.data.lock();
-        buf.clear();
-        buf.reserve(HEADER_BYTES + cols as usize * rows as usize * CELL_BYTES);
-        let palette = self.inner.palette.lock();
-        self.inner.emu.lock().snapshot(&palette, &mut buf);
-        // Read after filling: growing the buffer moves it.
-        SnapshotSpan { ptr: buf.as_ptr() as u64, len: buf.len() as u64 }
+        self.fill_snapshot(&out, false)
     }
 
     /// Packed grid (see `term_core::snapshot`). Clears the damage flag.
@@ -983,6 +1161,7 @@ impl Session {
         let mut out = Vec::with_capacity(HEADER_BYTES + cols as usize * rows as usize * CELL_BYTES);
         let palette = self.inner.palette.lock();
         self.inner.emu.lock().snapshot(&palette, &mut out);
+        self.stamp_generation(&mut out[..]);
         out
     }
 
@@ -1106,6 +1285,7 @@ impl Session {
 
     /// Text committed by the IME; sent verbatim.
     pub fn send_text(&self, text: String) {
+        self.note_typing(text.as_bytes());
         self.inner.send(text.into_bytes());
     }
 
@@ -1152,6 +1332,7 @@ impl Session {
             &modes,
         );
         if !bytes.is_empty() {
+            self.note_typing(&bytes);
             self.inner.scroll_to_bottom_on_input();
             self.inner.send(bytes);
         }
@@ -1159,6 +1340,7 @@ impl Session {
 
     pub fn paste(&self, text: String) {
         let modes = self.inner.emu.lock().modes();
+        self.inner.input_start.lock().pasting(&text, || self.inner.emu.lock().cursor_line());
         self.inner.scroll_to_bottom_on_input();
         self.inner.send(encode_paste(&text, &modes));
     }
@@ -1271,13 +1453,35 @@ impl Session {
 
     /// The line the cursor is on, up to the cursor, or empty when there is none.
     ///
-    /// What the user has typed so far, as far as anyone outside the emulator can
-    /// tell: enough to offer a completion against, and it costs one lock.
+    /// The prompt is included; [`Self::input_line`] says where it ends when
+    /// that is known.
     pub fn current_input(&self) -> String {
-        let emu = self.inner.emu.lock();
-        match emu.cursor_row_col() {
-            Some((row, col)) => emu.row_text(row).chars().take(col as usize).collect(),
-            None => String::new(),
+        // From the grid every time: `input_line` answers without it when
+        // nothing has been typed, and this is asked for what is on the line.
+        self.inner.emu.lock().cursor_line().map(|line| line.before).unwrap_or_default()
+    }
+
+    /// The line being typed, read for completing it from history.
+    pub fn input_line(&self) -> InputLine {
+        // Nothing typed since the last command: what the cursor sits after is
+        // the prompt, or the output of the command still running, and in
+        // neither case input. Said without reading the grid, which is what the
+        // poll was doing twice a second while a program streamed, through
+        // every row of one endless wrapped line.
+        if self.inner.input_start.lock().is_fresh() {
+            return InputLine { line: String::new(), typed: Some(String::new()), at_end: true, nothing_below: false, row: -1, col: 0 };
+        }
+        let Some(line) = self.inner.emu.lock().cursor_line() else {
+            return InputLine { line: String::new(), typed: None, at_end: true, nothing_below: false, row: -1, col: 0 };
+        };
+        let typed = self.inner.input_start.lock().typed(&line.before);
+        InputLine {
+            line: line.before,
+            typed,
+            at_end: line.at_end,
+            nothing_below: line.nothing_below,
+            row: line.row,
+            col: line.col,
         }
     }
 
@@ -1302,16 +1506,10 @@ impl Session {
     /// Asked for once a frame alongside [`Self::visible_links`], and cached
     /// against the rows the same way, so a still screen runs no patterns.
     pub fn visible_highlights(&self) -> Vec<crate::highlight::HighlightSpan> {
-        let mut hl = self.inner.highlight.lock();
-        if hl.is_empty() {
+        if self.inner.highlight.lock().is_empty() {
             return Vec::new();
         }
-        let (_, rows) = *self.inner.size.lock();
-        let texts: Vec<String> = {
-            let emu = self.inner.emu.lock();
-            (0..rows).map(|r| emu.row_text(r)).collect()
-        };
-        hl.scan(&texts)
+        self.with_rows(|texts, _| self.inner.highlight.lock().scan(texts))
     }
 
     /// Tappable URLs and paths on the visible grid.
@@ -1320,12 +1518,8 @@ impl Session {
     /// answers are cached against them, so a screen that is sitting still
     /// costs nothing and only the rows that moved are looked at again.
     pub fn visible_links(&self) -> Vec<crate::links::LinkSpan> {
-        let (cols, rows) = *self.inner.size.lock();
-        let texts: Vec<String> = {
-            let emu = self.inner.emu.lock();
-            (0..rows).map(|r| emu.row_text(r)).collect()
-        };
-        self.inner.link_cache.lock().scan(&texts, cols)
+        self.refresh_links();
+        self.inner.links_last.lock().links.clone()
     }
 
     pub fn row_text(&self, row: u16) -> String {
@@ -1561,9 +1755,24 @@ impl Inner {
     }
 
     fn mark_dirty(&self) {
-        if !self.dirty.swap(true, Ordering::AcqRel) {
+        self.generation.fetch_add(1, Ordering::AcqRel);
+        if !self.dirty.swap(true, Ordering::AcqRel) && !self.wake_frontend() {
             self.listener.on_damage();
         }
+    }
+
+    /// Makes the frontend's wake-up descriptor readable, if it asked for one.
+    fn wake_frontend(&self) -> bool {
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        if let Some(fd) = self.wake.lock().as_ref() {
+            use std::os::fd::AsRawFd;
+            let one: u64 = 1;
+            // SAFETY: an eventfd we own and an 8-byte value. EAGAIN means the
+            // counter is full of wake-ups nobody has read yet, which is as good.
+            unsafe { libc::write(fd.as_raw_fd(), &one as *const u64 as *const libc::c_void, 8) };
+            return true;
+        }
+        false
     }
 
     fn millis(&self) -> u64 {

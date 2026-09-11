@@ -12,8 +12,8 @@ use alacritty_terminal::vte::ansi::{Color, CursorShape, NamedColor, Processor, R
 use term_core::images::{self, Draw, ImageStore, Mark, Outcome, PlacedImage};
 use term_core::marks::{self, PromptMarkAt};
 use term_core::{
-    CellFlags, Emulator, EmulatorEvent, InterceptEvent, InterceptOptions, Interceptor, Palette, PromptMark,
-    SelectionKind, SnapshotHeader, SnapshotWriter, TermModes, ViewPoint,
+    CellFlags, CursorLine, Emulator, EmulatorEvent, InterceptEvent, InterceptOptions, Interceptor, Palette,
+    PromptMark, SelectionKind, SnapshotHeader, SnapshotWriter, TermModes, ViewPoint,
 };
 
 /// Collects events emitted by the terminal so the owner can drain them after
@@ -811,11 +811,99 @@ impl Emulator for AlacrittyEmulator {
     }
 
     fn row_text(&self, row: u16) -> String {
+        let mut out = String::new();
+        self.row_text_into(row, &mut out);
+        out
+    }
+
+    /// Walks the row itself rather than going through `bounds_to_string`.
+    ///
+    /// That builds a `String` per row by pushing a character at a time into an
+    /// empty one, appends it to a second `String`, then copies the whole thing
+    /// again to take off the newline it just added: about seven allocations a
+    /// row, thirty rows a frame. This writes into the caller's buffer instead.
+    ///
+    /// The one thing left out is the tab handling, which needs `Term`'s private
+    /// tab stops. A row holding a literal tab keeps the spaces that follow it
+    /// rather than collapsing them, which suits the callers here: the patterns
+    /// that read this text do not span a space, and the columns line up better
+    /// with the grid for having dropped nothing.
+    fn row_text_into(&self, row: u16, out: &mut String) {
+        use alacritty_terminal::grid::Row;
+        use alacritty_terminal::term::cell::{Cell, LineLength};
         let line = Line(row as i32) - self.term.grid().display_offset();
+        let grid_line: &Row<Cell> = &self.term.grid()[line];
+        let length = grid_line.line_length().0.min(self.size.cols);
+        for column in 0..length {
+            let cell = &grid_line[Column(column)];
+            if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+                continue;
+            }
+            out.push(cell.c);
+            for c in cell.zerowidth().into_iter().flatten() {
+                out.push(*c);
+            }
+        }
+    }
+
+    /// Walks back from the cursor to the row its line began on, then reads
+    /// forward to the cursor cell by cell.
+    ///
+    /// The grid's own cursor rather than the one drawn: a shell hides the
+    /// cursor while it redraws the line, and whoever reads this should not see
+    /// the line vanish for each of those frames. Scrolling the view back does
+    /// not move it either.
+    fn cursor_line(&self) -> Option<CursorLine> {
+        use alacritty_terminal::grid::Row;
+        use alacritty_terminal::term::cell::{Cell, LineLength};
+        let grid = self.term.grid();
         let cols = self.size.cols;
-        let start = Point::new(line, Column(0));
-        let end = Point::new(line, Column(cols.saturating_sub(1)));
-        self.term.bounds_to_string(start, end)
+        if cols == 0 {
+            return None;
+        }
+        let wraps = |row: &Row<Cell>| row[Column(cols - 1)].flags.contains(Flags::WRAPLINE);
+        let cursor = grid.cursor.point;
+        // Having just written the last column, the cursor stays on it until
+        // the next character wraps. The character there was typed; it is not
+        // the cell in front of the cursor.
+        let end = if grid.cursor.input_needs_wrap { cols } else { cursor.column.0.min(cols) };
+
+        // One screen's worth back at most. A program writing without newlines
+        // makes one wrapped line of everything it prints, and following that
+        // to its start read the whole scrollback on every call; no command
+        // anyone types is taller than the screen it is typed on.
+        let top = (-(grid.history_size() as i32)).max(cursor.line.0 - self.size.rows as i32);
+        let mut first = cursor.line;
+        while first.0 > top && wraps(&grid[Line(first.0 - 1)]) {
+            first = Line(first.0 - 1);
+        }
+        let mut before = String::new();
+        for line in first.0..=cursor.line.0 {
+            let row = &grid[Line(line)];
+            let upto = if line == cursor.line.0 { end } else { cols };
+            for column in 0..upto {
+                let cell = &row[Column(column)];
+                if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+                    continue;
+                }
+                // A tab is kept in the cell it was printed in, with blanks
+                // after it; on a command line it is only ever a gap.
+                before.push(if cell.c == '\t' || cell.c == '\0' { ' ' } else { cell.c });
+                for c in cell.zerowidth().into_iter().flatten() {
+                    before.push(*c);
+                }
+            }
+        }
+
+        let row = &grid[cursor.line];
+        let blank = |column: usize| column >= cols || matches!(row[Column(column)].c, ' ' | '\0');
+        // A row that runs on into the next has something after the cursor
+        // even where the next two cells happen to be blank.
+        let at_end = blank(end) && blank(end + 1) && !(end < cols && wraps(row));
+        // Text only: a row cleared in a background colour is still empty.
+        let nothing_below = (cursor.line.0 + 1..self.size.rows as i32).all(|l| grid[Line(l)].line_length().0 == 0);
+        let row = cursor.line.0 + grid.display_offset() as i32;
+        Some(CursorLine { before, at_end, nothing_below, row, col: end as u16 })
     }
 
     fn all_lines(&self) -> Vec<String> {
@@ -1396,5 +1484,116 @@ mod tests {
         assert_eq!(e.images().len(), 1);
         e.set_intercept(InterceptOptions::default());
         assert!(e.images().is_empty());
+    }
+
+    fn before_cursor(e: &AlacrittyEmulator) -> String {
+        e.cursor_line().expect("a cursor").before
+    }
+
+    #[test]
+    fn a_bare_prompt_keeps_the_blank_it_ends_in() {
+        // The row itself is trimmed, and reading it up to the cursor used to
+        // hand back `868ac99d54c5:~$`, which reads like a word typed at a
+        // prompt rather than a prompt with nothing typed after it.
+        let mut e = AlacrittyEmulator::new(80, 24, 1000);
+        e.feed(b"868ac99d54c5:~$ ");
+        assert_eq!(e.row_text(0), "868ac99d54c5:~$");
+        assert_eq!(before_cursor(&e), "868ac99d54c5:~$ ");
+        assert!(e.cursor_line().unwrap().at_end);
+    }
+
+    #[test]
+    fn the_cursor_line_is_the_prompt_and_what_was_typed() {
+        let mut e = AlacrittyEmulator::new(80, 24, 1000);
+        e.feed(b"868ac99d54c5:~$ clear\r\n\x1b[H\x1b[J");
+        e.feed(b"868ac99d54c5:~$ uptime\r\n 12:00:00 up 1 day\r\n");
+        e.feed(b"868ac99d54c5:~$ upt");
+        assert_eq!(before_cursor(&e), "868ac99d54c5:~$ upt");
+        assert!(e.cursor_line().unwrap().at_end);
+    }
+
+    #[test]
+    fn text_after_the_cursor_is_reported() {
+        let mut e = AlacrittyEmulator::new(80, 24, 1000);
+        // The cursor moved back into the word: the rest is on screen already.
+        e.feed(b"$ uptime\x1b[3D");
+        let line = e.cursor_line().unwrap();
+        assert_eq!(line.before, "$ upt");
+        assert!(!line.at_end);
+        // On the gap between two words, the next word is right there.
+        e.feed(b"\r\n$ ls -la\x1b[4D");
+        assert!(!e.cursor_line().unwrap().at_end);
+        // A shell drawing its own suggestion after the cursor, as zsh with
+        // autosuggestions does.
+        e.feed(b"\r\n$ git st\x1b[2matus\x1b[0m\x1b[4D");
+        let line = e.cursor_line().unwrap();
+        assert_eq!(line.before, "$ git st");
+        assert!(!line.at_end);
+        // A right-hand prompt at the far edge is not in the way.
+        e.feed(b"\r\n$ ls\x1b[70G[main]\x1b[5G");
+        assert!(e.cursor_line().unwrap().at_end);
+    }
+
+    #[test]
+    fn a_wrapped_command_is_read_from_the_row_it_began_on() {
+        let mut e = AlacrittyEmulator::new(20, 5, 100);
+        e.feed(b"$ docker compose up -d --build");
+        assert_eq!(e.row_text(1), "-d --build");
+        assert_eq!(before_cursor(&e), "$ docker compose up -d --build");
+        assert!(e.cursor_line().unwrap().at_end);
+    }
+
+    #[test]
+    fn a_command_that_fills_the_last_column_keeps_its_last_character() {
+        let mut e = AlacrittyEmulator::new(10, 5, 100);
+        e.feed(b"$ abcdefgh");
+        assert_eq!(before_cursor(&e), "$ abcdefgh");
+        // One more and it wraps; nothing is lost at the seam.
+        e.feed(b"i");
+        assert_eq!(before_cursor(&e), "$ abcdefghi");
+    }
+
+    #[test]
+    fn wide_characters_count_once() {
+        let mut e = AlacrittyEmulator::new(20, 5, 100);
+        e.feed("$ 日本 ls".as_bytes());
+        assert_eq!(before_cursor(&e), "$ 日本 ls");
+    }
+
+    #[test]
+    fn what_is_below_the_cursor_tells_a_shell_from_a_full_screen_program() {
+        let mut e = AlacrittyEmulator::new(40, 6, 100);
+        e.feed(b"$ upt");
+        assert!(e.cursor_line().unwrap().nothing_below);
+        // vim: the file's `~` rows and its status line are under the cursor.
+        e.feed(b"\x1b[?1049h\x1b[H\x1b[2Jimport os\r\n~\r\n~\r\n~\r\n~\r\n\"a.py\" 1L\x1b[1;7H");
+        assert!(!e.cursor_line().unwrap().nothing_below);
+        // A system monitor fills the screen, and hides its cursor.
+        e.feed(b"\x1b[?25l\x1b[H\x1b[2J cpu 12%\r\n mem 40%\r\n\r\n net 1M\x1b[1;1H");
+        assert!(!e.cursor_line().unwrap().nothing_below);
+        // Killed by a signal, it never switched the screen back nor showed
+        // the cursor again: the shell is left on the alt screen with a hidden
+        // cursor, and after `clear` its prompt is all there is.
+        e.feed(b"\x1b[H\x1b[J868ac99d54c5:~$ upt");
+        assert!(e.modes().alt_screen);
+        let line = e.cursor_line().unwrap();
+        assert!(line.nothing_below);
+        // The snapshot has no cursor to offer here, so the line says where it is.
+        assert_eq!(e.cursor_row_col(), None);
+        assert_eq!((line.row, line.col), (0, 19));
+    }
+
+    #[test]
+    fn scrolling_the_view_back_does_not_move_the_cursor_line() {
+        let mut e = AlacrittyEmulator::new(20, 5, 100);
+        for i in 0..30 {
+            e.feed(format!("line {i}\r\n").as_bytes());
+        }
+        e.feed(b"$ upt");
+        assert_eq!(e.cursor_line().unwrap().row, 4);
+        e.scroll_display(10);
+        assert_eq!(before_cursor(&e), "$ upt");
+        // Ten rows below the bottom of what is shown.
+        assert_eq!(e.cursor_line().unwrap().row, 14);
     }
 }

@@ -18,7 +18,10 @@ pub use keys::{
     encode_key, encode_mouse, encode_paste, Key, KeyEvent, KeyKind, ModifierKey, Modifiers, MouseButton, MouseEvent,
 };
 pub use palette::Palette;
-pub use snapshot::{encode_cell, CellFlags, SnapshotHeader, SnapshotWriter, CELL_BYTES, HEADER_BYTES};
+pub use snapshot::{
+    encode_cell, CellFlags, SnapshotHeader, SnapshotWriter, CELL_BYTES, GENERATION_OFFSET, HEADER_BYTES,
+    LINKS_OFFSET,
+};
 
 /// Terminal modes that influence input encoding and gesture handling.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -64,6 +67,40 @@ pub enum SelectionKind {
 pub struct ViewPoint {
     pub col: u16,
     pub row: u16,
+}
+
+/// The cursor's line as far as the cursor; see [`Emulator::cursor_line`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CursorLine {
+    /// Everything before the cursor on its line, the rows it wrapped from
+    /// included.
+    pub before: String,
+    /// Nothing is written at the cursor or in the cell after it.
+    ///
+    /// False when the cursor has been moved back into what was typed, and when
+    /// a shell draws its own suggestion after the cursor (fish, and zsh with
+    /// autosuggestions): anything drawn at the cursor would land on top of
+    /// that. The second cell is what tells "between two words" from "at the
+    /// end", and it still leaves room for a right-hand prompt far off to the
+    /// side.
+    pub at_end: bool,
+    /// No row below the cursor's line has anything on it.
+    ///
+    /// That is what a shell waiting for a command looks like, at the foot of
+    /// what it has printed. A full-screen program has its status line, its
+    /// `~` rows or its menus under the cursor, which is what tells the two
+    /// apart once the screen mode cannot: a program killed without restoring
+    /// the screen leaves the shell on the alt screen. Whether the cursor shows
+    /// is no help there, because the same program leaves it hidden too.
+    pub nothing_below: bool,
+    /// Where the cursor is, in viewport rows (outside `0..rows` when the view
+    /// is scrolled away from it), and the column the next character goes in,
+    /// which is the width itself once a row is full.
+    ///
+    /// Reported whether or not the cursor is showing: the snapshot calls a
+    /// hidden cursor nowhere, and a shell still takes commands under one.
+    pub row: i32,
+    pub col: u16,
 }
 
 /// Events an emulator produces as a side effect of processing output.
@@ -122,6 +159,41 @@ pub trait Emulator: Send {
 
     /// Text of a single visible row (used for URL / word detection on tap).
     fn row_text(&self, row: u16) -> String;
+
+    /// The same text, appended to a buffer the caller keeps.
+    ///
+    /// Every visible row is read on every frame that changes, for link and
+    /// keyword matching, and the `String` each one handed back was allocated
+    /// and thrown away again straight after. A backend that can write the
+    /// characters out directly should override this; the default keeps the
+    /// old behaviour for one that cannot.
+    fn row_text_into(&self, row: u16, out: &mut String) {
+        out.push_str(&self.row_text(row));
+    }
+
+    /// The line the cursor is on, from where it starts up to the cursor.
+    ///
+    /// A line in the shell's sense rather than the grid's: a command too long
+    /// for the width carries on into the next row, and reading the cursor's row
+    /// alone hands back the tail of it. The blanks between the last character
+    /// and the cursor are kept, because a prompt ends in one, and without it a
+    /// bare prompt reads exactly like a prompt with a word typed after it.
+    ///
+    /// This default reads the cursor's row alone, which is as much as a backend
+    /// that cannot say where its rows wrap is able to offer.
+    fn cursor_line(&self) -> Option<CursorLine> {
+        let (row, col) = self.cursor_row_col()?;
+        let text = self.row_text(row);
+        let col = col as usize;
+        let mut before: String = text.chars().take(col).collect();
+        let short = col.saturating_sub(before.chars().count());
+        before.extend(std::iter::repeat(' ').take(short));
+        let at_end = text.chars().skip(col).take(2).all(|c| c == ' ');
+        let (_, rows) = self.size();
+        let nothing_below = (row + 1..rows).all(|r| self.row_text(r).trim().is_empty());
+        Some(CursorLine { before, at_end, nothing_below, row: row as i32, col: col as u16 })
+    }
+
     /// Every line, scrollback first then the visible screen, trailing spaces trimmed.
     fn all_lines(&self) -> Vec<String>;
     /// Set the display offset (0 = bottom, history_size() = top).

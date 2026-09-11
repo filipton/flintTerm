@@ -442,6 +442,37 @@ class TerminalSession(
         runCatching { core.disconnect() }
     }
 
+    /**
+     * How the core says the grid changed, when it can: an eventfd that the
+     * main looper watches, drained and fanned out to the views here.
+     *
+     * Otherwise [SessionListener.onDamage] says it, from a core thread, over
+     * JNA, which reads and writes back a status structure by reflection and
+     * attaches the thread to the VM, once for every frame drawn. Only the views
+     * listen, and all they do is ask for a frame, which is main-thread work.
+     */
+    private val damageFd: android.os.ParcelFileDescriptor? = runCatching {
+        core.damageFd().takeIf { it >= 0 }?.let { android.os.ParcelFileDescriptor.adoptFd(it) }
+    }.getOrNull()
+    private val damageDrain = ByteArray(8)
+    private val damageWake = android.os.MessageQueue.OnFileDescriptorEventListener { fd, _ ->
+        runCatching { android.system.Os.read(fd, damageDrain, 0, 8) }
+        damageListeners.forEach { it() }
+        android.os.MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT
+    }
+
+    init {
+        damageFd?.let {
+            runCatching {
+                android.os.Looper.getMainLooper().queue.addOnFileDescriptorEventListener(
+                    it.fileDescriptor,
+                    android.os.MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT,
+                    damageWake,
+                )
+            }
+        }
+    }
+
     fun destroy() {
         destroyed = true
         // Before the core goes, so the last of the stream still reaches the file.
@@ -450,6 +481,10 @@ class TerminalSession(
         damageListeners.clear()
         imagesListeners.clear()
         scope.cancel()
+        damageFd?.let {
+            runCatching { android.os.Looper.getMainLooper().queue.removeOnFileDescriptorEventListener(it.fileDescriptor) }
+            runCatching { it.close() }
+        }
         runCatching { core.destroy() }
     }
 

@@ -33,6 +33,8 @@ import dev.flint.term.terminal.GridMemory
 import dev.flint.term.terminal.Palettes
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -702,6 +704,18 @@ class SessionManager(
         return session
     }
 
+    /**
+     * A scope per open session, for the collectors that watch it.
+     *
+     * Each of those suspends on a flow that never completes, so without
+     * somewhere to cancel them every session ever opened left live coroutines
+     * behind, each still holding on to the session it was watching.
+     */
+    private val watchers = java.util.concurrent.ConcurrentHashMap<String, CoroutineScope>()
+
+    private fun watcherScope(id: String): CoroutineScope =
+        watchers.getOrPut(id) { CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])) }
+
     private fun register(session: TerminalSession, tailscaleId: String? = null, knock: KnockPlan? = null) {
         _sessions.update { it + session }
         recordOpen()
@@ -709,8 +723,8 @@ class SessionManager(
         SessionService.refresh(context)
         // A rename has to reach the file too, and nothing else about the
         // session changes when it happens.
-        scope.launch { session.name.drop(1).collect { recordOpen() } }
-        scope.launch {
+        watcherScope(session.id).launch { session.name.drop(1).collect { recordOpen() } }
+        watcherScope(session.id).launch {
             session.state.first { it is SessionState.Disconnected }
             // A session that has ended is no longer something to reopen, which
             // is what keeps a host that failed from being tried again on the
@@ -799,6 +813,7 @@ class SessionManager(
     fun remove(id: String) {
         val s = get(id) ?: return
         _sessions.update { list -> list.filterNot { it.id == id } }
+        watchers.remove(id)?.cancel()
         recordOpen()
         dev.flint.term.transfer.ExternalEdit.stopFor(s)
         releaseIdleTunnels()
@@ -820,7 +835,7 @@ class SessionManager(
 
     /** Bell / pattern notifications while the app is in the background, and auto-reconnect for persistent hosts. */
     private fun watchForAlerts(session: TerminalSession, host: Host) {
-        scope.launch {
+        watcherScope(session.id).launch {
             session.patterns.collect { (pattern, line) ->
                 if (!App.inForeground) notify(session, "${host.displayName}: ${line.take(120)}", "matched \"$pattern\"")
             }
@@ -830,7 +845,7 @@ class SessionManager(
         // watching costs a pass over every chunk of output.
         if (store.settings.value.notifyOnCommandFinish) {
             session.watchCommands(COMMAND_NOTICE_MS)
-            scope.launch {
+            watcherScope(session.id).launch {
                 session.commandFinished.collect { done ->
                     if (!App.inForeground) {
                         notify(session, "Finished on ${host.displayName}", howItWent(done))
@@ -838,7 +853,7 @@ class SessionManager(
                 }
             }
         }
-        scope.launch {
+        watcherScope(session.id).launch {
             session.bell.collect {
                 if (!App.inForeground && store.settings.value.notifyOnBell) notify(session, "Bell from ${host.displayName}", session.title.value ?: "The terminal rang its bell")
             }
@@ -846,7 +861,7 @@ class SessionManager(
         // Something on the far end asked to be shown, with OSC 9, 99 or 777.
         // Same rule as the bell: a notification for the terminal you are
         // already looking at is noise.
-        scope.launch {
+        watcherScope(session.id).launch {
             session.notifications.collect { (title, body) ->
                 if (!App.inForeground && store.settings.value.notifyFromEscapes) {
                     notify(session, asPlainText(title, 80).ifEmpty { host.displayName }, asPlainText(body, 300).ifEmpty { host.displayName })
@@ -854,7 +869,7 @@ class SessionManager(
             }
         }
         if (host.persistent) {
-            scope.launch {
+            watcherScope(session.id).launch {
                 session.state.collect { st ->
                     when (st) {
                         is SessionState.Connected -> session.reconnectAttempts = 0

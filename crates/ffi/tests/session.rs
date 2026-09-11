@@ -814,6 +814,68 @@ fn external_session_carries_bytes_both_ways() {
     }
 }
 
+#[test]
+fn the_line_being_typed_is_read_from_after_the_prompt() {
+    // A busybox shell in a container: no prompt marks, and a prompt made of a
+    // hostname, a path and a `$`.
+    let device = Arc::new(Device { written: Mutex::new(vec![]), sizes: Mutex::new(vec![]), closed: AtomicUsize::new(0) });
+    let listener = Listener::new();
+    let session = Session::new(
+        Backend::External { config: ExternalConfig { label: "rig".into() } },
+        80, 24, 500, listener.clone(), Arc::new(Accept), Arc::new(NoQuestions), Options::default(),
+    );
+    session.set_external_sink(device.clone());
+    session.start();
+
+    session.push_output(b"868ac99d54c5:~$ ".to_vec());
+    wait_for(&session, "868ac99d54c5:~$");
+    // Nothing has been typed yet, and the core knows that without looking.
+    assert_eq!(session.input_line().typed.as_deref(), Some(""));
+    // The line itself still reads up to the cursor, blank and all.
+    assert_eq!(session.current_input(), "868ac99d54c5:~$ ", "the blank after the prompt is what says nothing is typed");
+
+    // The keys go out one at a time, and the host echoes them back.
+    for c in ["u", "p", "t"] {
+        session.send_text(c.into());
+    }
+    session.push_output(b"upt".to_vec());
+    wait_for(&session, "868ac99d54c5:~$ upt");
+    let line = session.input_line();
+    assert_eq!(line.line, "868ac99d54c5:~$ upt");
+    assert_eq!(line.typed.as_deref(), Some("upt"));
+    assert!(line.at_end);
+    assert_eq!(session.current_input(), "868ac99d54c5:~$ upt");
+
+    // Enter: what comes next is a new command, and none of it is typed yet.
+    session.send_key(KeyPress { key: KeyCode::Enter, ctrl: false, alt: false, shift: false, kind: KeyEventKind::Press });
+    session.push_output(b"ime\r\n 12:00:00 up 1 day\r\n868ac99d54c5:~$ ".to_vec());
+    wait_for(&session, "up 1 day");
+    assert_eq!(session.input_line().typed.as_deref(), Some(""));
+    session.send_text("s".into());
+    session.push_output(b"s".to_vec());
+    wait_for(&session, "868ac99d54c5:~$ s");
+    assert_eq!(session.input_line().typed.as_deref(), Some("s"));
+    assert!(session.input_line().nothing_below);
+
+    // A full-screen program killed by a signal never switches the screen
+    // back, and the shell carries on on the alt screen. After `clear`, its
+    // prompt is still recognisably a prompt.
+    session.push_output(b"\x1b[?1049h\x1b[?25l\x1b[H\x1b[2J cpu 12%\x1b[5;1H mem 40%\x1b[1;1H".to_vec());
+    wait_for(&session, "mem 40%");
+    assert!(!session.input_line().nothing_below, "a full-screen layout is not a prompt");
+    // The cursor stays hidden: nothing is left to show it again.
+    session.push_output(b"\x1b[H\x1b[J868ac99d54c5:~$ upt".to_vec());
+    wait_for(&session, "868ac99d54c5:~$ upt");
+    assert!(session.modes().alt_screen);
+    let stuck = session.input_line();
+    assert!(stuck.nothing_below);
+    assert_eq!(stuck.typed.as_deref(), Some("upt"));
+    // Where a hint would go, although there is no cursor showing to say so.
+    assert_eq!((stuck.row, stuck.col), (0, 19));
+
+    session.external_closed();
+}
+
 // ---------------------------------------------------------------------------
 // Mosh: bootstrap over SSH, then run the session over UDP
 // ---------------------------------------------------------------------------

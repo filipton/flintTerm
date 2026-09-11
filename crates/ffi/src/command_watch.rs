@@ -140,7 +140,10 @@ impl CommandWatch {
                     b if b < 0x20 => {}
                     _ => {
                         self.line.push(b);
-                        if self.line.len() > LINE_CAP {
+                        // Trimmed in one go when it has run well past the cap,
+                        // not on every byte after it: a line that never ends
+                        // was moving the whole buffer down by one per byte.
+                        if self.line.len() > LINE_CAP * 2 {
                             let cut = self.line.len() - LINE_CAP;
                             self.line.drain(..cut);
                         }
@@ -149,7 +152,10 @@ impl CommandWatch {
             }
         }
         let mut finished = None;
-        if looks_like_prompt(&String::from_utf8_lossy(&self.line)) {
+        // Only the tail, so that trimming lazily above cannot change what this
+        // sees: the buffer now runs past the cap before it is cut back.
+        let tail = &self.line[self.line.len().saturating_sub(LINE_CAP)..];
+        if looks_like_prompt(&String::from_utf8_lossy(tail)) {
             if let Some(start) = self.started_at.take() {
                 let elapsed = now.saturating_sub(start);
                 if elapsed >= self.min_millis {

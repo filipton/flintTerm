@@ -95,6 +95,12 @@ impl Writer {
 pub struct PtyIo {
     pty: Arc<pty::Pty>,
     fd: Arc<AsyncFd<OwnedFd>>,
+    /// Where reads land before each chunk is copied out at its own size.
+    ///
+    /// Only the reader's copy ever grows it; the writer's clone keeps an empty
+    /// one. It used to be a fresh 64 KiB, zeroed, per read, and the whole of it
+    /// was handed on as the chunk however few bytes the read returned.
+    scratch: Vec<u8>,
 }
 
 impl PtyIo {
@@ -103,12 +109,15 @@ impl PtyIo {
         let dup = pty.dup_master()?;
         let fd = AsyncFd::with_interest(dup, Interest::READABLE | Interest::WRITABLE)
             .map_err(|e| pty::PtyError::Invalid(e.to_string()))?;
-        Ok(Self { pty: Arc::new(pty), fd: Arc::new(fd) })
+        Ok(Self { pty: Arc::new(pty), fd: Arc::new(fd), scratch: Vec::new() })
     }
 
-    async fn read(&self) -> Event {
-        let mut buf = vec![0u8; 64 * 1024];
+    async fn read(&mut self) -> Event {
+        if self.scratch.is_empty() {
+            self.scratch = vec![0u8; 64 * 1024];
+        }
         loop {
+            let buf = &mut self.scratch;
             let mut guard = match self.fd.readable().await {
                 Ok(g) => g,
                 Err(_) => return Event::Closed,
@@ -124,10 +133,7 @@ impl PtyIo {
                 }
             }) {
                 Ok(Ok(0)) => return Event::Exit(self.exit_code().await),
-                Ok(Ok(n)) => {
-                    buf.truncate(n);
-                    return Event::Data(Bytes::from(buf));
-                }
+                Ok(Ok(n)) => return Event::Data(Bytes::copy_from_slice(&buf[..n])),
                 // EIO on a pty master means the slave side is gone: the child exited.
                 Ok(Err(e)) if e.raw_os_error() == Some(libc::EIO) => return Event::Exit(self.exit_code().await),
                 Ok(Err(_)) => return Event::Closed,

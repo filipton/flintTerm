@@ -363,6 +363,17 @@ fun HostGlyph(host: Host, size: Int = 44) {
     IconTile(iconFor(host.icon), accent, size = size, corner = (size * 0.32f).toInt())
 }
 
+/** The fading the connecting dot does, and the only thing that asks for frames. */
+@Composable
+private fun pulsingAlpha(): Float {
+    val pulse = rememberInfiniteTransition(label = stringResource(R.string.components_pulse))
+    val alpha by pulse.animateFloat(
+        initialValue = 1f, targetValue = 0.25f,
+        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = stringResource(R.string.components_alpha),
+    )
+    return alpha
+}
+
 @Composable
 fun StatusDot(state: SessionState, size: Int = 9) {
     val color = when (state) {
@@ -370,15 +381,15 @@ fun StatusDot(state: SessionState, size: Int = 9) {
         is SessionState.Connecting -> Status.busy
         is SessionState.Disconnected -> Status.offline
     }
-    val pulse = rememberInfiniteTransition(label = stringResource(R.string.components_pulse))
-    val alpha by pulse.animateFloat(
-        initialValue = 1f, targetValue = 0.25f,
-        animationSpec = infiniteRepeatable(tween(700), RepeatMode.Reverse), label = stringResource(R.string.components_alpha),
-    )
+    // Only while it is connecting. An infinite transition holds the frame clock
+    // open for as long as it is composed, so making one for a dot that is not
+    // pulsing kept the whole screen — the terminal included — redrawing at the
+    // display rate behind a session that was sitting still.
+    val alpha = if (state is SessionState.Connecting) pulsingAlpha() else 1f
     Box(
         Modifier
             .size(size.dp)
-            .alpha(if (state is SessionState.Connecting) alpha else 1f)
+            .alpha(alpha)
             .clip(CircleShape)
             .background(color),
     )
