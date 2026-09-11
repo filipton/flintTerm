@@ -198,11 +198,16 @@ Everything the app does, at length. The short list is in the [README](../README.
 - Password managers fill the app's login fields: every username, password and passphrase field says
   what it is, so Bitwarden, 1Password or Google's own manager offers the right entry. Nothing filled
   is read or kept by the app beyond the field it landed in.
+- **Screenshots are allowed** unless Settings → Security → Block screenshots is on, which also
+  hides the app's preview in recent apps.
 
 ### The terminal
 
 - Full xterm-256color emulation: colors, bold/italic/underline, alt screen, mouse reporting
   (tap/scroll in htop, btop, vim), bracketed paste, OSC title, OSC 52 clipboard.
+- **Terminal type**: the `TERM` sessions announce, `xterm-256color` unless Settings → Terminal →
+  Terminal type picks another from the list or one of your own. It goes to SSH, Mosh and the local
+  shell alike.
 - **Inline images**: the kitty graphics protocol and sixel, so `chafa`, `timg` and `kitty +kitten
   icat` draw real pictures. They scroll with the text, go when the line they sit on is cleared, and
   a session holds at most 64 MiB of them. Only direct transmission is spoken — a file path or a
@@ -252,12 +257,15 @@ Everything the app does, at length. The short list is in the [README](../README.
 - **Completion from what you have actually run**: commands are remembered per host and offered as
   chips above the keyboard as you type; tapping one finishes the line. A host's own
   `~/.zsh_history` / `~/.bash_history` can be imported from its menu, so the suggestions are useful
-  from the first session. Which part of the line is "typed" is worked out by matching the line's
-  suffixes against the history rather than guessing what the prompt looks like.
+  from the first session. Which part of the line is typed is known rather than guessed: the core
+  notes what was on the line at the first keystroke after a command, and that is the prompt. Inside
+  a full-screen program nothing is suggested and nothing is remembered.
 - **A redraw limit, off by default**: a terminal repaints when something on it changes, up to
   whatever the screen refreshes at, and not at all while the screen is still. Settings → Terminal can
   cap it, which only bites when output is pouring in faster than that — a flood costs about a fifth
   less battery at 30 a second, on output going past far too fast to read either way.
+- **A battery page**: Settings → Battery lists the settings that cost battery, says which are
+  already the cheaper choice, and takes you to each one with a tap.
 
 ### Keyboard and input
 
