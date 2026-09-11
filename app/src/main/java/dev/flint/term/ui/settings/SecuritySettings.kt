@@ -17,6 +17,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.compose.material.icons.rounded.VerifiedUser
+import androidx.compose.material.icons.rounded.Visibility
 import dev.flint.term.App
 import dev.flint.term.ui.AppLock
 import dev.flint.term.ui.AppSwitch
@@ -56,6 +57,17 @@ fun SecuritySettings(nav: NavController) {
                     }
                 }
             }
+        }
+
+        Group("Privacy") {
+            GroupRow(
+                title = "Block screenshots",
+                subtitle = "Stops Android capturing the app, the recents thumbnail included",
+                icon = Icons.Rounded.Visibility,
+                iconTint = MaterialTheme.colorScheme.primary,
+                checked = settings.blockScreenshots,
+                onCheckedChange = { v -> app.store.updateSettings { it.copy(blockScreenshots = v) } },
+            )
         }
 
         Group("Servers") {

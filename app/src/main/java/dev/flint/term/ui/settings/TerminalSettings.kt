@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
@@ -14,8 +16,12 @@ import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.KeyboardTab
 import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.Terminal
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import dev.flint.term.App
+import dev.flint.term.data.DEFAULT_TERM
 import dev.flint.term.data.PredictiveEcho
 import dev.flint.term.data.RecordingFormat
 import dev.flint.term.data.TerminalImages
@@ -42,11 +49,68 @@ import dev.flint.term.ui.Segmented
 import dev.flint.term.ui.SheetAction
 import kotlin.math.roundToInt
 
+/**
+ * The terminal names worth offering, and why anyone would pick them.
+ *
+ * A name only works where the host has a terminfo entry for it, which is why
+ * the list is short and the rest is typed in.
+ */
+private val TERM_PRESETS = listOf(
+    DEFAULT_TERM to "Suits almost everything",
+    "screen-256color" to "What tmux and screen usually want",
+    "tmux-256color" to "Newer tmux, where the host knows the name",
+    "xterm-kitty" to "Programs that look for the kitty protocols by name",
+)
+
 /** How the terminal itself behaves: how much it remembers, what it guesses, and what it writes down. */
 @Composable
 fun TerminalSettings(nav: NavController) {
     val app = LocalContext.current.applicationContext as App
     val settings by app.store.settings.collectAsStateWithLifecycle()
+
+    var termSheet by remember { mutableStateOf(false) }
+    var termCustom by remember { mutableStateOf<String?>(null) }
+    if (termSheet) {
+        val current = settings.termName.trim().ifEmpty { DEFAULT_TERM }
+        ActionSheet(
+            onDismiss = { termSheet = false },
+            title = "Terminal type",
+            subtitle = "What a session claims to be. Applies to new sessions.",
+            actions = TERM_PRESETS.map { (name, help) ->
+                SheetAction(name + if (name == current) "   ✓" else "", subtitle = help) {
+                    app.store.updateSettings { it.copy(termName = name) }
+                    termSheet = false
+                }
+            } + SheetAction(
+                "Custom…",
+                subtitle = if (TERM_PRESETS.none { it.first == current }) current else "A name the host has terminfo for",
+            ) {
+                termCustom = current
+                termSheet = false
+            },
+        )
+    }
+    termCustom?.let { typed ->
+        AlertDialog(
+            onDismissRequest = { termCustom = null },
+            title = { Text("Terminal type") },
+            text = {
+                OutlinedTextField(
+                    value = typed,
+                    onValueChange = { termCustom = it },
+                    singleLine = true,
+                    placeholder = { Text(DEFAULT_TERM) },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    app.store.updateSettings { it.copy(termName = typed.trim().ifEmpty { DEFAULT_TERM }) }
+                    termCustom = null
+                }) { Text("Set") }
+            },
+            dismissButton = { TextButton(onClick = { termCustom = null }) { Text("Cancel") } },
+        )
+    }
 
     var predictSheet by remember { mutableStateOf(false) }
     if (predictSheet) {
@@ -80,6 +144,15 @@ fun TerminalSettings(nav: NavController) {
                 )
                 Text("Applies to new sessions.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            RowDivider()
+            GroupRow(
+                title = "Terminal type",
+                subtitle = settings.termName.trim().ifEmpty { DEFAULT_TERM },
+                subtitleMono = true,
+                icon = Icons.Rounded.Terminal,
+                iconTint = MaterialTheme.colorScheme.primary,
+                onClick = { termSheet = true },
+            )
             RowDivider()
             GroupRow(
                 title = "Redraw limit",

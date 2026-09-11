@@ -181,7 +181,7 @@ object StoreJson {
         root.put("settings", JSONObject().apply {
             put("fontSizeSp", s.fontSizeSp.toDouble()); put("theme", s.theme); put("scrollback", s.scrollback); put("fontFamily", s.fontFamily); put("ligatures", s.ligatures); put("predictiveEcho", s.predictiveEcho.name); put("dataSaver", s.dataSaver.name)
             put("vibrateOnBell", s.vibrateOnBell); put("keepScreenOn", s.keepScreenOn); put("keepaliveSeconds", s.keepaliveSeconds)
-            put("maxFps", s.maxFps)
+            put("maxFps", s.maxFps); put("termName", s.termName); put("blockScreenshots", s.blockScreenshots)
             put("appTheme", s.appTheme.name); put("dynamicColor", s.dynamicColor); put("showHiddenFiles", s.showHiddenFiles)
             s.extraKeysRow1?.let { put("extraKeysRow1", JSONArray(it)) }; s.extraKeysRow2?.let { put("extraKeysRow2", JSONArray(it)) }
             put("hideExtraKeysWithHardwareKeyboard", s.hideExtraKeysWithHardwareKeyboard)
@@ -566,6 +566,8 @@ object StoreJson {
                 keepScreenOn = o.optBoolean("keepScreenOn", false),
                 keepaliveSeconds = o.optInt("keepaliveSeconds", 30),
                 maxFps = o.optInt("maxFps", 0),
+                termName = o.optString("termName", DEFAULT_TERM),
+                blockScreenshots = o.optBoolean("blockScreenshots", false),
                 appTheme = runCatching { AppTheme.valueOf(o.optString("appTheme")) }.getOrDefault(AppTheme.DARK),
                 dynamicColor = o.optBoolean("dynamicColor", false),
                 showHiddenFiles = o.optBoolean("showHiddenFiles", true),

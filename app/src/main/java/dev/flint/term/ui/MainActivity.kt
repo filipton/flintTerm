@@ -260,6 +260,16 @@ class MainActivity : FragmentActivity() {
         setContent {
             FlintTermTheme {
                 val settings by app.store.settings.collectAsStateWithLifecycle()
+                // FLAG_SECURE has to be set on the window rather than drawn
+                // around: it covers the recents thumbnail and screen recording
+                // too, neither of which any composable can reach.
+                LaunchedEffect(settings.blockScreenshots) {
+                    if (settings.blockScreenshots) {
+                        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                }
                 val lockable = remember { AppLock.canAuthenticate(this) }
                 var locked by remember { mutableStateOf(lockable && AppLock.isLocked(settings.appLock, settings.appLockGraceSeconds, App.lastBackgroundedAt)) }
                 // Re-evaluate when we come back to the foreground.

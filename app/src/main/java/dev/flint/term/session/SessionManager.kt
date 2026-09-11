@@ -362,6 +362,7 @@ class SessionManager(
                     null
                 },
                 env = host.env.requestable().map { EnvVar(it.name, it.value) },
+                term = settings.termName,
         )
         // Mosh bootstraps over this same SSH config and then leaves SSH behind.
         val backend = if (host.mosh && chain.isEmpty() && allowMosh) {
@@ -678,14 +679,14 @@ class SessionManager(
         val home = context.filesDir.absolutePath
         val env = listOf(
             EnvVar("HOME", home),
-            EnvVar("TERM", "xterm-256color"),
+            EnvVar("TERM", settings.termName.trim().ifEmpty { "xterm-256color" }),
             EnvVar("PATH", "/system/bin:/system/xbin:/product/bin:/apex/com.android.runtime/bin"),
             EnvVar("TMPDIR", context.cacheDir.absolutePath),
             EnvVar("LANG", "en_US.UTF-8"),
             // mksh: keep the prompt plain; $PWD is expanded at prompt time.
             EnvVar("PS1", "\$PWD \$ "),
         )
-        val backend = Backend.Local(LocalShellConfig("/system/bin/sh", listOf("-l"), env, home))
+        val backend = Backend.Local(LocalShellConfig("/system/bin/sh", listOf("-l"), env, home, settings.termName))
         val session = TerminalSession(
             host = null,
             label = "Local shell",

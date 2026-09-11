@@ -124,6 +124,7 @@ fn a_capture_started_late_still_sees_the_output() {
             args: vec![],
             env: vec![EnvVar { name: "PATH".into(), value: "/usr/bin:/bin".into() }, EnvVar { name: "PS1".into(), value: "$ ".into() }],
             cwd: None,
+            term: String::new(),
         },
     };
     let session = Session::new(backend, 40, 10, 1000, listener.clone(), Arc::new(Accept), Arc::new(NoQuestions), Options::default());
@@ -161,6 +162,7 @@ fn local_shell_roundtrip() {
             args: vec![],
             env: vec![EnvVar { name: "PATH".into(), value: "/usr/bin:/bin".into() }, EnvVar { name: "PS1".into(), value: "$ ".into() }],
             cwd: None,
+            term: String::new(),
         },
     };
     let session = Session::new(backend, 40, 10, 1000, listener.clone(), Arc::new(Accept), Arc::new(NoQuestions), Options::default());
@@ -240,6 +242,7 @@ fn a_resize_while_the_host_key_is_being_checked_reaches_the_pty() {
     let backend = Backend::Ssh {
         config: SshConfig {
             label: String::new(),
+            term: String::new(),
             host: "127.0.0.1".into(),
             port: port.parse().unwrap(),
             username: std::env::var("USER").unwrap(),
@@ -284,6 +287,7 @@ fn ssh_session_roundtrip() {
     let backend = Backend::Ssh {
         config: SshConfig {
             label: String::new(),
+            term: String::new(),
             host: "127.0.0.1".into(),
             port: port.parse().unwrap(),
             username: std::env::var("USER").unwrap(),
@@ -384,6 +388,7 @@ fn ssh_via_jump_host_with_pre_command() {
     let backend = Backend::Ssh {
         config: SshConfig {
             label: String::new(),
+            term: String::new(),
             host: "127.0.0.1".into(),
             port,
             username: user.clone(),
@@ -451,6 +456,7 @@ fn ssh_via_jump_host_unreachable_target_times_out() {
     let backend = Backend::Ssh {
         config: SshConfig {
             label: String::new(),
+            term: String::new(),
             host: "127.0.0.1".into(),
             port: 1, // nothing listens here
             username: user.clone(),
@@ -541,6 +547,7 @@ fn ssh_session_through_wireguard_tunnel() {
     let backend = Backend::Ssh {
         config: SshConfig {
             label: String::new(),
+            term: String::new(),
             host: "10.77.0.1".into(),
             port: 22,
             username: std::env::var("USER").unwrap(),
@@ -589,6 +596,7 @@ fn agent_forwarding_lists_our_key() {
     let backend = Backend::Ssh {
         config: SshConfig {
             label: String::new(),
+            term: String::new(),
             host: "127.0.0.1".into(),
             port: port.parse().unwrap(),
             username: std::env::var("USER").unwrap(),
@@ -831,6 +839,7 @@ fn mosh_session_bootstraps_over_ssh_and_runs_over_udp() {
             config: MoshConfig {
                 ssh: SshConfig {
                     label: String::new(),
+                    term: String::new(),
                     host: "127.0.0.1".into(),
                     port: port.parse().unwrap(),
                     username: std::env::var("USER").unwrap(),
@@ -895,6 +904,7 @@ fn mosh_refuses_tailscale_with_a_clear_reason() {
             config: MoshConfig {
                 ssh: SshConfig {
                     label: String::new(),
+                    term: String::new(),
                     host: "host.example".into(),
                     port: 22,
                     username: "nobody".into(),
@@ -1022,6 +1032,7 @@ fn mosh_session_through_a_wireguard_tunnel() {
             config: MoshConfig {
                 ssh: SshConfig {
                     label: String::new(),
+                    term: String::new(),
                     host: "10.77.0.1".into(),
                     port: 22,
                     username: std::env::var("USER").unwrap(),
@@ -1089,6 +1100,7 @@ fn predictive_echo_shows_a_keystroke_before_the_server_does() {
             config: MoshConfig {
                 ssh: SshConfig {
                     label: String::new(),
+                    term: String::new(),
                     host: "127.0.0.1".into(),
                     port: port.parse().unwrap(),
                     username: std::env::var("USER").unwrap(),
@@ -1157,6 +1169,7 @@ fn prediction_is_off_for_an_ordinary_ssh_session() {
         Backend::Ssh {
             config: SshConfig {
                 label: String::new(),
+                term: String::new(),
                 host: "127.0.0.1".into(),
                 port: port.parse().unwrap(),
                 username: std::env::var("USER").unwrap(),
@@ -1214,6 +1227,7 @@ fn mosh_session_through_a_jump_host_relay() {
             config: MoshConfig {
                 ssh: SshConfig {
                     label: String::new(),
+                    term: String::new(),
                     host: "127.0.0.1".into(),
                     port,
                     username: user.clone(),
@@ -1419,6 +1433,7 @@ fn mosh_session_through_a_socks5_udp_proxy() {
             config: MoshConfig {
                 ssh: SshConfig {
                     label: String::new(),
+                    term: String::new(),
                     host: "127.0.0.1".into(),
                     port: port.parse().unwrap(),
                     username: std::env::var("USER").unwrap(),
@@ -1526,6 +1541,7 @@ fn mosh_session_through_tailscales_own_socks5_server() {
             config: MoshConfig {
                 ssh: SshConfig {
                     label: String::new(),
+                    term: String::new(),
                     host: "127.0.0.1".into(),
                     port: port.parse().unwrap(),
                     username: std::env::var("USER").unwrap(),

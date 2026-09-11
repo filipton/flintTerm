@@ -708,6 +708,9 @@ data class HighlightRule(
     val enabled: Boolean = true,
 )
 
+/** What a terminal says it is when nothing overrides it. */
+const val DEFAULT_TERM: String = "xterm-256color"
+
 data class Settings(
     val fontSizeSp: Float = 13f,
     /** A TermFonts family id ("jetbrains", "fira", "hack" or "file:<name>"). */
@@ -943,6 +946,16 @@ data class Settings(
      * and costs a quarter of what 120 does.
      */
     val maxFps: Int = 0,
+    /**
+     * What a session calls itself in `TERM`. Blank means [DEFAULT_TERM].
+     */
+    val termName: String = DEFAULT_TERM,
+    /**
+     * Stop Android screenshotting the app, the recents thumbnail included.
+     *
+     * Off, because a terminal is something people screenshot on purpose.
+     */
+    val blockScreenshots: Boolean = false,
     val highlightEnabled: Boolean = false,
     val highlightRules: List<HighlightRule> = emptyList(),
     /** Which inline-image protocols sessions answer to. */

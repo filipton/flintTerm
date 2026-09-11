@@ -190,6 +190,10 @@ pub struct SshConfig {
     /// Asked for on the shell channel before the pty. Whether they arrive is the
     /// server's decision (`AcceptEnv`), so nothing here is a promise.
     pub env: Vec<EnvVar>,
+    /// What to call this terminal in the pty request. Empty for the default,
+    /// which is what almost everything wants; `screen-256color` inside tmux and
+    /// `xterm-kitty` for programs that look for the kitty protocols by name.
+    pub term: String,
 }
 
 #[derive(Debug, Clone, uniffi::Record)]
@@ -204,6 +208,8 @@ pub struct LocalShellConfig {
     pub args: Vec<String>,
     pub env: Vec<EnvVar>,
     pub cwd: Option<String>,
+    /// `TERM` for the shell. Empty for the default; see [`SshConfig::term`].
+    pub term: String,
 }
 
 /// A plain telnet console (switches, PDUs, BMCs). No auth: the device prompts.
@@ -525,6 +531,19 @@ pub struct Modes {
 
 /// What a session is allowed to do beyond plain terminal behavior.
 ///
+/// The terminal name to announce, with the default filled in.
+///
+/// Every backend asks the same question, and an empty setting has to mean the
+/// default rather than an empty `TERM` — which would leave programs guessing at
+/// a dumb terminal.
+fn term_name(configured: &str) -> &str {
+    let t = configured.trim();
+    if t.is_empty() { DEFAULT_TERM } else { t }
+}
+
+/// What this terminal calls itself when nothing says otherwise.
+pub const DEFAULT_TERM: &str = "xterm-256color";
+
 /// Everything here is a switch in the app, so the record travels with the
 /// session rather than being read from a global: two hosts open at once may
 /// disagree about every one of these.
@@ -1730,7 +1749,7 @@ impl Inner {
                 self.probe_os(&client).await;
                 let env = self.shell_env(&config.env);
                 let (cols, rows) = *self.size.lock();
-                let shell = client.open_shell_env("xterm-256color", cols, rows, &env).await?;
+                let shell = client.open_shell_env(term_name(&config.term), cols, rows, &env).await?;
                 *self.writer.lock() = Some(Writer::Ssh(shell.writer()));
                 *self.ssh.lock().await = Some(client);
                 Ok(Reader::Ssh(shell))
@@ -1744,14 +1763,19 @@ impl Inner {
                 self.step("mosh", "Starting mosh-server over SSH", StepStatus::Running);
                 // mosh-server takes the variables directly, so a Mosh session gets
                 // them even where sshd's AcceptEnv would have dropped them.
-                let env: Vec<(String, String)> = config.ssh.env.iter().map(|e| (e.name.clone(), e.value.clone())).collect();
+                let mut env: Vec<(String, String)> = config.ssh.env.iter().map(|e| (e.name.clone(), e.value.clone())).collect();
+                // mosh-server decides TERM for the session it spawns, and takes
+                // it the same way as every other variable.
+                if !env.iter().any(|(n, _)| n == "TERM") {
+                    env.push(("TERM".to_string(), term_name(&config.ssh.term).to_string()));
+                }
                 self.probe_os(&client).await;
                 // Agent forwarding cannot survive on its own here: mosh-server
                 // inherits SSH_AUTH_SOCK, but sshd removes that socket when the
                 // channel that asked for it closes. So a channel is held open and
                 // its socket path handed to mosh-server, which sets it in the
                 // session it spawns.
-                let mut env = env;
+                // (env is already owned and mutable above)
                 if config.ssh.forward_agent {
                     match client.hold_agent_socket().await {
                         Ok((path, channel)) => {
@@ -1867,7 +1891,7 @@ impl Inner {
                         self.predict.lock().reset();
                         let env = self.shell_env(&config.ssh.env);
                         let (cols, rows) = *self.size.lock();
-                        let shell = client.open_shell_env("xterm-256color", cols, rows, &env).await?;
+                        let shell = client.open_shell_env(term_name(&config.ssh.term), cols, rows, &env).await?;
                         *self.writer.lock() = Some(Writer::Ssh(shell.writer()));
                         *self.ssh.lock().await = Some(client);
                         Ok(Reader::Ssh(shell))
@@ -1894,7 +1918,10 @@ impl Inner {
                 Ok(Reader::External(reader))
             }
             Backend::Local { config } => {
-                let env: Vec<(String, String)> = config.env.iter().map(|e| (e.name.clone(), e.value.clone())).collect();
+                let mut env: Vec<(String, String)> = config.env.iter().map(|e| (e.name.clone(), e.value.clone())).collect();
+                if !env.iter().any(|(n, _)| n == "TERM") {
+                    env.push(("TERM".to_string(), term_name(&config.term).to_string()));
+                }
                 let (cols, rows) = *self.size.lock();
                 let pty = pty::Pty::spawn(pty::SpawnOptions {
                     program: &config.program,
