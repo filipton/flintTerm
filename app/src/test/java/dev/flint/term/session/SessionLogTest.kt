@@ -92,6 +92,54 @@ class SessionLogTest {
     }
 
     @Test
+    fun `a file smaller than the cap comes back whole`() {
+        val f = java.io.File.createTempFile("rec", ".log").apply { deleteOnExit() }
+        f.writeText("one\ntwo\nthree\n")
+        val tail = SessionLog.tail(f, 1024)
+        assertEquals("one\ntwo\nthree\n", tail.text)
+        assertTrue(!tail.truncated)
+    }
+
+    @Test
+    fun `a file over the cap comes back as whole lines from the end`() {
+        val f = java.io.File.createTempFile("rec", ".log").apply { deleteOnExit() }
+        f.writeText((1..2000).joinToString("\n") { "line $it" } + "\n")
+        val tail = SessionLog.tail(f, 200)
+        assertTrue(tail.truncated)
+        assertTrue(tail.text.length <= 200)
+        // No half a line at the front, and the very end is still there.
+        assertTrue(tail.text.startsWith("line "))
+        assertTrue(tail.text.endsWith("line 2000\n"))
+    }
+
+    @Test
+    fun `a multi-byte character is never cut in half`() {
+        val f = java.io.File.createTempFile("rec", ".log").apply { deleteOnExit() }
+        // Four bytes a line, so a byte-aligned cut lands inside a character.
+        f.writeText((1..500).joinToString("\n") { "☃☃" } + "\n")
+        val tail = SessionLog.tail(f, 101)
+        assertTrue(tail.truncated)
+        assertTrue(!tail.text.contains('\uFFFD'))
+    }
+
+    @Test
+    fun `a huge cast keeps its header so the grid is still known`() {
+        val f = java.io.File.createTempFile("rec", ".cast").apply { deleteOnExit() }
+        f.writeText(
+            SessionLog.castHeader(cols = 123, rows = 45, startedAt = 0) + "\n" +
+                (1..3000).joinToString("\n") { SessionLog.castEvent(it * 10L, "frame $it") } + "\n",
+        )
+        val tail = SessionLog.castTail(f, 500)
+        assertTrue(tail.truncated)
+        val read = SessionLog.parseCast(tail.text)
+        assertEquals(123, read.cols)
+        assertEquals(45, read.rows)
+        assertTrue(read.frames.isNotEmpty())
+        // The end of the recording, not the start of it.
+        assertTrue(read.frames.last().text == "frame 3000")
+    }
+
+    @Test
     fun `a broken line costs only itself`() {
         val cast = SessionLog.castHeader(80, 24, 0) + "\n" +
             SessionLog.castEvent(0, "before\n") + "\n" +

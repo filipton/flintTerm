@@ -163,6 +163,7 @@ fun HostEditScreen(nav: NavController, id: String) {
     var forwardAgent by remember { mutableStateOf(existing?.forwardAgent ?: false) }
     var showInFiles by remember { mutableStateOf(existing?.showInFiles ?: false) }
     var recordSessions by remember { mutableStateOf(existing?.recordSessions ?: false) }
+    var confirmRecord by remember { mutableStateOf(false) }
     var addresses by remember { mutableStateOf(existing?.addresses ?: emptyList()) }
     var openAddress by remember { mutableStateOf<String?>(null) }
     // Which address the VPN sheet is picking for: null is the host's own.
@@ -1086,6 +1087,25 @@ fun HostEditScreen(nav: NavController, id: String) {
                 )
             }
 
+            if (confirmRecord) {
+                AlertDialog(
+                    onDismissRequest = { confirmRecord = false },
+                    title = { Text("Record every session?") },
+                    text = {
+                        Text(
+                            "Everything the host prints is written to a file, from login to logout. " +
+                                "Recording carries on while the app is in the background, so a session " +
+                                "left open all day can reach several gigabytes. Only the end of a very " +
+                                "large recording can be opened again.",
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { recordSessions = true; confirmRecord = false }) { Text("Record") }
+                    },
+                    dismissButton = { TextButton(onClick = { confirmRecord = false }) { Text("Cancel") } },
+                )
+            }
+
             if (page == EditorPage.OnConnect) Group("After login") {
                 GroupRow(
                     title = "Record every session",
@@ -1096,7 +1116,7 @@ fun HostEditScreen(nav: NavController, id: String) {
                     },
                     icon = Icons.Rounded.FiberManualRecord,
                     iconTint = MaterialTheme.colorScheme.error,
-                    trailing = { AppSwitch(recordSessions, { recordSessions = it }) },
+                    trailing = { AppSwitch(recordSessions, { if (it) confirmRecord = true else recordSessions = false }) },
                 )
                 RowDivider()
                 GroupRow(

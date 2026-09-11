@@ -10,6 +10,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
+import java.io.RandomAccessFile
 import java.io.Writer
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -143,6 +144,52 @@ object SessionLog {
      * with one malformed line is still worth playing up to that line, which is
      * not how a parser that throws would treat it.
      */
+    /**
+     * The most of a recording worth holding in memory at once.
+     *
+     * A session left recording in the background grows without limit, and these
+     * files reach gigabytes. Reading one whole is an allocation nothing on a
+     * phone can serve, so everything that reads a recording reads the end of it.
+     */
+    const val VIEW_MAX_BYTES = 4L * 1024 * 1024
+    const val CAST_MAX_BYTES = 16L * 1024 * 1024
+
+    /** A piece of a recording, and whether there was more of it before this. */
+    data class Tail(val text: String, val truncated: Boolean)
+
+    /**
+     * The last [maxBytes] of [file], starting at a line boundary.
+     *
+     * Starting at a newline drops the partial line the cut lands in, and with it
+     * any half of a UTF-8 character, so what comes back always decodes.
+     */
+    fun tail(file: File, maxBytes: Long): Tail {
+        val len = file.length()
+        if (len <= maxBytes) return Tail(file.readText(), false)
+        RandomAccessFile(file, "r").use { raf ->
+            raf.seek(len - maxBytes)
+            val buf = ByteArray(maxBytes.toInt())
+            raf.readFully(buf)
+            var from = 0
+            while (from < buf.size && buf[from] != '\n'.code.toByte()) from++
+            if (from < buf.size) from++
+            return Tail(String(buf, from, buf.size - from, Charsets.UTF_8), true)
+        }
+    }
+
+    /**
+     * A cast small enough to play: its header line, then the end of it.
+     *
+     * The header carries the size of the grid, so it is read from the front
+     * whatever else is dropped.
+     */
+    fun castTail(file: File, maxBytes: Long): Tail {
+        if (file.length() <= maxBytes) return Tail(file.readText(), false)
+        val header = file.bufferedReader().use { it.readLine() }.orEmpty()
+        val rest = tail(file, maxBytes)
+        return Tail(header + "\n" + rest.text, true)
+    }
+
     fun parseCast(text: String): Cast {
         var cols = 80
         var rows = 24

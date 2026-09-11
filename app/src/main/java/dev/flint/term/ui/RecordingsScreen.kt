@@ -134,10 +134,20 @@ private fun CastPlayer(file: File, onBack: () -> Unit) {
     val app = context.applicationContext as App
     val settings by app.store.settings.collectAsStateWithLifecycle()
     var cast by remember(file) { mutableStateOf<SessionLog.Cast?>(null) }
+    var partial by remember(file) { mutableStateOf(false) }
     var failure by remember(file) { mutableStateOf<String?>(null) }
     LaunchedEffect(file) {
-        withContext(Dispatchers.IO) { runCatching { file.readText() } }
-            .onSuccess { cast = SessionLog.parseCast(it) }
+        withContext(Dispatchers.IO) { runCatching { SessionLog.castTail(file, SessionLog.CAST_MAX_BYTES) } }
+            .onSuccess { tail ->
+                partial = tail.truncated
+                // A recording cut at the end starts partway through its own
+                // clock, so the first frame left becomes time zero.
+                val parsed = SessionLog.parseCast(tail.text)
+                cast = if (!tail.truncated) parsed else {
+                    val base = parsed.frames.firstOrNull()?.atMillis ?: 0
+                    parsed.copy(frames = parsed.frames.map { it.copy(atMillis = it.atMillis - base) })
+                }
+            }
             .onFailure { failure = it.message ?: "cannot read the recording" }
     }
 
@@ -195,7 +205,8 @@ private fun CastPlayer(file: File, onBack: () -> Unit) {
         topBar = {
             AppHeader(
                 title = file.name,
-                subtitle = "${ready.cols}×${ready.rows}  ·  ${formatSeconds(ready.durationMillis)}",
+                subtitle = "${ready.cols}×${ready.rows}  ·  ${formatSeconds(ready.durationMillis)}" +
+                    if (partial) "  ·  the end of ${humanBytes(file.length())}" else "",
                 onBack = onBack,
             )
         },
@@ -245,14 +256,23 @@ private fun LogViewer(file: File, onBack: () -> Unit) {
     var text by remember(file) { mutableStateOf<String?>(null) }
     LaunchedEffect(file) {
         text = withContext(Dispatchers.IO) {
-            // The tail is what anybody wants from a log this long; the whole of
-            // a day's session would only be slower to draw.
-            runCatching { file.readText().takeLast(400_000) }.getOrElse { "Cannot read this file: ${it.message}" }
+            // The end is what anybody wants from a log this long, and it is all
+            // that can be read: a session recorded in the background for a day
+            // is far larger than anything this phone will hold at once.
+            runCatching { SessionLog.tail(file, SessionLog.VIEW_MAX_BYTES).text }
+                .getOrElse { "Cannot read this file: ${it.message}" }
         }
     }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
-        topBar = { AppHeader(title = file.name, subtitle = humanBytes(file.length()), onBack = onBack) },
+        topBar = {
+            AppHeader(
+                title = file.name,
+                subtitle = humanBytes(file.length()) +
+                    if (file.length() > SessionLog.VIEW_MAX_BYTES) "  ·  showing the end" else "",
+                onBack = onBack,
+            )
+        },
     ) { padding ->
         SelectionContainer(Modifier.fillMaxSize().padding(padding)) {
             Text(
