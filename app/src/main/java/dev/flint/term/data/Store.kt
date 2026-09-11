@@ -256,7 +256,7 @@ class Store(context: Context) {
         val trimmed = command.trim()
         if (after === before || after == before) {
             // Already known, but running it again is exactly what the count is for.
-            if (CommandHistory.worthKeeping(trimmed) && trimmed in after) bumpCount(hostId, trimmed)
+            if (CommandHistory.worthKeeping(command) && trimmed in after) bumpCount(hostId, trimmed)
             return
         }
         _history.update { it + (hostId to after) }

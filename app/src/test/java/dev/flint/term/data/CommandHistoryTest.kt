@@ -1,6 +1,7 @@
 package dev.flint.term.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -25,6 +26,59 @@ class CommandHistoryTest {
         assertEquals("", CommandHistory.typed("~/src ❯ ", h))
         // But the moment something is typed, that is what counts.
         assertEquals("ec", CommandHistory.typed("→  ~ ec", h))
+    }
+
+    @Test
+    fun `a bare prompt as the core reads it is nothing typed`() {
+        // The core keeps the blank between the prompt and the cursor. Trimmed,
+        // this prompt used to come back as the thing typed at it.
+        val h = listOf("clear", "uptime")
+        assertEquals("", CommandHistory.typed("868ac99d54c5:~\$ ", h))
+        assertEquals("upt", CommandHistory.typed("868ac99d54c5:~\$ upt", h))
+        assertEquals("ime", CommandHistory.ghost(h, CommandHistory.typed("868ac99d54c5:~\$ upt", h)))
+    }
+
+    @Test
+    fun `the blank before the cursor stays with the match`() {
+        val h = listOf("git status")
+        assertEquals("git ", CommandHistory.typed("pilif@box:~\$ git ", h))
+        assertEquals("status", CommandHistory.ghost(h, "git "))
+    }
+
+    @Test
+    fun `the core's own reading of the line is taken as it stands`() {
+        val h = listOf("systemctl restart nginx", "uptime")
+        // A guess would cut this down to the part the history recognizes.
+        assertEquals(
+            "sudo systemctl restart nginx",
+            CommandHistory.typed("$ sudo systemctl restart nginx", "sudo systemctl restart nginx", true, h),
+        )
+        // A command nobody has run is not completed from its last word.
+        assertEquals(null, CommandHistory.ghost(h, CommandHistory.typed("$ git add u", "git add u", true, h)))
+        // Without it, the guess is all there is.
+        assertEquals("upt", CommandHistory.typed("868ac99d54c5:~\$ upt", null, true, h))
+    }
+
+    @Test
+    fun `nothing is offered over text already after the cursor`() {
+        assertEquals("", CommandHistory.typed("$ upt", "upt", false, listOf("uptime")))
+    }
+
+    @Test
+    fun `a command typed with a space in front stays out of the history`() {
+        assertEquals(listOf("one"), CommandHistory.remember(listOf("one"), " export TOKEN=abc"))
+        assertEquals(listOf("one", "uptime"), CommandHistory.remember(listOf("one"), "uptime"))
+    }
+
+    @Test
+    fun `the alt screen is a program's, not a prompt`() {
+        // vim, less, fzf: whatever is under the cursor, it is not a command.
+        assertFalse(CommandHistory.atPrompt(marked = false, running = false, tmuxHost = false, altScreen = true))
+        // A tmux host lives on the alt screen and is still a shell.
+        assertTrue(CommandHistory.atPrompt(marked = false, running = false, tmuxHost = true, altScreen = true))
+        // The primary screen is a shell's, and prompt marks overrule the rest.
+        assertTrue(CommandHistory.atPrompt(marked = false, running = false, tmuxHost = false, altScreen = false))
+        assertFalse(CommandHistory.atPrompt(marked = true, running = true, tmuxHost = false, altScreen = false))
     }
 
     @Test

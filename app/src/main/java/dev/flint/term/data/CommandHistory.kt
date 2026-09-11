@@ -34,13 +34,33 @@ object CommandHistory {
             // startsWith(ignoreCase) rather than lowercasing: this runs on a
             // tick while somebody is typing, and lowercasing the whole history
             // for every candidate was thousands of throwaway strings a second.
-            if (history.any { it.startsWith(candidate, ignoreCase = true) }) return candidate
+            // The blanks between the match and the cursor go with it: the hint
+            // is drawn at the cursor, so `git ` has to complete to `status`,
+            // not to ` status` one cell further along than it should be.
+            if (history.any { it.startsWith(candidate, ignoreCase = true) }) return candidate + line.substring(text.length)
         }
         // A line that ends in a space has nothing typed since the last word —
         // most often a prompt with the cursor sitting after it.
         if (line != text) return ""
         val last = text.substringAfterLast(' ').trim()
         return if (isPromptDecoration(last)) "" else last
+    }
+
+    /**
+     * What to complete, from what the core could say about the line.
+     *
+     * [exact] is the core's own answer, when it saw where the prompt ended,
+     * and it is used as it stands: read through the guess above, `sudo
+     * systemctl restart` would be cut down to whichever part of it the history
+     * happens to recognize, and `git add u` would be completed as if `u` began
+     * a command. [atEnd] false means something is written after the cursor
+     * already — the cursor was moved back into the line, or the shell shows a
+     * suggestion of its own — and a hint drawn there would land on top of it.
+     */
+    fun typed(line: String, exact: String?, atEnd: Boolean, history: List<String>): String = when {
+        !atEnd -> ""
+        exact != null -> exact
+        else -> typed(line, history)
     }
 
     /**
@@ -51,15 +71,42 @@ object CommandHistory {
      * a candidate made only of the characters prompts are built from is not
      * treated as input, and an empty line stays an empty line.
      */
+    /**
+     * Whether the cursor is at a shell prompt, where a line is a command.
+     *
+     * Everywhere else it is something else: matching a file being edited
+     * against the history puts a ghost in the middle of vim, and remembering
+     * it on Enter fills the history with lines of that file. A shell that
+     * marks its prompts settles it. Otherwise the primary screen is a shell's
+     * and the alt screen a full-screen program's. A tmux host is a shell on
+     * the alt screen by design.
+     *
+     * A program killed by a signal can leave the shell stranded on the alt
+     * screen, and then nothing is suggested until it is cleared (`reset`).
+     * Guessing from the layout instead, a shell being what has nothing under
+     * the cursor, would get that case right and put suggestions into `less`,
+     * `man` and `fzf`, which all keep the cursor on the last row.
+     */
+    fun atPrompt(marked: Boolean, running: Boolean, tmuxHost: Boolean, altScreen: Boolean): Boolean =
+        when {
+            marked -> !running
+            else -> tmuxHost || !altScreen
+        }
+
     private fun isPromptDecoration(candidate: String): Boolean =
         candidate.isEmpty() || candidate.all { it in PROMPT_CHARS }
 
     private const val PROMPT_CHARS = "~$#>%❯→➜»λ/:.-_ "
 
-    /** Worth remembering? Not blanks, not one-offs of a couple of characters. */
+    /**
+     * Worth remembering? Not blanks, not one-offs of a couple of characters,
+     * and not a command typed with a space in front of it, which bash and zsh
+     * both take to mean "keep this out of my history". The space has to be
+     * looked for before trimming; after it, there never is one.
+     */
     fun worthKeeping(command: String): Boolean {
         val c = command.trim()
-        return c.length >= 3 && !c.startsWith(" ") && c.lines().size == 1
+        return c.length >= 3 && !command.startsWith(" ") && c.lines().size == 1
     }
 
     /**
@@ -69,8 +116,8 @@ object CommandHistory {
      * is what you reach for most recently, not what you first typed.
      */
     fun remember(history: List<String>, command: String): List<String> {
+        if (!worthKeeping(command)) return history
         val c = command.trim()
-        if (!worthKeeping(c)) return history
         return (history.filterNot { it == c } + c).takeLast(LIMIT)
     }
 
@@ -107,7 +154,7 @@ object CommandHistory {
 
     /**
      * The one suggestion worth drawing where the cursor is: the rest of the
-     * most recent command that starts with [typed], or null.
+     * command [suggest] puts first for [typed], or null.
      */
     fun ghost(history: List<String>, typed: String, counts: Map<String, Int> = emptyMap()): String? {
         val best = suggest(history, typed, limit = 1, counts = counts).firstOrNull() ?: return null

@@ -245,6 +245,20 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     // connected, and that says nothing about what is running inside the pane.
     val tmuxHost = session.host?.usesTmuxControls(settings) == true
 
+    /** Whether the cursor is at a shell prompt; see [CommandHistory.atPrompt]. */
+    fun atPrompt(): Boolean = dev.flint.term.data.CommandHistory.atPrompt(
+        marked = marked,
+        running = running,
+        tmuxHost = tmuxHost,
+        altScreen = runCatching { session.core.modes().altScreen }.getOrDefault(false),
+    )
+
+    // The loop below outlives many compositions, and the history changes under
+    // it with every command entered. Captured once, it went on reading the
+    // history as it stood when the loop started, and a command run since could
+    // not be recognized on the line.
+    val latestHistory by androidx.compose.runtime.rememberUpdatedState(hostHistory)
+
     // No event says "the user typed a character" — the emulator only knows the
     // screen changed — so the line is read on a slow tick, and only while there
     // is history to match it against.
@@ -268,28 +282,18 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             val generation = view.snapGeneration
             if (generation == seen) continue
             seen = generation
-            // The line the cursor is on is a command at a shell prompt and
-            // something else everywhere else, and matching a file being edited
-            // against the history puts a ghost in the middle of vim. A shell
-            // that marks its prompts settles it; otherwise the alt screen is
-            // the tell, since a full-screen program is not a prompt.
-            val atPrompt = if (marked) {
-                !running
-            } else {
-                tmuxHost || runCatching { !session.core.modes().altScreen }.getOrDefault(true)
-            }
-            if (!atPrompt) {
+            val input = runCatching { session.core.inputLine() }.getOrNull()
+            if (input == null || !atPrompt()) {
                 if (typed.isNotEmpty()) typed = ""
                 continue
             }
-            val line = runCatching { session.core.currentInput() }.getOrNull() ?: continue
-            val t = dev.flint.term.data.CommandHistory.typed(line, hostHistory)
+            val t = dev.flint.term.data.CommandHistory.typed(input.line, input.typed, input.atEnd, latestHistory)
             if (t != typed) typed = t
         }
     }
 
-    // What the feature is: the rest of the most recent match, drawn where the
-    // cursor is. The list only exists for when that one guess is wrong.
+    // What the feature is: the rest of the best match, drawn where the cursor
+    // is. The list only exists for when that one guess is wrong.
     val ghost = remember(typed, hostHistory, hostCounts, settings.completeFromHistory) {
         if (settings.completeFromHistory) dev.flint.term.data.CommandHistory.ghost(hostHistory, typed, hostCounts) else null
     }
@@ -492,8 +496,16 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
 
     session.host?.let { host ->
         view.onCommandEntered = { line ->
-            // Recording uses the same reading of the line the suggestions do.
-            app.store.rememberCommand(host.id, dev.flint.term.data.CommandHistory.typed(line, historyAll[host.id].orEmpty()))
+            // Recording uses the same reading of the line the suggestions do,
+            // and only at a prompt: Enter in an editor is not a command. The
+            // cursor being back inside the line does not matter here, since
+            // the shell runs all of it, so only the guess is second-guessed.
+            val input = runCatching { session.core.inputLine() }.getOrNull()
+            if (atPrompt()) {
+                val command = input?.typed
+                    ?: dev.flint.term.data.CommandHistory.typed(input?.line ?: line, historyAll[host.id].orEmpty())
+                app.store.rememberCommand(host.id, command)
+            }
             typed = ""
         }
     }
