@@ -903,6 +903,19 @@ data class Settings(
     val doubleTapLocksModifier: Boolean = true,
     /** Dragging two fingers on the terminal sends arrow keys. */
     val twoFingerDragArrows: Boolean = true,
+    /**
+     * How far the scrollback moves for a drag, as a multiple of the finger's
+     * own travel. 1 keeps the text under the thumb, which is what every other
+     * app on the phone does.
+     *
+     * Worth a knob because a terminal is where that rule costs the most: a
+     * build log is hundreds of lines and a thumb is one screen long. The same
+     * number scales the wheel a program reading the mouse is sent, so a drag
+     * through `less` or `btop` covers what it would have covered in the
+     * scrollback. Sideways is not here because the grid has no sideways: lines
+     * wrap, so there is never anything off the edge to scroll to.
+     */
+    val scrollSpeed: Float = 1f,
     val capsLockAs: CapsLockAction = CapsLockAction.NONE,
     /** Keep the compose line open when leaving and coming back to a session. */
     val composeRemembersState: Boolean = true,

@@ -462,6 +462,7 @@
     <string name="keyboardsettings_extra_keys">Extra keys</string>
     <string name="keyboardsettings_hardware_keyboard">Hardware keyboard</string>
     <string name="keyboardsettings_hold_ctrl_for_chords">Hold Ctrl for chords</string>
+    <string name="keyboardsettings_how_far_the_scrollback_moves_for_a_drag_higher_g">How far the scrollback moves for a drag. Higher gets through a long log in fewer strokes, and a program reading the mouse is sent the same amount. Lines wrap, so there is nothing to scroll sideways to.</string>
     <string name="keyboardsettings_keep_the_compose_line_open">Keep the compose line open</string>
     <string name="keyboardsettings_keyboard_input">Keyboard &amp; input</string>
     <string name="keyboardsettings_keyboard_protocol">Keyboard protocol</string>
@@ -469,6 +470,7 @@
     <string name="keyboardsettings_normally_these_three_send_the_same_bytes_as_esca">Normally these three send the same bytes as Escape, Tab and Enter. On, they are sent as separate keys, so a tmux binding on Ctrl+[ works. The Escape, Tab and Enter keys do not change.</string>
     <string name="keyboardsettings_offer_to_paste_what_you_copied">Offer to paste what you copied</string>
     <string name="keyboardsettings_phone_keyboards_have_no_tab_key_so_two_taps_send">Phone keyboards have no Tab key, so two taps send it. This works inside programs that read the mouse too.</string>
+    <string name="keyboardsettings_scroll_speed">Scroll speed</string>
     <string name="keyboardsettings_send_ctrl_ctrl_i_and_ctrl_m_as_their_own_keys">Send Ctrl+[, Ctrl+I and Ctrl+M as their own keys</string>
     <string name="keyboardsettings_shortcuts">Shortcuts</string>
     <string name="keyboardsettings_slide_two_fingers_to_walk_the_cursor_pinch_still">Slide two fingers to walk the cursor. Pinch still zooms</string>

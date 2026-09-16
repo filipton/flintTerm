@@ -4,6 +4,7 @@ import dev.flint.term.R
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Bolt
@@ -23,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -30,12 +32,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import dev.flint.term.App
 import dev.flint.term.data.CapsLockAction
+import dev.flint.term.ui.AppSlider
 import dev.flint.term.ui.Group
 import dev.flint.term.ui.GroupRow
 import dev.flint.term.ui.RowDivider
 import dev.flint.term.ui.Routes
 import dev.flint.term.ui.Segmented
 import dev.flint.term.ui.ShortcutsScreen
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /** What the keys and the fingers do: the extra-key bar, and the gestures on the terminal. */
 @Composable
@@ -143,6 +148,27 @@ fun KeyboardSettings(nav: NavController) {
         }
 
         Group("Gestures") {
+            Column(Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.keyboardsettings_scroll_speed), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Text(
+                        String.format(Locale.US, "%.1f×", settings.scrollSpeed),
+                        style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                AppSlider(
+                    value = settings.scrollSpeed,
+                    // A tenth is the smallest step anybody can feel, and it keeps
+                    // the number above the slider from reading 1.4732.
+                    onValueChange = { v -> app.store.updateSettings { it.copy(scrollSpeed = (v * 10f).roundToInt() / 10f) } },
+                    valueRange = 0.5f..3f,
+                )
+                Text(
+                    stringResource(R.string.keyboardsettings_how_far_the_scrollback_moves_for_a_drag_higher_g),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            RowDivider()
             GroupRow(
                 title = stringResource(R.string.keyboardsettings_double_tap_locks_a_modifier),
                 subtitle = stringResource(R.string.keyboardsettings_tap_ctrl_twice_quickly_and_it_stays_down_until_y),

@@ -327,6 +327,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     view.ghost = ghost
     view.doubleTapSendsTab = settings.doubleTapSendsTab
     view.twoFingerDragArrows = settings.twoFingerDragArrows
+    view.scrollSpeed = settings.scrollSpeed
     view.nerdGlyphs = settings.nerdGlyphs
     view.cursorStyle = settings.cursorStyle
     view.cursorBlink = settings.cursorBlink

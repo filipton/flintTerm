@@ -236,7 +236,10 @@ Everything the app does, at length. The short list is in the [README](../README.
   it and the pinch, Ctrl+Shift+± and Ctrl+0 all write that host's size rather than the app's: a switch
   console with an 80x24 firmware terminal can be zoomed until it fits without the big server's `btop`
   going with it. Left on "Follow settings", every one of them changes the app setting as before.
-- Scrollback with fling, scroll indicator, scroll-to-bottom on input.
+- Scrollback with fling, scroll indicator, scroll-to-bottom on input, and a **scroll speed** in
+  Settings → Keyboard & input → Gestures for anyone who would rather cross a build log in three
+  strokes than thirty. It scales the fling and the wheel a program reading the mouse is sent, so
+  `less` and `btop` move by as much as the scrollback would have.
 - **Tap URLs and paths** in the terminal: they get a dotted underline, and a tap offers Open / Copy
   for a URL, or jumps straight to the file's folder in the SFTP browser for a path.
 - Search in scrollback with highlighted hits; bell and per-host regex pattern notifications while the

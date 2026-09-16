@@ -20,6 +20,7 @@ class SettingsRoundTripTest {
             rawControlKeys = false,
             doubleTapLocksModifier = false,
             twoFingerDragArrows = false,
+            scrollSpeed = 1.8f,
             capsLockAs = CapsLockAction.CTRL,
             composeRemembersState = false,
             tmuxControls = false,

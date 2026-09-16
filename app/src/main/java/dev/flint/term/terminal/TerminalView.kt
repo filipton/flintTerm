@@ -1502,7 +1502,10 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     private fun scrollBy(dyPixels: Float, e: MotionEvent?) {
         val s = session ?: return
-        scrollRemainder += dyPixels
+        // Here rather than at the gesture, so the fling that follows a drag
+        // covers the same ground per screenful that the drag did — a fling
+        // that suddenly scrolled at a different rate would read as a bug.
+        scrollRemainder += dyPixels * scrollSpeed
         val lines = (scrollRemainder / cellH).toInt()
         if (lines == 0) return
         scrollRemainder -= lines * cellH
@@ -2124,6 +2127,18 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     /** Two fingers dragged together walk the cursor. Off unless the app says so. */
     var twoFingerDragArrows: Boolean = false
 
+    /**
+     * How far a drag scrolls, as a multiple of the finger's own travel.
+     *
+     * Clamped rather than trusted: this arrives from the settings file, and a
+     * zero or a negative there would leave the scrollback unreachable or
+     * upside down with nothing on screen to say why.
+     */
+    var scrollSpeed: Float = 1f
+        set(value) {
+            field = value.coerceIn(MIN_SCROLL_SPEED, MAX_SCROLL_SPEED)
+        }
+
     /** Hooks for actions that live in the Compose layer. */
     var onSnippets: (() -> Unit)? = null
     var onSearch: (() -> Unit)? = null
@@ -2375,6 +2390,14 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         private const val RESIZE_SETTLE_MS = 110L
         const val MIN_SP = 6f
         const val MAX_SP = 32f
+
+        /**
+         * The far ends of the scroll-speed knob. Wider than the slider offers,
+         * because these exist to keep a hand-edited settings file from making
+         * the scrollback unusable, not to second-guess the screen.
+         */
+        const val MIN_SCROLL_SPEED = 0.25f
+        const val MAX_SCROLL_SPEED = 5f
         private const val LINE_SPACING = 1.0f
         private const val FLAG_BOLD = 1
         private const val FLAG_ITALIC = 1 shl 1
