@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
@@ -153,6 +154,15 @@ private fun KeyCap(
     // is held for as long as the finger is down rather than flashed, because a
     // flash is exactly what a slow frame swallows.
     var down by remember { mutableStateOf(false) }
+    // The detector is keyed on nothing and reads the click through the snapshot
+    // instead of closing over it. Keying on the lambda tore the gesture down
+    // mid-press, because the lambda closes over the view and so is a new object
+    // on every recomposition: typing a letter with Ctrl armed consumes the
+    // modifier, which recomposes the cap under the finger, and the press was
+    // cancelled at `tryAwaitRelease` with the cap left lit. The reset moves into
+    // a `finally` for the cancellations that are real — a scroll stealing the
+    // gesture — which would otherwise strand the colour the same way.
+    val click by rememberUpdatedState(onClick)
     Box(
         modifier
             .height(capHeight)
@@ -165,13 +175,16 @@ private fun KeyCap(
                     else -> cap
                 },
             )
-            .pointerInput(onClick) {
+            .pointerInput(Unit) {
                 detectTapGestures(onPress = {
                     down = true
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onClick()
-                    tryAwaitRelease()
-                    down = false
+                    try {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        click()
+                        tryAwaitRelease()
+                    } finally {
+                        down = false
+                    }
                 })
             }
             .padding(horizontal = if (compact) 2.dp else 8.dp),
@@ -350,21 +363,25 @@ private fun RepeatCap(icon: ImageVector?, label: String, cap: Color, text: Color
     val haptic = LocalHapticFeedback.current
     val scope = rememberCoroutineScope()
     var down by remember { mutableStateOf(false) }
+    // Read through the snapshot rather than closed over, for the reason [KeyCap]
+    // gives: keyed on the lambda, the first press of a repeating key with Ctrl
+    // armed restarted the detector and killed the repeat before it began.
+    val key by rememberUpdatedState(onKey)
     Box(
         modifier
             .height(capHeight)
             .clip(CapShape)
             .background(if (down) pressedOver(cap, text) else cap)
-            .pointerInput(onKey) {
+            .pointerInput(Unit) {
                 awaitEachGesture {
                     awaitFirstDown()
                     down = true
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onKey()
+                    key()
                     val repeater = scope.launch {
                         delay(400)
                         while (isActive) {
-                            onKey()
+                            key()
                             delay(45)
                         }
                     }
