@@ -15,6 +15,7 @@ carries this workspace's MIT/Apache license instead of mosh's GPL-3.
 | `fragment`  | zlib, and cutting an instruction to fit the MTU                    |
 | `proto`     | the protobuf messages, hand-coded (no `protoc` build step)         |
 | `transport` | the state machine: what to send, what to ack, what to apply        |
+| `predict`   | predictive local echo: guesses drawn over the screen, never fed in |
 
 ## The shortcut that makes this small
 
@@ -41,9 +42,3 @@ MOSH_SERVER=/usr/bin/mosh-server cargo test -p mosh   # + interop
 
 Without a `mosh-server` the interop tests skip; with `MOSH_SERVER` set to
 something that is not a file they fail rather than quietly pass.
-
-## Not done yet
-
-Predictive local echo. Everything else — connect, output, input, resize,
-fragmentation, acks, heartbeats and roaming across a source-port change — is
-exercised by the harness.

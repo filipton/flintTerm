@@ -1,148 +1,154 @@
 # The terminal backend
 
-What the two engines are, how they compare, and how they are kept honest against each other.
+The two VT engines, how they compare, and how they're checked against each other.
 
-The VT engine is chosen at compile time. `alacritty_terminal` is the default; passing `--term
-ghostty` to `build-apk.sh` (or `-PtermBackend=ghostty` to Gradle, or `--features ghostty` to cargo)
-swaps in **libghostty-vt**, the VT library out of [Ghostty](https://github.com/ghostty-org/ghostty).
-Both implement `term_core::Emulator`, so the snapshot format, the FFI and the Kotlin renderer are the
-same either way, and so are the colour schemes — the palette stays on our side and only the grid
-comes from the backend.
+- [The two engines](#the-two-engines)
+- [Performance](#performance)
+- [Checking the two against each other](#checking-the-two-against-each-other)
 
-libghostty-vt is Zig, so that build needs **Zig 0.16+** on `PATH`. `crates/ghostty-vt-sys/build.rs`
-fetches Ghostty at a pinned revision into `target/ghostty-vt/`, runs `zig build` once per ABI and
-links the static library; later builds reuse both.
+## The two engines
 
-Only the parts of libghostty-vt this crate calls are built: it encodes keys and mice with
-`term_core::keys`, searches the scrollback through `Emulator::all_lines`, decodes images itself (see
-below), and has no use for libghostty's own state serialisation, so those come out (`FEATURES` in
-the build script, overridable with `GHOSTTY_VT_FEATURES`). Referencing something that was left out
-fails to link rather than going quiet at runtime. A ghostty build also compiles alacritty out rather
-than carrying both.
+The engine is chosen at compile time:
 
-Everything the app layers on top of the VT engine works the same on either backend, because it is
-not the engine's: notifications (OSC 9/99/777), the working directory (OSC 7), shell prompt marks
-(OSC 133), kitty and sixel images and the kitty keyboard protocol are all lifted out of the byte
-stream by `term_core::intercept` before the engine sees them, and where an image or a mark sits on
-the screen is remembered by writing a private OSC 8 hyperlink into the grid and reading it back
-through `ghostty_grid_ref_hyperlink_uri` — the same trick the alacritty backend uses, so a placement
-scrolls, reflows and gets erased with the text around it on both. Two things are done differently
-underneath. libghostty's grid cannot be edited from outside, so a prompt mark is not pruned back to
-one cell after the fact; the pen is closed the moment the first cell printed after the mark carries
-it, which means feeding the handful of bytes between a mark and its prompt one at a time. And
-libghostty has no setting to switch the kitty keyboard protocol off, so with the protocol off the
-filter stays in the stream to swallow the queries (`Interceptor::set_keyboard_gate`) instead of
-stepping aside as it can for alacritty. The kitty flags a program pushed are read from
-`GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS`. One observable difference remains, and it is the VT
-engines' own: `ESC [ 2 J` pushes the cleared screen into the scrollback in alacritty and erases it
-in place in libghostty, so a `clear` takes the marks on screen with it on the ghostty build where
-the alacritty build keeps them in the history.
-
-What is left costs, on arm64, +808 KB in the installed `libflintterm.so` (7.06 → 7.89 MB) and
-+279 KB in the APK (7.43 → 7.72 MB), the emulator being the only difference between the two builds.
-Carrying the whole of libghostty-vt and both backends would have been +1.50 MB and +650 KB.
-Set `GHOSTTY_VT_LIB_DIR` to link a prebuilt `libghostty-vt.a` instead, or `GHOSTTY_SRC` to build
-from a checkout you already have.
-
-`cargo run -p term-ghostty --release --example vtbench` times the two against each other, best of
-five runs. On an x86_64 dev box, 120x40:
-
-| parsing | alacritty | ghostty |
+| | alacritty (default) | ghostty |
 | --- | --- | --- |
-| feed 1.2 MB plain text | 26.5 ms | **2.4 ms** |
-| feed 1.1 MB CJK | 23.5 ms | **3.6 ms** |
-| feed a build log (6 recurring styles) | 26.9 ms | **5.9 ms** |
-| feed a distinct style per word | 10.7 ms | **9.4 ms** |
-| feed 300 alt-screen repaints | **28.9 ms** | 31.9 ms |
+| Library | `alacritty_terminal` | libghostty-vt, from [Ghostty](https://github.com/ghostty-org/ghostty) |
+| `build-apk.sh` | (nothing) | `--term ghostty` |
+| Gradle | (nothing) | `-PtermBackend=ghostty` |
+| cargo | (nothing) | `--features ghostty` |
+| Needs | nothing extra | Zig 0.16+ on `PATH` |
 
-| feed + snapshot per frame, the loop the app runs | alacritty | ghostty |
+Both implement `term_core::Emulator`, so the snapshot format, FFI, Kotlin renderer and color schemes
+are the same. A ghostty build leaves alacritty out.
+
+### Building libghostty-vt
+
+`crates/ghostty-vt-sys/build.rs` fetches Ghostty at a pinned revision into `target/ghostty-vt/` and
+runs `zig build` once per ABI. Later builds reuse both.
+
+- **Only what's used is built.** Key encoding, search, image decoding and state serialisation are
+  done on our side, so they're left out (`FEATURES` in the build script, or `GHOSTTY_VT_FEATURES`).
+  Calling something that was left out fails at link time, not at runtime.
+- **`GHOSTTY_VT_LIB_DIR`** links a prebuilt `libghostty-vt.a`; **`GHOSTTY_SRC`** builds from an
+  existing checkout.
+- **Size on arm64:** +808 KB installed (`libflintterm.so` 7.06 → 7.89 MB) and +279 KB in the APK
+  (7.43 → 7.72 MB). All of libghostty-vt plus both backends would have been +1.50 MB and +650 KB.
+
+### What works the same on both
+
+Notifications (OSC 9/99/777), the working directory (OSC 7), prompt marks (OSC 133), kitty and sixel
+images and the kitty keyboard protocol are all handled by `term_core::intercept` before the engine
+sees the bytes. Images and marks are placed by writing a private OSC 8 hyperlink into the grid and
+reading it back, so they scroll, reflow and get erased with the text on both engines.
+
+Three differences underneath:
+
+- **Prompt marks.** libghostty's grid can't be edited from outside, so the mark's hyperlink is
+  closed as soon as the first cell after it is printed. That means feeding the bytes between a mark
+  and its prompt one at a time.
+- **Kitty keyboard protocol.** libghostty can't switch it off, so when it's off the interceptor
+  stays in the stream to swallow the queries (`Interceptor::set_keyboard_gate`). The flags a program
+  pushed are read from `GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS`.
+- **`clear`.** `ESC [ 2 J` pushes the screen into scrollback on alacritty but erases it in place on
+  libghostty, so on ghostty a `clear` also removes the prompt marks that were on screen.
+
+## Performance
+
+### Benchmark
+
+`cargo run -p term-ghostty --release --example vtbench`, best of five, x86_64, 120x40:
+
+| Parsing | alacritty | ghostty |
+| --- | --- | --- |
+| 1.2 MB plain text | 26.5 ms | **2.4 ms** |
+| 1.1 MB CJK | 23.5 ms | **3.6 ms** |
+| A build log (6 recurring styles) | 26.9 ms | **5.9 ms** |
+| A different style per word | 10.7 ms | **9.4 ms** |
+| 300 alt-screen repaints | **28.9 ms** | 31.9 ms |
+
+| Parse + snapshot per frame (what the app does) | alacritty | ghostty |
 | --- | --- | --- |
 | 1000 frames of scrolling output | 29.8 ms | **8.3 ms** |
-| 1000 frames of a TUI status line redrawing in place | 28.5 ms | **2.8 ms** |
+| 1000 frames of a TUI status line redrawing | 28.5 ms | **2.8 ms** |
 | 200 frames of a TUI repainting the whole screen | **18.3 ms** | 19.9 ms |
 | 500 scroll + snapshot (a fling) | 16.3 ms | **4.2 ms** |
-| 1000 snapshots of a screen that did not change | 28.2 ms | **1.6 ms** |
+| 1000 snapshots of an unchanged screen | 28.2 ms | **1.6 ms** |
 
-That is a bench. On a device it shows up as the frame times of a program that redraws constantly:
-the same emulator, the same server, `btop --update 100` full screen for 30 seconds, read out of
-`dumpsys gfxinfo` with a reset either side.
+### On a device
 
-| frame time | 50th | 90th | 99th |
+`btop --update 100` full screen for 30 seconds on the emulator, same server, frame times from
+`dumpsys gfxinfo`:
+
+| Frame time | 50th | 90th | 99th |
 | --- | --- | --- | --- |
 | alacritty | 48 ms | 117 ms | 150 ms |
 | ghostty | 32 ms | 48 ms | 65 ms |
 
-The tail is what a person calls lag, and it is the tail that moves. Nothing on an emulator meets
-16 ms, so the percentiles are the comparison; the jank count says 97% on both and means nothing here.
+The slow frames are what feels like lag, and that's where the difference is. Nothing on an emulator
+hits 16 ms, so compare the percentiles; the jank count is 97% on both and means nothing here.
 
-Three things get it there.
+### Where the speed comes from
 
-**Parsing** is libghostty's own, and it is the part that scales with how much the remote prints.
+- **Parsing** is libghostty's own, and it's the part that grows with how much the server prints.
+- **Cells are decoded in Rust.** A cell is a packed `u64`, which is much cheaper to read directly
+  than one C call per field. The bit layout isn't a stable ABI, but `ghostty_type_json()` publishes
+  it. At startup the backend writes test cells covering every field, checks they read back exactly,
+  and falls back to the C calls if anything moved (`cargo run -p ghostty-vt-sys --example manifest`
+  prints the layout). Cells in the default style skip color resolution, and each style is resolved
+  once per row, not per cell.
+- **Only changed rows are rebuilt.** libghostty tracks which rows changed since the last frame, so a
+  TUI redrawing one status line rebuilds one row out of forty. The cache is dropped on a resize, a
+  palette change, or when libghostty marks the whole frame dirty (scrolls, screen switches,
+  selection changes). `cached_snapshots_match_full_rebuilds` runs 400 random steps on two emulators,
+  one cached and one not, and compares them after every step.
 
-**Cells are decoded in Rust.** Reading one through the C API costs a call per field; a cell is really
-a packed `u64`, and while the C ABI does not freeze the bit positions, `ghostty_type_json()`
-publishes them. This is not taken on trust: at startup the backend builds synthetic cells covering
-every content tag and field, checks that `ghostty_cell_get` reads back exactly what was written, and
-falls back to the per-field C path if a revision has moved anything (`cargo run -p ghostty-vt-sys
---example manifest` prints what a build actually says). A cell in the default style then skips colour
-resolution entirely, and what a style *means* is worked out once per style per row rather than once
-per cell.
+### Where ghostty is slower
 
-**Only rows that changed are re-serialised.** libghostty tracks per-row dirty state and accumulates
-it until told the frame was drawn, so a snapshot rebuilds just the rows that moved — a TUI redrawing
-one status line touches one row out of forty. A frame that has to draw everything anyway skips the
-cache and writes straight into the caller's buffer, so scrolling output pays nothing for it. The
-cache is dropped whenever anything outside the row flags could have changed the picture: a resize, a
-palette change, or libghostty reporting the frame fully dirty, which it does for a scroll, a screen
-switch and a selection change. `cached_snapshots_match_full_rebuilds` drives two emulators through
-400 arbitrary steps — feeding, scrolling, selecting, resizing, switching screens, changing the
-palette — one snapshotting incrementally and one rebuilding every row, and compares after every
-step.
+A screen repainted entirely with SGR (color and style) changes. Fed only cursor movement, libghostty
+is 1.8x faster; fed only SGR, it's 1.4x slower. Ghostty stores a 16-bit style id per cell and
+updates a shared style table on each change, where alacritty stores attributes in every cell: cheap
+cells and text, more expensive style changes.
 
-The one case libghostty loses is a screen being repainted entirely in SGR, and the cost is in
-parsing rather than drawing: fed nothing but cursor positioning it is 1.8x *faster*, and fed nothing
-but SGR changes 1.4x slower. That is the two designs showing through. Ghostty interns styles — a
-cell is eight bytes holding a 16-bit style id, and every attribute change releases one entry in the
-page's style set and adds another — where alacritty stores the attributes in the cell. Cheap cells
-and cheap bulk text, dearer SGR.
-
-Nothing here can undo that; it is behind `ghostty_terminal_vt_write`. Two things soften it, both
-already upstream: a sequence that re-asserts the style a cell already has returns before touching
-the set, which is the common case in the wild, and the interning is what makes a cell eight bytes
-and the render state's per-row style array cheap to read. A sequence carrying several parameters
-(`ESC [ 1;31 m`) does pay once per parameter that changes the style.
+That cost is inside `ghostty_terminal_vt_write`, so we can't fix it. It's softened upstream: an SGR
+that sets the style a cell already has skips the table, which is the common case. A sequence with
+several parameters (`ESC [ 1;31 m`) pays once per parameter that changes the style.
 
 ## Checking the two against each other
 
-`cargo run -p term-diff` feeds both backends the same input and reports everywhere they disagree —
-cell by cell, plus the cursor, the modes, the scrollback and the text a selection would copy. It
-runs as a test too (`cargo test -p term-diff`), which is the regression net for the newer backend.
+`term-diff` feeds both engines the same input and reports every difference: cells, cursor, modes,
+scrollback, and the text a selection would copy.
 
-    cargo run -p term-diff                  # the built-in scripts
-    cargo run -p term-diff -- capture.bin   # a captured stream of real terminal output
-    cargo run -p term-diff -- --known       # also list the differences we know about
+```sh
+cargo run -p term-diff                  # the built-in scripts
+cargo run -p term-diff -- capture.bin   # a captured stream of real terminal output
+cargo run -p term-diff -- --known       # also list the known differences
+cargo test -p term-diff                 # the same, as a regression test
+```
 
-Seventeen scripts — text and wrapping, SGR, colours, cursor movement, erase and edit, scroll
-regions, the alternate screen, wide characters, modes, OSC, scrollback, selection, a repainting TUI,
-resize, and with the output filter on, prompt marks and kitty and sixel images, which compares the
-marks and placements each backend reads back out of its own grid — agree exactly. Six behaviours
-differ, and each has a script of its own carrying the reason: tabs
-(alacritty keeps U+0009 in the cells a tab skipped, ghostty fills them with spaces), SGR 21 (ghostty
-draws the double underline ECMA-48 asks for, alacritty ignores it), ED 2 and IL (alacritty pushes the
-displaced lines into scrollback, ghostty does not), the two mouse encodings being set at once, and
-selection trimming (ghostty stops at the end of the text, alacritty runs to the end of the row).
-Two emulators are not obliged to agree; these are written down rather than papered over.
+**Seventeen scripts agree exactly**: text and wrapping, SGR, colors, cursor movement, erase and
+edit, scroll regions, the alternate screen, wide characters, modes, OSC, scrollback, selection, a
+repainting TUI, resize, and (with the interceptor on) prompt marks and kitty and sixel images.
 
-Replaying captured output from real programs is the point of the file argument, and it is worth
-doing before trusting a change: `ls --color` (632 KB), `top`, `htop`, `less`, `vim` and `man` all
-come through with the two backends agreeing on every cell, the cursor and the modes.
+**Six known differences**, each with its own script and reason:
 
-The harness has found two real bugs so far, one on each side. In the *older* backend, `selection_all`
-anchored a line selection and never extended it, so "Select all" copied one line instead of the
-buffer. In the newer one, libghostty caps scrollback by bytes as well as by lines and that limit
-defaults to 10 KB against a page size of around 400 KB — so it kept roughly one page of history
-whatever the line limit said, and a request for ten thousand lines yielded a few hundred. The byte
-limit is now removed, leaving the line count the only governor, which is what the app's setting means
-and what alacritty does. Both are pinned by tests.
+| Behaviour | alacritty | ghostty |
+| --- | --- | --- |
+| Tabs | keeps U+0009 in the skipped cells | fills them with spaces |
+| SGR 21 | ignored | double underline, as ECMA-48 says |
+| ED 2 | pushes lines into scrollback | doesn't |
+| IL | pushes lines into scrollback | doesn't |
+| Mouse modes 1005 and 1006 both set | setting one clears the other | keeps both, as xterm does |
+| Selection trimming | runs to the end of the row | stops at the end of the text |
+
+**Real captures** of `ls --color` (632 KB), `top`, `htop`, `less`, `vim` and `man` agree on every
+cell, the cursor and the modes. Replay one before trusting a change.
+
+**Bugs found so far**, both now covered by tests:
+
+- **alacritty backend:** Select all copied one line instead of the whole buffer, because
+  `selection_all` never extended the selection.
+- **ghostty backend:** scrollback kept only about a page of history. libghostty also limits it by
+  bytes, defaulting to 10 KB against ~400 KB pages. The byte limit is now removed, so the line count
+  setting is the only limit, as on alacritty.
 
 [← back to the README](../README.md)
