@@ -6,6 +6,16 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-09-17
+
+### Added
+
+- Set how far a drag scrolls the scrollback
+
+### Fixed
+
+- A cap pressed with Ctrl armed clears when you let go
+
 ## [0.1.3] - 2026-09-11
 
 ### Added
