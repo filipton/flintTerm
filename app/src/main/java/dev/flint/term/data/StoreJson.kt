@@ -33,9 +33,13 @@ data class Snapshot(
  * them as they are and seals the whole document instead. That is `secret`,
  * applied to every password, private key, passphrase, tunnel config and auth
  * key, and to nothing else.
+ *
+ * The command history is the other difference: a backup carries it inline, as
+ * the store file once did, but the store now keeps it in [HistoryLog] and
+ * writes without it, so that recording a command is not a rewrite of this.
  */
 object StoreJson {
-    fun write(snap: Snapshot, secret: (String) -> String): JSONObject {
+    fun write(snap: Snapshot, withHistory: Boolean = true, secret: (String) -> String): JSONObject {
         val root = JSONObject()
         root.put("version", 1)
         root.put("hosts", JSONArray().apply {
@@ -135,14 +139,16 @@ object StoreJson {
                 put(JSONObject().apply { put("id", t.id); put("name", t.name); put("config", secret(t.config)); put("created", t.created) })
             }
         })
-        root.put("history", JSONObject().apply {
-            snap.history.forEach { (hostId, commands) -> put(hostId, JSONArray(commands)) }
-        })
-        root.put("historyCounts", JSONObject().apply {
-            snap.historyCounts.forEach { (hostId, counts) ->
-                put(hostId, JSONObject().apply { counts.forEach { (command, n) -> put(command, n) } })
-            }
-        })
+        if (withHistory) {
+            root.put("history", JSONObject().apply {
+                snap.history.forEach { (hostId, commands) -> put(hostId, JSONArray(commands)) }
+            })
+            root.put("historyCounts", JSONObject().apply {
+                snap.historyCounts.forEach { (hostId, counts) ->
+                    put(hostId, JSONObject().apply { counts.forEach { (command, n) -> put(command, n) } })
+                }
+            })
+        }
         root.put("proxies", JSONArray().apply {
             snap.proxies.forEach { p ->
                 put(JSONObject().apply {

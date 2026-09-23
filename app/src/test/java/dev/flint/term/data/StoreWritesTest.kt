@@ -25,7 +25,7 @@ class StoreWritesTest {
     private fun hostsWith(vararg passwords: String) =
         Snapshot(hosts = passwords.mapIndexed { i, p -> Host(id = "h$i", password = p) })
 
-    private fun SecretCache.file(snap: Snapshot) = write { seal -> StoreJson.write(snap, seal) }.toString()
+    private fun SecretCache.file(snap: Snapshot) = write { seal -> StoreJson.write(snap, secret = seal) }.toString()
 
     @Test fun `an unchanged secret is not sealed again`() {
         val c = cache()

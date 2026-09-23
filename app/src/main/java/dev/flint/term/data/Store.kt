@@ -16,6 +16,8 @@ import java.io.File
  * Single JSON document on disk, secrets encrypted with [Crypto]. Small enough
  * that a full rewrite is cheaper than a database, as long as a burst of changes
  * is one rewrite and not one each: see [CoalescingWriter] and [SecretCache].
+ * The command history, which changes on every Enter, is kept apart in a
+ * [HistoryLog] so that it does not rewrite the rest.
  */
 class Store(context: Context) {
     private val appContext = context.applicationContext
@@ -24,6 +26,8 @@ class Store(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val secrets = SecretCache(Crypto::encrypt, Crypto::decrypt)
     private val writer = CoalescingWriter<Snapshot>(scope, WRITE_QUIET_MS, ::write)
+    private val historyFile = File(context.filesDir, "history.jsonl")
+    private val historyLog = HistoryLog(historyFile, scope, WRITE_QUIET_MS)
 
     private val _hosts = MutableStateFlow<List<Host>>(emptyList())
     val hosts: StateFlow<List<Host>> = _hosts
@@ -40,16 +44,14 @@ class Store(context: Context) {
     private val _proxies = MutableStateFlow<List<SavedProxy>>(emptyList())
     val proxies: StateFlow<List<SavedProxy>> = _proxies
     /** Commands run per host id, oldest first; the source for completions. */
-    private val _history = MutableStateFlow<Map<String, List<String>>>(emptyMap())
-    val history: StateFlow<Map<String, List<String>>> = _history
+    val history: StateFlow<Map<String, List<String>>> = historyLog.history
     /**
      * How often each command has been run on a host.
      *
      * The list above keeps one entry per command, so it can only say what was
      * run *last*; the count is what lets a suggestion say what is run *most*.
      */
-    private val _historyCounts = MutableStateFlow<Map<String, Map<String, Int>>>(emptyMap())
-    val historyCounts: StateFlow<Map<String, Map<String, Int>>> = _historyCounts
+    val historyCounts: StateFlow<Map<String, Map<String, Int>>> = historyLog.counts
     private val _snippets = MutableStateFlow<List<Snippet>>(emptyList())
     val snippets: StateFlow<List<Snippet>> = _snippets
     private val _accounts = MutableStateFlow<List<Account>>(emptyList())
@@ -153,7 +155,7 @@ class Store(context: Context) {
     }
 
     fun deleteHost(id: String) {
-        _history.update { it - id }
+        historyLog.forget(id)
         if (_hosts.value.firstOrNull { it.id == id }?.showInFiles == true) {
             dev.flint.term.files.SftpDocumentsProvider.refreshRoots(appContext)
         }
@@ -250,49 +252,14 @@ class Store(context: Context) {
         persist()
     }
 
-    fun rememberCommand(hostId: String, command: String) {
-        val before = _history.value[hostId].orEmpty()
-        val after = CommandHistory.remember(before, command)
-        val trimmed = command.trim()
-        if (after === before || after == before) {
-            // Already known, but running it again is exactly what the count is for.
-            if (!CommandHistory.worthKeeping(command) || trimmed !in after) return
-        } else {
-            _history.update { it + (hostId to after) }
-        }
-        bumpCount(hostId, trimmed, after)
-        persist()
-    }
-
-    private fun bumpCount(hostId: String, command: String, kept: List<String>) {
-        _historyCounts.update { all ->
-            val forHost = all[hostId].orEmpty()
-            val bumped = forHost + (command to ((forHost[command] ?: 0) + 1))
-            all + (hostId to CommandHistory.prune(bumped, kept))
-        }
-    }
+    /** Appends to the history file alone; the store is not written for a command. */
+    fun rememberCommand(hostId: String, command: String) = historyLog.remember(hostId, command)
 
     /** Merge commands read from a host's own shell history file. */
-    fun addHistory(hostId: String, commands: List<String>, counts: Map<String, Int> = emptyMap()) {
-        if (commands.isEmpty()) return
-        val merged = commands.fold(_history.value[hostId].orEmpty()) { acc, c -> CommandHistory.remember(acc, c) }
-        _history.update { it + (hostId to merged) }
-        if (counts.isNotEmpty()) {
-            _historyCounts.update { all ->
-                val forHost = all[hostId].orEmpty()
-                // The file's own repetitions are better evidence than anything
-                // counted here, so they win rather than adding to it.
-                all + (hostId to CommandHistory.prune(forHost + counts.mapValues { (c, n) -> maxOf(n, forHost[c] ?: 0) }, merged))
-            }
-        }
-        persist()
-    }
+    fun addHistory(hostId: String, commands: List<String>, counts: Map<String, Int> = emptyMap()) =
+        historyLog.add(hostId, commands, counts)
 
-    fun clearHistory(hostId: String) {
-        _history.update { it - hostId }
-        _historyCounts.update { it - hostId }
-        persist()
-    }
+    fun clearHistory(hostId: String) = historyLog.forget(hostId)
 
     fun proxy(id: String?): SavedProxy? = id?.let { p -> _proxies.value.firstOrNull { it.id == p } }
 
@@ -357,11 +324,14 @@ class Store(context: Context) {
      * process may be about to go: the app leaving the screen is the last word
      * Android promises before it may kill us.
      */
-    fun flush() = writer.flush()
+    fun flush() {
+        historyLog.flush()
+        writer.flush()
+    }
 
     private fun write(snap: Snapshot) {
         try {
-            val text = secrets.write { seal -> StoreJson.write(snap, seal) }.toString()
+            val text = secrets.write { seal -> StoreJson.write(snap, withHistory = false, secret = seal) }.toString()
             tmp.writeText(text)
             if (!tmp.renameTo(file)) {
                 file.writeText(text)
@@ -372,13 +342,29 @@ class Store(context: Context) {
     }
 
     private fun load() {
+        // A log that cannot be read is treated as missing, so a store that
+        // still holds the history inline puts it back.
+        val haveLog = try {
+            historyLog.load()
+        } catch (e: Exception) {
+            Log.e("Store", "history load failed", e)
+            false
+        }
         if (!file.exists()) return
         try {
             val snap = StoreJson.read(JSONObject(file.readText()), secrets::open)
-            // Files from before the counts were bounded can hold a count for
-            // every command ever run; only those still in the history matter.
-            val counts = snap.historyCounts.mapValues { (id, c) -> CommandHistory.prune(c, snap.history[id].orEmpty()) }
-            replace(snap.copy(historyCounts = counts))
+            replace(snap)
+            if (snap.history.isNotEmpty() || snap.historyCounts.isNotEmpty()) {
+                // A store from before the history had a file of its own. It
+                // is moved there and on disk before the store is written
+                // without it, so a kill in between loses nothing. A log that
+                // already exists came from that move, and is the newer copy.
+                if (!haveLog) {
+                    historyLog.replaceAll(snap.history, snap.historyCounts)
+                    historyLog.flush()
+                }
+                if (historyFile.exists()) persist()
+            }
         } catch (e: Exception) {
             Log.e("Store", "load failed", e)
         }
@@ -388,10 +374,11 @@ class Store(context: Context) {
     fun snapshot(): Snapshot = Snapshot(
         hosts = _hosts.value, groups = _groups.value, accounts = _accounts.value, identities = _identities.value,
         tunnels = _tunnels.value, proxies = _proxies.value, tailscaleProfiles = _tailscale.value,
-        snippets = _snippets.value, knownHosts = _knownHosts.value, history = _history.value,
-        historyCounts = _historyCounts.value, settings = _settings.value,
+        snippets = _snippets.value, knownHosts = _knownHosts.value, history = historyLog.history.value,
+        historyCounts = historyLog.counts.value, settings = _settings.value,
     )
 
+    /** Everything but the history, which [HistoryLog] loads and keeps itself. */
     private fun replace(snap: Snapshot) {
         _hosts.value = snap.hosts
         _identities.value = snap.identities
@@ -399,8 +386,6 @@ class Store(context: Context) {
         _tunnels.value = snap.tunnels
         _tailscale.value = snap.tailscaleProfiles
         _proxies.value = snap.proxies
-        _history.value = snap.history
-        _historyCounts.value = snap.historyCounts
         _snippets.value = snap.snippets
         _accounts.value = snap.accounts
         _groups.value = snap.groups
@@ -413,10 +398,11 @@ class Store(context: Context) {
     /** Put a merged restore in place of what is here, and on disk. */
     fun restore(snap: Snapshot) {
         replace(snap)
+        historyLog.replaceAll(snap.history, snap.historyCounts)
         persist()
         // Not left to wait out the quiet period: a restore is the one change
         // somebody is likely to check survived by closing the app straight away.
-        scope.launch { writer.flush() }
+        scope.launch { flush() }
         // Hosts shown in the Files app may have arrived or changed name.
         dev.flint.term.files.SftpDocumentsProvider.refreshRoots(appContext)
     }
