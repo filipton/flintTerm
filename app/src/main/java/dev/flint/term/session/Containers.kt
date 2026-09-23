@@ -485,7 +485,11 @@ object ContainerLogs {
                         break
                     }
                     val lines = if (text.isBlank()) emptyList() else text.trimEnd('\n').lines()
-                    Containers.newTail(shown, lines).forEach { tab.write(it) }
+                    // One push for the lot: each is a trip across the FFI and a
+                    // frame for the view, and a busy container adds dozens of
+                    // lines between two reads.
+                    val fresh = Containers.newTail(shown, lines)
+                    if (fresh.isNotEmpty()) tab.write(fresh.joinToString("\r\n"))
                     shown = lines
                     delay(FOLLOW_MILLIS)
                 }
