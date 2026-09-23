@@ -353,7 +353,7 @@ class TerminalSession(
             // running: decoding a chunk nobody wants was the most expensive
             // thing this class did per byte.
             val recording = _recording.value ?: return
-            recording.append(String(bytes, Charsets.UTF_8))
+            recording.append(bytes)
         }
     }
 
