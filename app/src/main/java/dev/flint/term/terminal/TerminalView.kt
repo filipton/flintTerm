@@ -234,13 +234,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         scannedAt = snapGeneration
         scannedCols = sc
         scannedRows = sr
-        // Both of these are found in the core, against rows it already holds,
-        // and come back once for the whole screen rather than a string per row.
-        if (detectLinks) {
-            runCatching { c.visibleLinks() }.getOrNull()?.forEach {
-                links += LinkSpan(it.row.toInt(), it.start.toInt(), it.end.toInt(), Link(it.text, it.isUrl))
-            }
-        }
         if (highlightRules.isEmpty()) {
             highlighted = false
             return
@@ -1515,6 +1508,18 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     // ---- touch ------------------------------------------------------------
 
+    // Touch arrives at 120-240 Hz, far faster than a finger crosses cells, so
+    // the core is only told when the cell under it changes.
+    private var dragCell = -1L
+
+    private fun dragSelect(x: Float, y: Float, moveStart: Boolean) {
+        val (c, r) = cellAt(x, y)
+        val cell = (r.toLong() shl 32) or c.toLong()
+        if (cell == dragCell) return
+        dragCell = cell
+        core?.selectUpdate(c.toUShort(), r.toUShort(), moveStart)
+    }
+
     private fun cellAt(x: Float, y: Float): Pair<Int, Int> {
         val c = floor((x - paddingLeft - paddingPx) / cellW).toInt().coerceIn(0, max(0, snapCols - 1))
         val r = floor((y - paddingTop - paddingPx) / cellH).toInt().coerceIn(0, max(0, snapRows - 1))
@@ -1564,13 +1569,11 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             }
             MotionEvent.ACTION_MOVE -> when (drag) {
                 Drag.SELECT, Drag.HANDLE_END -> {
-                    val (c, r) = cellAt(event.x, event.y)
-                    core?.selectUpdate(c.toUShort(), r.toUShort(), false)
+                    dragSelect(event.x, event.y, false)
                     return true
                 }
                 Drag.HANDLE_START -> {
-                    val (c, r) = cellAt(event.x, event.y)
-                    core?.selectUpdate(c.toUShort(), r.toUShort(), true)
+                    dragSelect(event.x, event.y, true)
                     return true
                 }
                 Drag.NONE -> {}
@@ -1578,6 +1581,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val was = drag
                 drag = Drag.NONE
+                dragCell = -1L
                 parent?.requestDisallowInterceptTouchEvent(false)
                 if (was != Drag.NONE) {
                     if (core?.hasSelection() == true) startActionMode() else finishActionMode()
