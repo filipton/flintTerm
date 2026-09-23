@@ -856,10 +856,13 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         syncLayout()
         val len = FrameBridge.snapshotInto(sessionHandle, bufferHandle, flags)
         if (len <= 0L) return
-        // The buffer only moves when it has to grow, and growing changes its
-        // length, so the address is only asked for then.
-        if (len != snapLen) {
-            val ptr = FrameBridge.bufferAddress(bufferHandle)
+        // The address is asked for on every frame, not only when the length
+        // changes: the row layout reserves room ahead of what it writes and
+        // pads the length to a high-water mark, so the buffer can move to a new
+        // allocation and come back the same length, and a view kept over the
+        // old one would read freed memory.
+        val ptr = FrameBridge.bufferAddress(bufferHandle)
+        if (len != snapLen || ptr != snapPtr) {
             val direct = com.sun.jna.Pointer(ptr)
                 .getByteBuffer(0, len)
                 .order(ByteOrder.LITTLE_ENDIAN)

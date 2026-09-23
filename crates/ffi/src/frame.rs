@@ -320,7 +320,8 @@ fn key_press(key: i32, arg: i32, mods: i32, kind: i32) -> Option<KeyPress> {
     })
 }
 
-/// Where the buffer's bytes start. Only asked for when the length changed.
+/// Where the buffer's bytes start. Asked for every frame, as the buffer can move
+/// without its length changing.
 #[no_mangle]
 pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_bufferAddress(
     _env: *mut c_void,
