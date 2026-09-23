@@ -9,6 +9,7 @@ pub mod intercept;
 pub mod keys;
 pub mod marks;
 pub mod palette;
+pub mod scrollback;
 pub mod snapshot;
 
 pub use images::{ImageStore, Mark as ImageMark, PlacedImage};
@@ -194,8 +195,29 @@ pub trait Emulator: Send {
         Some(CursorLine { before, at_end, nothing_below, row: row as i32, col: col as u16 })
     }
 
+    /// How many lines the whole buffer holds: the scrollback and the screen.
+    fn line_count(&self) -> usize;
+
+    /// Line `index` of the whole buffer, trailing blanks trimmed, appended to
+    /// `out`. Line 0 is the oldest line of the scrollback and the last one is
+    /// the bottom of the screen.
+    ///
+    /// One line at a time so that searching and saving the scrollback can walk
+    /// fifty thousand lines through one reused buffer, and let go of the
+    /// emulator between stretches of them, instead of copying all of it out
+    /// first.
+    fn line_text_into(&self, index: usize, out: &mut String);
+
     /// Every line, scrollback first then the visible screen, trailing spaces trimmed.
-    fn all_lines(&self) -> Vec<String>;
+    fn all_lines(&self) -> Vec<String> {
+        (0..self.line_count())
+            .map(|i| {
+                let mut line = String::new();
+                self.line_text_into(i, &mut line);
+                line
+            })
+            .collect()
+    }
     /// Set the display offset (0 = bottom, history_size() = top).
     fn scroll_to(&mut self, offset: usize);
 

@@ -6,35 +6,6 @@ import org.junit.Test
 
 class ScrollbackTest {
     @Test
-    fun `the lines come out in the order they were printed`() {
-        val lines = listOf("$ ls", "Cargo.toml", "src", "$ ")
-        assertEquals("$ ls\nCargo.toml\nsrc\n$", Scrollback.text(lines))
-    }
-
-    @Test
-    fun `the empty screen under the last output is dropped`() {
-        val lines = listOf("$ uptime", " 11:04:22 up 9 days", "$ ", "", "", "", "")
-        assertEquals("$ uptime\n 11:04:22 up 9 days\n$", Scrollback.text(lines))
-    }
-
-    @Test
-    fun `a blank line inside the output is part of it`() {
-        val lines = listOf("first", "", "second", "")
-        assertEquals("first\n\nsecond", Scrollback.text(lines))
-    }
-
-    @Test
-    fun `the padding a terminal writes to the end of a row is not text`() {
-        assertEquals("web01", Scrollback.text(listOf("web01" + " ".repeat(75))))
-    }
-
-    @Test
-    fun `an empty buffer is an empty string, not a line`() {
-        assertEquals("", Scrollback.text(emptyList()))
-        assertEquals("", Scrollback.text(listOf("", "   ", "")))
-    }
-
-    @Test
     fun `the file is named after the session and when it was taken`() {
         val at = 1_757_000_000_000L
         val name = Scrollback.fileName("web01", at)

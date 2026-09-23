@@ -1020,17 +1020,45 @@ impl Emulator for AlacrittyEmulator {
         Some(CursorLine { before, at_end, nothing_below, row, col: end as u16 })
     }
 
-    fn all_lines(&self) -> Vec<String> {
+    fn line_count(&self) -> usize {
+        self.term.grid().history_size() + self.size.rows
+    }
+
+    /// The cell walk of [`Self::row_text_into`], plus the tab handling of
+    /// `bounds_to_string`, which this used to call once per line.
+    ///
+    /// A tab is kept in the cell it was printed in and the blanks it jumped
+    /// over are dropped, so a saved file gets its tabs back. `Term` keeps the
+    /// tab stops to itself; these are the default ones every eight columns,
+    /// which is where they are unless a program has moved them.
+    fn line_text_into(&self, index: usize, out: &mut String) {
+        use alacritty_terminal::grid::Row;
+        use alacritty_terminal::term::cell::{Cell, LineLength};
         let grid = self.term.grid();
-        let history = grid.history_size() as i32;
-        let cols = self.size.cols;
-        let mut out = Vec::with_capacity((history as usize) + self.size.rows);
-        for l in -history..(self.size.rows as i32) {
-            let start = Point::new(Line(l), Column(0));
-            let end = Point::new(Line(l), Column(cols.saturating_sub(1)));
-            out.push(self.term.bounds_to_string(start, end).trim_end().to_string());
+        if index >= grid.history_size() + self.size.rows {
+            return;
         }
-        out
+        let line = Line(index as i32 - grid.history_size() as i32);
+        let grid_line: &Row<Cell> = &grid[line];
+        let length = grid_line.line_length().0.min(self.size.cols);
+        let start = out.len();
+        let mut tab = false;
+        for column in 0..length {
+            let cell = &grid_line[Column(column)];
+            if tab && column % 8 != 0 && cell.c == ' ' {
+                continue;
+            }
+            tab = cell.c == '\t';
+            if cell.flags.intersects(Flags::WIDE_CHAR_SPACER | Flags::LEADING_WIDE_CHAR_SPACER) {
+                continue;
+            }
+            out.push(cell.c);
+            for c in cell.zerowidth().into_iter().flatten() {
+                out.push(*c);
+            }
+        }
+        let kept = start + out[start..].trim_end().len();
+        out.truncate(kept);
     }
 
     fn scroll_to(&mut self, offset: usize) {
@@ -1813,5 +1841,21 @@ mod tests {
         assert_eq!(before_cursor(&e), "$ upt");
         // Ten rows below the bottom of what is shown.
         assert_eq!(e.cursor_line().unwrap().row, 14);
+    }
+
+    #[test]
+    fn a_line_reads_as_bounds_to_string_reads_it() {
+        let mut e = AlacrittyEmulator::new(12, 3, 100);
+        e.feed("plain  \r\na\tb\tc\r\n日本 wide\r\ne\u{301}\r\nwraps past the edge".as_bytes());
+        assert!(e.history_size() > 0);
+        let history = e.history_size() as i32;
+        for i in 0..e.line_count() {
+            let line = Line(i as i32 - history);
+            let old = e.term.bounds_to_string(Point::new(line, Column(0)), Point::new(line, Column(11)));
+            let mut new = String::new();
+            e.line_text_into(i, &mut new);
+            assert_eq!(new, old.trim_end(), "line {i}");
+        }
+        assert!(e.all_lines().iter().any(|l| l == "a\tb\tc"), "{:?}", e.all_lines());
     }
 }

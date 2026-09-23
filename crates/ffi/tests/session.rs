@@ -187,6 +187,8 @@ fn local_shell_roundtrip() {
     // Selection of a word and copy.
     session.send_text("echo selectme-please\n".into());
     let text = wait_for(&session, "selectme-please");
+    let lowest = text.lines().collect::<Vec<_>>().iter().rposition(|l| !l.trim().is_empty()).unwrap();
+    assert_eq!(session.last_text_row() as usize, lowest, "{text}");
     let row = text.lines().position(|l| l.trim_start().starts_with("selectme-please")).unwrap();
     session.select_start(2, row as u16, SelectKind::Word);
     assert_eq!(session.selected_text().as_deref(), Some("selectme-please"));
@@ -197,8 +199,15 @@ fn local_shell_roundtrip() {
     session.set_watch_patterns(vec!["build (finished|failed)".into()]).unwrap();
     session.send_text("echo the build finished ok\n".into());
     wait_for(&session, "finished ok");
-    let lines = session.all_lines();
-    assert!(lines.iter().any(|l| l.contains("selectme-please")), "{lines:?}");
+    let hits = session.search("SELECTME-please".into());
+    assert!(hits.len() >= 2 && hits.len() % 2 == 0, "{hits:?}");
+    let file = std::env::temp_dir().join(format!("flint-scrollback-{}", std::process::id()));
+    let fd = std::os::fd::IntoRawFd::into_raw_fd(std::fs::File::create(&file).unwrap());
+    session.write_scrollback(fd).unwrap();
+    let saved = std::fs::read_to_string(&file).unwrap();
+    let _ = std::fs::remove_file(&file);
+    assert!(saved.contains("echo selectme-please\nselectme-please"), "{saved}");
+    assert!(!saved.ends_with('\n'), "{saved:?}");
     let start = Instant::now();
     while !listener.progress.lock().unwrap().iter().any(|m| m.starts_with("PATTERN")) {
         assert!(start.elapsed() < Duration::from_secs(3), "no pattern hit: {:?}", listener.progress.lock().unwrap());

@@ -444,8 +444,10 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             scope.launch {
                 val ok = withContext(Dispatchers.IO) {
                     runCatching {
-                        val text = Scrollback.text(session.core.allLines())
-                        context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(text.toByteArray()) } != null
+                        // The core writes the file itself and closes it.
+                        val pfd = context.contentResolver.openFileDescriptor(uri, "wt") ?: return@runCatching false
+                        session.core.writeScrollback(pfd.detachFd())
+                        true
                     }.getOrDefault(false)
                 }
                 Toast.makeText(context, if (ok) context.getString(R.string.terminalscreen_saved_the_scrollback) else "Could not save the scrollback", Toast.LENGTH_SHORT).show()
@@ -453,7 +455,9 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         }
     }
     var query by remember { mutableStateOf("") }
-    var matches by remember { mutableStateOf<List<Pair<Int, Int>>>(emptyList()) } // (absolute line, column)
+    // (absolute line, column) pairs laid end to end: a search can find tens of
+    // thousands, and a Pair for each is two boxed Ints on top of the Pair.
+    var matches by remember { mutableStateOf(IntArray(0)) }
     var matchIndex by remember { mutableStateOf(0) }
 
     LaunchedEffect(settings.volumeDownAction, settings.volumeUpAction, settings.volumeDownMode, settings.volumeUpMode) {
@@ -601,9 +605,10 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
 
     fun showMatch(i: Int) {
         if (matches.isEmpty()) { view.searchHighlight = null; return }
-        val idx = Math.floorMod(i, matches.size)
+        val idx = Math.floorMod(i, matches.size / 2)
         matchIndex = idx
-        val (line, col) = matches[idx]
+        val line = matches[2 * idx]
+        val col = matches[2 * idx + 1]
         val history = session.core.historySize().toInt()
         val rows = view.gridRows.coerceAtLeast(1)
         // Put the hit roughly a third down the screen.
@@ -629,33 +634,24 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     fun copyLastOutput(): Boolean {
         // A command still running ends where its output has got to, rather than
         // at the bottom of a screen that is mostly empty.
-        var bottom = (view.gridRows - 1).coerceAtLeast(0)
-        while (bottom > 0 && session.core.rowText(bottom.toUShort()).isBlank()) bottom--
+        val bottom = session.core.lastTextRow().toInt()
         val rows = PromptMarks.lastOutput(session.core.marks(), bottom) ?: return false
         return view.copyRows(rows.first, rows.last)
     }
 
     LaunchedEffect(query, searching) {
-        if (!searching || query.isBlank()) { matches = emptyList(); view.searchHighlight = null; return@LaunchedEffect }
-        // The whole scrollback crosses the bridge for every search, so it waits
-        // for a pause in the typing; a keystroke inside it restarts the wait.
+        if (!searching || query.isBlank()) { matches = IntArray(0); view.searchHighlight = null; return@LaunchedEffect }
+        // Each search reads the whole scrollback, so it waits for a pause in the
+        // typing; a keystroke inside it restarts the wait, and the search it
+        // starts tells the core to drop the one still running.
         kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
         val q = query
         val found = withContext(Dispatchers.Default) {
-            val lines = session.core.allLines()
-            buildList {
-                lines.forEachIndexed { i, l ->
-                    var from = 0
-                    while (true) {
-                        val at = l.indexOf(q, from, ignoreCase = true)
-                        if (at < 0) break
-                        add(i to at); from = at + q.length
-                    }
-                }
-            }
+            val flat = session.core.search(q)
+            IntArray(flat.size) { flat[it].toInt() }
         }
         matches = found
-        if (found.isNotEmpty()) showMatch(found.size - 1) else view.searchHighlight = null
+        if (found.isNotEmpty()) showMatch(found.size / 2 - 1) else view.searchHighlight = null
     }
 
     BackHandler {
@@ -768,7 +764,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                         modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     )
                 }
-                Text(if (matches.isEmpty()) (if (query.isBlank()) "" else "0") else "${matchIndex + 1}/${matches.size}", style = MaterialTheme.typography.labelSmall, color = onChromeMuted)
+                Text(if (matches.isEmpty()) (if (query.isBlank()) "" else "0") else "${matchIndex + 1}/${matches.size / 2}", style = MaterialTheme.typography.labelSmall, color = onChromeMuted)
                 IconButton(onClick = { showMatch(matchIndex - 1) }, enabled = matches.isNotEmpty()) { Icon(Icons.Rounded.KeyboardArrowUp, "Previous", tint = onChrome) }
                 IconButton(onClick = { showMatch(matchIndex + 1) }, enabled = matches.isNotEmpty()) { Icon(Icons.Rounded.KeyboardArrowDown, "Next", tint = onChrome) }
                 IconButton(onClick = { searching = false; view.searchHighlight = null }) { Icon(Icons.Rounded.Close, stringResource(R.string.terminalscreen_close_search), tint = onChrome) }
@@ -1040,7 +1036,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                     scrollbackSheet = false
                     scope.launch {
                         val file = withContext(Dispatchers.IO) {
-                            runCatching { Scrollback.write(context, session.label, session.core.allLines()) }.getOrNull()
+                            runCatching { Scrollback.write(context, session.label) { session.core.writeScrollback(it) } }.getOrNull()
                         }
                         if (file == null) {
                             Toast.makeText(context, context.getString(R.string.terminalscreen_could_not_write_the_scrollback), Toast.LENGTH_SHORT).show()

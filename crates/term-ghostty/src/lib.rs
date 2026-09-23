@@ -1548,11 +1548,12 @@ impl Emulator for GhosttyEmulator {
         self.line_text(sys::GHOSTTY_POINT_TAG_VIEWPORT, row as u32)
     }
 
-    fn all_lines(&self) -> Vec<String> {
-        let total = self.get_or::<usize>(sys::GHOSTTY_TERMINAL_DATA_TOTAL_ROWS);
-        (0..total)
-            .map(|y| self.line_text(sys::GHOSTTY_POINT_TAG_SCREEN, y as u32).trim_end().to_string())
-            .collect()
+    fn line_count(&self) -> usize {
+        self.get_or::<usize>(sys::GHOSTTY_TERMINAL_DATA_TOTAL_ROWS)
+    }
+
+    fn line_text_into(&self, index: usize, out: &mut String) {
+        out.push_str(self.line_text(sys::GHOSTTY_POINT_TAG_SCREEN, index as u32).trim_end());
     }
 
     fn take_events(&mut self) -> Vec<EmulatorEvent> {

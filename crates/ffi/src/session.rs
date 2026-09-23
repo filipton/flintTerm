@@ -641,6 +641,8 @@ struct Inner {
     verifier: Arc<dyn HostKeyVerifier>,
     prompter: Arc<dyn AuthPrompter>,
     emu: Mutex<Box<dyn Emulator>>,
+    /// Which scrollback search is the current one.
+    searches: crate::scrollback::Searches,
     palette: Mutex<Palette>,
     dirty: AtomicBool,
     /// Bumped every time the visible grid changes.
@@ -1102,6 +1104,7 @@ impl Session {
                 verifier,
                 prompter,
                 emu: Mutex::new(emu),
+                searches: Default::default(),
                 palette: Mutex::new(Palette::default()),
                 dirty: AtomicBool::new(true),
                 generation: AtomicU64::new(1),
@@ -1667,13 +1670,52 @@ impl Session {
         self.inner.links_last.lock().links.clone()
     }
 
-    pub fn row_text(&self, row: u16) -> String {
-        self.inner.emu.lock().row_text(row)
+    /// The lowest visible row with any text on it, or 0 when there is none.
+    ///
+    /// Where the output of a command still running has got to. Asked here
+    /// rather than by reading the rows one by one from the bottom up, which
+    /// was a trip across the bridge and a string for each empty row.
+    pub fn last_text_row(&self) -> u16 {
+        let emu = self.inner.emu.lock();
+        let mut text = String::new();
+        (1..emu.size().1)
+            .rev()
+            .find(|&row| {
+                text.clear();
+                emu.row_text_into(row, &mut text);
+                !text.trim().is_empty()
+            })
+            .unwrap_or(0)
     }
 
-    /// Scrollback plus screen, one string per line (for search).
-    pub fn all_lines(&self) -> Vec<String> {
-        self.inner.emu.lock().all_lines()
+    /// Every hit of `query` in the scrollback and screen, ignoring case, as
+    /// `line, column` pairs laid end to end: the line counted from the oldest
+    /// in the scrollback, the column in UTF-16 units. Empty when a newer search
+    /// has started since; see [`crate::scrollback::search`].
+    ///
+    /// Blocks for as long as the search takes, so not on the main thread.
+    pub fn search(&self, query: String) -> Vec<u32> {
+        let ticket = self.inner.searches.begin();
+        crate::scrollback::search(&self.inner.emu, &self.inner.searches, ticket, &query)
+    }
+
+    /// Write the scrollback as plain text to `fd`, which this takes over and
+    /// closes.
+    ///
+    /// A descriptor rather than a path because the place a person picks to
+    /// save to is a content URI, and one rather than the text itself because
+    /// a full scrollback is megabytes that would otherwise be copied across
+    /// the bridge only to be written straight back down.
+    pub fn write_scrollback(&self, fd: i32) -> Result<(), CoreError> {
+        use std::io::Write;
+        use std::os::fd::FromRawFd;
+        if fd < 0 {
+            return Err(CoreError::Other("no file to write the scrollback to".into()));
+        }
+        // SAFETY: the caller hands the descriptor over and does not close it.
+        let mut file = unsafe { std::fs::File::from_raw_fd(fd) };
+        let text = crate::scrollback::text(&self.inner.emu);
+        file.write_all(text.as_bytes()).map_err(|e| CoreError::Other(e.to_string()))
     }
 
     /// Scroll so that `offset` lines of history are above the top of the screen.

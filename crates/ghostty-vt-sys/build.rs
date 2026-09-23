@@ -28,8 +28,9 @@ const REV: &str = "448062571c5edf010b7490d06869b88b5ebf8f80";
 ///
 /// Everything is on by default, and the ones turned off here are whole
 /// subsystems the app never reaches: it encodes keys and mice with
-/// `term_core::keys`, searches the scrollback through `Emulator::all_lines`,
-/// draws no images, and has no use for libghostty's own state serialisation.
+/// `term_core::keys`, searches the scrollback through
+/// `Emulator::line_text_into`, draws no images, and has no use for libghostty's
+/// own state serialisation.
 /// Carrying them cost about a third of the static library.
 ///
 /// Anything referenced but disabled fails to link, loudly, rather than going

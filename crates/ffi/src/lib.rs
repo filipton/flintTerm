@@ -19,6 +19,7 @@ mod mosh;
 mod putty;
 mod recording;
 mod runtime;
+mod scrollback;
 mod securitykey;
 mod session;
 mod sftp;
