@@ -16,6 +16,7 @@
 //! backtracking this deliberately does not do. A pattern using them is reported
 //! as bad rather than quietly ignored.
 
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use regex::{Regex, RegexBuilder};
@@ -64,8 +65,19 @@ struct Compiled {
 #[derive(Default)]
 pub struct Highlighter {
     rules: Vec<Compiled>,
-    /// The text each row was last matched against, and what was found in it.
-    rows: Vec<(String, Vec<HighlightSpan>)>,
+    /// What was found in each row text on screen, keyed by the text rather
+    /// than by where it sits: output that scrolls moves every row up one, and
+    /// keyed by position that was every row matched again on every line.
+    rows: HashMap<String, Seen>,
+    /// Counts passes, so a text that has left the screen can be told apart.
+    pass: u32,
+}
+
+/// One row text's spans, as (start, end, colour), and the pass it was last on
+/// screen in.
+struct Seen {
+    pass: u32,
+    spans: Vec<(u16, u16, i32)>,
 }
 
 /// Compile one pattern, or say why it will not.
@@ -128,6 +140,14 @@ impl Highlighter {
 
     /// The spans on one row, in the order the rules are in.
     fn scan_row(&self, row: u16, text: &str) -> Vec<HighlightSpan> {
+        self.match_row(text)
+            .into_iter()
+            .map(|(start, end, color)| HighlightSpan { row, start, end, color })
+            .collect()
+    }
+
+    /// [`Self::scan_row`] without the row, which is what the cache keeps.
+    fn match_row(&self, text: &str) -> Vec<(u16, u16, i32)> {
         let mut out = Vec::new();
         if text.is_empty() {
             return out;
@@ -141,9 +161,9 @@ impl Highlighter {
                 let (s, e) = (m.start(), m.end());
                 if e > s {
                     out.push(if rule.whole_line {
-                        HighlightSpan { row, start: 0, end: cols, color: rule.color }
+                        (0, cols, rule.color)
                     } else {
-                        HighlightSpan { row, start: col_of(text, s), end: col_of(text, e), color: rule.color }
+                        (col_of(text, s), col_of(text, e), rule.color)
                     });
                     found += 1;
                 }
@@ -164,22 +184,45 @@ impl Highlighter {
 
     /// Spans for the visible grid, rescanning only the rows that changed.
     pub fn scan(&mut self, rows: &[String]) -> Vec<HighlightSpan> {
-        if self.rules.is_empty() {
-            return Vec::new();
-        }
-        if self.rows.len() != rows.len() {
-            // A row that has never been looked at must not match an empty one.
-            self.rows = vec![("\u{0}".to_string(), Vec::new()); rows.len()];
-        }
         let mut all = Vec::new();
-        for (i, text) in rows.iter().enumerate() {
-            if &self.rows[i].0 != text {
-                let spans = self.scan_row(i as u16, text);
-                self.rows[i] = (text.clone(), spans);
-            }
-            all.extend(self.rows[i].1.iter().cloned());
-        }
+        self.visit(rows, |row, spans| {
+            all.extend(spans.iter().map(|&(start, end, color)| HighlightSpan { row, start, end, color }));
+        });
         all
+    }
+
+    /// Hands every span on the visible grid to `f`, as (row, start, end,
+    /// colour), in the order that lets the first rule to claim a cell keep it
+    /// when each call simply overwrites the one before.
+    pub fn paint(&mut self, rows: &[String], mut f: impl FnMut(u16, u16, u16, i32)) {
+        self.visit(rows, |row, spans| {
+            for &(start, end, color) in spans.iter().rev() {
+                f(row, start, end, color);
+            }
+        });
+    }
+
+    /// Looks each row up by its text, matching only texts not seen on the
+    /// last pass, and forgets the texts that have left the screen.
+    fn visit(&mut self, rows: &[String], mut f: impl FnMut(u16, &[(u16, u16, i32)])) {
+        if self.rules.is_empty() {
+            return;
+        }
+        self.pass = self.pass.wrapping_add(1);
+        let pass = self.pass;
+        for (i, text) in rows.iter().enumerate() {
+            // Looked up by &str first, so a row already known costs no copy
+            // of its text; only a new one is cloned to be kept.
+            if let Some(seen) = self.rows.get_mut(text.as_str()) {
+                seen.pass = pass;
+                f(i as u16, &seen.spans);
+                continue;
+            }
+            let spans = self.match_row(text);
+            f(i as u16, &spans);
+            self.rows.insert(text.clone(), Seen { pass, spans });
+        }
+        self.rows.retain(|_, seen| seen.pass == pass);
     }
 }
 
@@ -358,6 +401,40 @@ mod tests {
     fn an_empty_row_reads_as_empty_on_a_fresh_matcher() {
         let mut h = with(vec![rule("error", 0x00ff0000)]);
         assert!(h.scan(&[String::new()]).is_empty());
+    }
+
+    #[test]
+    fn a_row_that_scrolled_is_not_matched_again() {
+        let mut h = with(vec![rule("error", 0x00ff0000)]);
+        let first = h.scan(&["an error".to_string(), "fine".to_string()]);
+        assert_eq!(first[0].row, 0);
+        // The same text one row further up: the cached spans move with it.
+        let moved = h.scan(&["fine".to_string(), "an error".to_string(), "new".to_string()]);
+        assert_eq!(moved.len(), 1);
+        assert_eq!((moved[0].row, moved[0].start, moved[0].end), (1, 3, 8));
+        assert!(h.rows.contains_key("an error"));
+    }
+
+    #[test]
+    fn texts_that_left_the_screen_are_forgotten() {
+        let mut h = with(vec![rule("error", 0x00ff0000)]);
+        h.scan(&["an error".to_string(), "old".to_string()]);
+        h.scan(&["an error".to_string(), "new".to_string()]);
+        assert!(!h.rows.contains_key("old"));
+        assert_eq!(h.rows.len(), 2);
+    }
+
+    #[test]
+    fn painting_lets_the_first_rule_keep_a_cell() {
+        let mut h = with(vec![rule("error", 0x00ff0000), rule("err", 0x0000ff00)]);
+        let mut cells = [0i32; 8];
+        h.paint(&["error".to_string()], |_, s, e, c| {
+            for cell in &mut cells[s as usize..e as usize] {
+                *cell = c;
+            }
+        });
+        assert_eq!(cells[0], 0xffff0000u32 as i32, "the first rule wins where both match");
+        assert_eq!(cells[4], 0xffff0000u32 as i32);
     }
 
     #[test]

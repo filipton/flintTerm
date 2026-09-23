@@ -9,6 +9,7 @@
 //! Results are cached against the text of the row they came from, so a still
 //! screen — or a busy one where a line or two moves — runs no patterns at all.
 
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -125,31 +126,43 @@ pub fn join_wrapped(links: &mut [LinkSpan], cols: u16) {
     }
 }
 
-/// Remembers what each row said and what was found in it.
+/// Remembers what was found in each row text on screen.
+///
+/// Keyed by the text rather than by the row it sat on: output that scrolls
+/// moves every row up one, and keyed by position that meant every row was
+/// scanned again for every line printed.
 #[derive(Default)]
 pub struct LinkCache {
-    rows: Vec<(String, Vec<LinkSpan>)>,
+    rows: HashMap<String, Seen>,
+    /// Counts scans, so a text that has left the screen can be told apart.
+    pass: u32,
+}
+
+/// One row text's links, found as row 0, and the scan it was last on screen in.
+struct Seen {
+    pass: u32,
+    links: Vec<LinkSpan>,
 }
 
 impl LinkCache {
-    /// Links for the visible grid, rescanning only the rows that changed.
+    /// Links for the visible grid, scanning only the texts not seen last time.
     pub fn scan(&mut self, rows: &[String], cols: u16) -> Vec<LinkSpan> {
-        if self.rows.len() != rows.len() {
-            self.rows = vec![(String::new(), Vec::new()); rows.len()];
-            // A fresh cache has nothing to say about any row, so make sure the
-            // comparison below misses rather than matching an empty row.
-            for (i, slot) in self.rows.iter_mut().enumerate() {
-                slot.0.push('\u{0}');
-                let _ = i;
-            }
-        }
+        self.pass = self.pass.wrapping_add(1);
+        let pass = self.pass;
         let mut all = Vec::new();
         for (i, text) in rows.iter().enumerate() {
-            if &self.rows[i].0 != text {
-                self.rows[i] = (text.clone(), scan_row(i as u16, text));
+            let row = i as u16;
+            // Looked up by &str, so a known row costs no copy of its text.
+            if let Some(seen) = self.rows.get_mut(text.as_str()) {
+                seen.pass = pass;
+                all.extend(seen.links.iter().map(|l| LinkSpan { row, ..l.clone() }));
+                continue;
             }
-            all.extend(self.rows[i].1.iter().cloned());
+            let links = scan_row(0, text);
+            all.extend(links.iter().map(|l| LinkSpan { row, ..l.clone() }));
+            self.rows.insert(text.clone(), Seen { pass, links });
         }
+        self.rows.retain(|_, seen| seen.pass == pass);
         join_wrapped(&mut all, cols);
         all
     }
@@ -236,6 +249,25 @@ mod tests {
         assert!(cache.scan(&rows, 80).is_empty());
         rows[0] = "now /var/log/syslog".to_string();
         assert_eq!(texts(&cache.scan(&rows, 80)), vec!["/var/log/syslog"]);
+    }
+
+    #[test]
+    fn a_row_that_scrolled_keeps_its_links_at_its_new_row() {
+        let mut cache = LinkCache::default();
+        let first = cache.scan(&["see /etc/hosts".to_string(), "x".to_string()], 80);
+        assert_eq!(first[0].row, 0);
+        let moved = cache.scan(&["x".to_string(), "see /etc/hosts".to_string()], 80);
+        assert_eq!(moved.len(), 1);
+        assert_eq!((moved[0].row, moved[0].start), (1, 4));
+    }
+
+    #[test]
+    fn texts_that_left_the_screen_are_forgotten() {
+        let mut cache = LinkCache::default();
+        cache.scan(&["see /etc/hosts".to_string(), "old".to_string()], 80);
+        cache.scan(&["see /etc/hosts".to_string(), "new".to_string()], 80);
+        assert!(!cache.rows.contains_key("old"));
+        assert_eq!(cache.rows.len(), 2);
     }
 
     #[test]
