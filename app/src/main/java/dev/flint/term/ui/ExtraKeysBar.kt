@@ -103,7 +103,7 @@ fun ExtraKeysBar(
     val cap = onChrome.copy(alpha = 0.08f)
     val capText = onChrome.copy(alpha = 0.85f)
 
-    val actions = BarActions(view, onSnippets, onSearch, onCompose, onChords) { pickToInsert.launch(arrayOf("*/*")) }
+    val actions = rememberBarActions(view, onSnippets, onSearch, onCompose, onChords) { pickToInsert.launch(arrayOf("*/*")) }
 
     @Composable
     fun androidx.compose.foundation.layout.RowScope.render(token: String, weight: Float?) {
@@ -416,6 +416,39 @@ fun KeyCapText(label: String, cap: Color, text: Color, modifier: Modifier = Modi
 private val CTRL_SLIDE = listOf('c', 'd', 'z', 'l', 'a', 'e', 'r', 'w', 'u', 'k')
 
 /** What a cap can reach besides the terminal itself. */
+/**
+ * [BarActions] kept across recompositions, so a cap handed the same one can
+ * skip recomposing; the callbacks are read through at the moment of the press,
+ * so the ones the caller passed last are the ones that run.
+ */
+@Composable
+fun rememberBarActions(
+    view: TerminalView,
+    onSnippets: () -> Unit,
+    onSearch: () -> Unit,
+    onCompose: () -> Unit,
+    onChords: (() -> Unit)?,
+    onInsertFile: () -> Unit,
+): BarActions {
+    val snippets by rememberUpdatedState(onSnippets)
+    val search by rememberUpdatedState(onSearch)
+    val compose by rememberUpdatedState(onCompose)
+    val chords by rememberUpdatedState(onChords)
+    val insertFile by rememberUpdatedState(onInsertFile)
+    // Whether there is a chords sheet at all changes what a long press on
+    // Ctrl does, so that one is part of the key rather than read through.
+    val hasChords = onChords != null
+    return remember(view, hasChords) {
+        BarActions(
+            view,
+            { snippets() },
+            { search() },
+            { compose() },
+            if (hasChords) ({ chords?.invoke() }) else null,
+        ) { insertFile() }
+    }
+}
+
 class BarActions(
     val view: TerminalView,
     val onSnippets: () -> Unit,
@@ -516,7 +549,7 @@ fun ExtraKeysPad(
     val pickToInsert = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) view.onFilesDropped?.invoke(uris)
     }
-    val actions = BarActions(view, onSnippets, onSearch, onCompose, onChords) { pickToInsert.launch(arrayOf("*/*")) }
+    val actions = rememberBarActions(view, onSnippets, onSearch, onCompose, onChords) { pickToInsert.launch(arrayOf("*/*")) }
     val cap = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
     val capText = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f)
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -534,15 +567,11 @@ fun ExtraKeysPad(
                 .heightIn(max = 330.dp)
                 .verticalScroll(rememberScrollState()),
         ) {
-            PadSection("Function", (1..12).map { "F$it" }, actions, mods, cap, capText)
-            PadSection("Moving about", listOf("UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV"), actions, mods, cap, capText)
-            PadSection("Editing", listOf("ESC", "TAB", "STAB", "ENTER", "BKSP", "DEL", "INS", "CTRL", "ALT", "SHIFT"), actions, mods, cap, capText)
-            PadSection("Doing", listOf("SNIPPETS", "PASTE", "SEARCH", "FILE", "COMPOSE", "KEYBOARD"), actions, mods, cap, capText)
-            PadSection(
-                "Symbols",
-                listOf("-", "_", "/", "\\", "|", "~", ":", ";", "'", "\"", "`", "(", ")", "[", "]", "{", "}", "<", ">", "^", "#", "@", "$", "!", "&", "*", "+", "=", "%", "?", ","),
-                actions, mods, cap, capText,
-            )
+            PadSection("Function", PAD_FUNCTION, actions, mods, cap, capText)
+            PadSection("Moving about", PAD_MOVING, actions, mods, cap, capText)
+            PadSection("Editing", PAD_EDITING, actions, mods, cap, capText)
+            PadSection("Doing", PAD_DOING, actions, mods, cap, capText)
+            PadSection("Symbols", PAD_SYMBOLS, actions, mods, cap, capText)
         }
     }
 }
@@ -606,3 +635,10 @@ private fun SlideStrip(targets: List<Char>, hovered: Char?) {
         }
     }
 }
+
+/** What the overflow pad offers, section by section; the same lists every time. */
+private val PAD_FUNCTION = (1..12).map { "F$it" }
+private val PAD_MOVING = listOf("UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PGUP", "PGDN", "NAV")
+private val PAD_EDITING = listOf("ESC", "TAB", "STAB", "ENTER", "BKSP", "DEL", "INS", "CTRL", "ALT", "SHIFT")
+private val PAD_DOING = listOf("SNIPPETS", "PASTE", "SEARCH", "FILE", "COMPOSE", "KEYBOARD")
+private val PAD_SYMBOLS = listOf("-", "_", "/", "\\", "|", "~", ":", ";", "'", "\"", "`", "(", ")", "[", "]", "{", "}", "<", ">", "^", "#", "@", "$", "!", "&", "*", "+", "=", "%", "?", ",")

@@ -283,8 +283,15 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             val generation = view.snapGeneration
             if (generation == seen) continue
             seen = generation
+            // Asked first, and without the bridge: while a command runs there
+            // is no line being typed, and output streaming is exactly when the
+            // generation moves on every tick.
+            if (!atPrompt()) {
+                if (typed.isNotEmpty()) typed = ""
+                continue
+            }
             val input = runCatching { session.core.inputLine() }.getOrNull()
-            if (input == null || !atPrompt()) {
+            if (input == null) {
                 if (typed.isNotEmpty()) typed = ""
                 continue
             }
@@ -630,6 +637,9 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
 
     LaunchedEffect(query, searching) {
         if (!searching || query.isBlank()) { matches = emptyList(); view.searchHighlight = null; return@LaunchedEffect }
+        // The whole scrollback crosses the bridge for every search, so it waits
+        // for a pause in the typing; a keystroke inside it restarts the wait.
+        kotlinx.coroutines.delay(SEARCH_DEBOUNCE_MS)
         val q = query
         val found = withContext(Dispatchers.Default) {
             val lines = session.core.allLines()
@@ -772,11 +782,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 // The rectangle a floating window shrinks out of and expands
                 // back into; it has to be known before anyone asks for one.
                 val r = coords.boundsInWindow()
-                Pip.trackTerminal(
-                    context,
-                    sessionId,
-                    android.graphics.Rect(r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt()),
-                )
+                Pip.trackTerminal(context, sessionId, r.left.toInt(), r.top.toInt(), r.right.toInt(), r.bottom.toInt())
             },
         ) {
             val maxWidthPx = with(LocalDensity.current) { maxWidth.roundToPx() }
@@ -1294,6 +1300,9 @@ private fun menuGroup(name: String, vararg actions: SheetAction?): List<SheetAct
 
 /** How long the connection drawer stays up even when the connection was instant. */
 private const val MIN_SHEET_MS = 1100L
+
+/** How long typing in the search field has to pause before the scrollback is searched. */
+private const val SEARCH_DEBOUNCE_MS = 150L
 
 /**
  * The two chevrons that walk the session from one prompt to the next.

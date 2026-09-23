@@ -62,11 +62,28 @@ object Pip {
      * it has to be current *before* the window appears — by the time anything
      * asks for one it is too late to go and measure.
      */
-    fun trackTerminal(context: Context, sessionId: String, bounds: Rect) {
+    fun trackTerminal(context: Context, sessionId: String, left: Int, top: Int, right: Int, bottom: Int) {
         this.sessionId = sessionId
-        if (bounds == source || bounds.isEmpty) return
-        source = bounds
-        context.asActivity()?.let { apply(it) }
+        val known = source
+        if (right <= left || bottom <= top) return
+        if (known != null && known.left == left && known.top == top && known.right == right && known.bottom == bottom) return
+        source = Rect(left, top, right, bottom)
+        // Handed to the system once the layout settles rather than on every
+        // pass: a keyboard sliding in moves the terminal on every frame of its
+        // animation, and each of these is a call into the system server.
+        // [float] reads [source] itself, so a window asked for in between
+        // still starts from the right place.
+        val activity = context.asActivity() ?: return
+        pending = activity
+        main.removeCallbacks(applyPending)
+        main.postDelayed(applyPending, TRACK_SETTLE_MS)
+    }
+
+    private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+    private var pending: Activity? = null
+    private val applyPending = Runnable {
+        pending?.let { apply(it) }
+        pending = null
     }
 
     /** Whether a trip to another app leaves a floating window behind. */
@@ -114,6 +131,9 @@ object Pip {
     }
 
     private const val WIDEST = 2.39f
+
+    /** How long the terminal has to hold still before the system is told where it is. */
+    private const val TRACK_SETTLE_MS = 100L
 }
 
 private tailrec fun Context.asActivity(): Activity? = when (this) {
