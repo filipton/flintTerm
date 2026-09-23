@@ -50,8 +50,15 @@ const WG_OVERHEAD: usize = 80;
 fn device_mtu(config: &WgConfig) -> usize {
     config.mtu.saturating_sub(WG_OVERHEAD).max(576)
 }
-const TCP_BUFFER: usize = 256 * 1024;
-const TIMER_TICK: Duration = Duration::from_millis(250);
+/// Each direction of a virtual TCP connection. Enough to keep an SSH session
+/// and a port forward busy; every open connection pays it twice.
+const TCP_BUFFER: usize = 64 * 1024;
+/// boringtun rounds its timers to the second, so ticking faster than this
+/// only wakes the phone to find nothing due.
+const TIMER_TICK: Duration = Duration::from_secs(1);
+/// Packet buffers kept for reuse, so a busy tunnel is not allocating one per
+/// packet; beyond this they are freed.
+const SPARE_BUFFERS: usize = 32;
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const DNS_TIMEOUT: Duration = Duration::from_secs(6);
 
@@ -66,6 +73,15 @@ pub struct TunnelStats {
     pub running: bool,
 }
 
+/// What the worker shares with the handle. The handshake is kept as a moment
+/// rather than an age so a read gives the age now, without the worker having
+/// to wake up just to keep counting.
+#[derive(Default)]
+struct SharedStats {
+    stats: TunnelStats,
+    handshake_at: Option<std::time::Instant>,
+}
+
 // ---------------------------------------------------------------------------
 // Public handle
 // ---------------------------------------------------------------------------
@@ -73,7 +89,7 @@ pub struct TunnelStats {
 pub struct Tunnel {
     config: WgConfig,
     cmd: mpsc::UnboundedSender<Cmd>,
-    stats: Arc<Mutex<TunnelStats>>,
+    stats: Arc<Mutex<SharedStats>>,
     local_addr: SocketAddr,
     running: Arc<AtomicBool>,
     /// False while the phone has no network; see [`Tunnel::set_network_up`].
@@ -100,7 +116,10 @@ impl Tunnel {
         let tunn = Tunn::new(private, public, config.peer.preshared_key, config.peer.persistent_keepalive, rand::random(), None);
 
         let (cmd_tx, cmd_rx) = mpsc::unbounded_channel();
-        let stats = Arc::new(Mutex::new(TunnelStats { endpoint: Some(endpoint), running: true, ..Default::default() }));
+        let stats = Arc::new(Mutex::new(SharedStats {
+            stats: TunnelStats { endpoint: Some(endpoint), running: true, ..Default::default() },
+            handshake_at: None,
+        }));
         let running = Arc::new(AtomicBool::new(true));
         let network_up = Arc::new(AtomicBool::new(true));
 
@@ -122,7 +141,10 @@ impl Tunnel {
     }
 
     pub fn stats(&self) -> TunnelStats {
-        self.stats.lock().unwrap().clone()
+        let shared = self.stats.lock().unwrap();
+        let mut stats = shared.stats.clone();
+        stats.last_handshake_secs = shared.handshake_at.map(|t| t.elapsed().as_secs());
+        stats
     }
 
     pub fn is_running(&self) -> bool {
@@ -155,7 +177,11 @@ impl Tunnel {
     /// this is false the periodic work is skipped; traffic the caller actually
     /// sends still goes out, so nothing is broken if the guess is wrong.
     pub fn set_network_up(&self, up: bool) {
-        self.network_up.store(up, Ordering::Relaxed);
+        // The worker does not tick at all while the network is down, so it
+        // has to be told when to start again.
+        if self.network_up.swap(up, Ordering::Relaxed) != up {
+            let _ = self.cmd.send(Cmd::NetworkChanged);
+        }
     }
 
     pub fn network_up(&self) -> bool {
@@ -403,6 +429,8 @@ enum Cmd {
     UdpClose { id: u32 },
     Shutdown { id: u32 },
     Close { id: u32 },
+    /// The network came or went; see [`Tunnel::set_network_up`].
+    NetworkChanged,
     Stop,
 }
 
@@ -453,37 +481,69 @@ struct VirtDevice {
     rx: VecDeque<Vec<u8>>,
     tx: VecDeque<Vec<u8>>,
     mtu: usize,
+    /// The packet smoltcp is reading. It is kept here rather than handed over,
+    /// so its buffer can go back to `spare` once smoltcp is done with it.
+    reading: Vec<u8>,
+    /// Emptied packet buffers, reused for the next packets either way.
+    spare: Vec<Vec<u8>>,
 }
 
-struct VRx(Vec<u8>);
-struct VTx<'a>(&'a mut VecDeque<Vec<u8>>);
+impl VirtDevice {
+    fn new(mtu: usize) -> Self {
+        Self { rx: VecDeque::new(), tx: VecDeque::new(), mtu, reading: Vec::new(), spare: Vec::new() }
+    }
 
-impl smoltcp::phy::RxToken for VRx {
+    /// An inner packet arriving from the peer.
+    fn push_rx(&mut self, packet: &[u8]) {
+        let mut buf = self.spare.pop().unwrap_or_default();
+        buf.extend_from_slice(packet);
+        self.rx.push_back(buf);
+    }
+
+    /// Hand back a packet buffer that has been dealt with.
+    fn recycle(spare: &mut Vec<Vec<u8>>, mut buf: Vec<u8>) {
+        if spare.len() < SPARE_BUFFERS && buf.capacity() > 0 {
+            buf.clear();
+            spare.push(buf);
+        }
+    }
+}
+
+struct VRx<'a>(&'a [u8]);
+struct VTx<'a> {
+    tx: &'a mut VecDeque<Vec<u8>>,
+    spare: &'a mut Vec<Vec<u8>>,
+}
+
+impl smoltcp::phy::RxToken for VRx<'_> {
     fn consume<R, F: FnOnce(&[u8]) -> R>(self, f: F) -> R {
-        f(&self.0)
+        f(self.0)
     }
 }
 
 impl<'a> smoltcp::phy::TxToken for VTx<'a> {
     fn consume<R, F: FnOnce(&mut [u8]) -> R>(self, len: usize, f: F) -> R {
-        let mut buf = vec![0u8; len];
+        let mut buf = self.spare.pop().unwrap_or_default();
+        buf.resize(len, 0);
         let r = f(&mut buf);
-        self.0.push_back(buf);
+        self.tx.push_back(buf);
         r
     }
 }
 
 impl Device for VirtDevice {
-    type RxToken<'a> = VRx where Self: 'a;
+    type RxToken<'a> = VRx<'a> where Self: 'a;
     type TxToken<'a> = VTx<'a> where Self: 'a;
 
     fn receive(&mut self, _ts: SmolInstant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         let p = self.rx.pop_front()?;
-        Some((VRx(p), VTx(&mut self.tx)))
+        let done = std::mem::replace(&mut self.reading, p);
+        Self::recycle(&mut self.spare, done);
+        Some((VRx(&self.reading), VTx { tx: &mut self.tx, spare: &mut self.spare }))
     }
 
     fn transmit(&mut self, _ts: SmolInstant) -> Option<Self::TxToken<'_>> {
-        Some(VTx(&mut self.tx))
+        Some(VTx { tx: &mut self.tx, spare: &mut self.spare })
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
@@ -509,10 +569,13 @@ struct Worker {
     endpoint: SocketAddr,
     cmd_rx: mpsc::UnboundedReceiver<Cmd>,
     cmd_tx: mpsc::UnboundedSender<Cmd>,
-    stats: Arc<Mutex<TunnelStats>>,
+    stats: Arc<Mutex<SharedStats>>,
     running: Arc<AtomicBool>,
     network_up: Arc<AtomicBool>,
     device: VirtDevice,
+    /// Where outgoing packets are encrypted, kept rather than allocated for
+    /// every poll of the stack.
+    sealed: Vec<u8>,
     iface: Interface,
     sockets: SocketSet<'static>,
     conns: HashMap<u32, Conn>,
@@ -535,11 +598,11 @@ impl Worker {
         endpoint: SocketAddr,
         cmd_rx: mpsc::UnboundedReceiver<Cmd>,
         cmd_tx: mpsc::UnboundedSender<Cmd>,
-        stats: Arc<Mutex<TunnelStats>>,
+        stats: Arc<Mutex<SharedStats>>,
         running: Arc<AtomicBool>,
         network_up: Arc<AtomicBool>,
     ) -> Self {
-        let mut device = VirtDevice { rx: VecDeque::new(), tx: VecDeque::new(), mtu: device_mtu(&config) };
+        let mut device = VirtDevice::new(device_mtu(&config));
         let mut iface = Interface::new(IfaceConfig::new(HardwareAddress::Ip), &mut device, SmolInstant::now());
         iface.update_ip_addrs(|addrs| {
             for a in &config.addresses {
@@ -560,6 +623,7 @@ impl Worker {
             running,
             network_up,
             device,
+            sealed: vec![0u8; MAX_PACKET],
             iface,
             sockets: SocketSet::new(vec![]),
             conns: HashMap::new(),
@@ -589,12 +653,20 @@ impl Worker {
             self.poll_stack().await;
 
             let now = tokio::time::Instant::now();
-            let poll_wait = self
+            let mut wait = self
                 .iface
                 .poll_delay(SmolInstant::now(), &self.sockets)
                 .map(|d| Duration::from_micros(d.total_micros()))
                 .unwrap_or(Duration::from_secs(3600));
-            let wait = poll_wait.min(next_tick.saturating_duration_since(now));
+            // With no network the timers have nothing worth doing, so the
+            // worker sleeps until a packet, a command or the network returns.
+            if self.network_up.load(Ordering::Relaxed) {
+                wait = wait.min(next_tick.saturating_duration_since(now));
+            }
+            // A ping is answered "no reply" on time, not on the next tick.
+            if let Some(deadline) = self.pings.values().map(|p| p.deadline).min() {
+                wait = wait.min(deadline.saturating_duration_since(std::time::Instant::now()));
+            }
 
             tokio::select! {
                 r = self.udp.recv_from(&mut buf) => {
@@ -609,20 +681,26 @@ impl Worker {
                 cmd = self.cmd_rx.recv() => {
                     match cmd {
                         Some(Cmd::Stop) | None => break,
+                        // Back up: the timers are due now, since whatever they
+                        // were waiting on went unwatched while it was down.
+                        Some(Cmd::NetworkChanged) => next_tick = tokio::time::Instant::now(),
                         Some(c) => self.handle_cmd(c),
                     }
                 }
                 _ = tokio::time::sleep(wait) => {}
             }
 
-            if tokio::time::Instant::now() >= next_tick {
+            if self.network_up.load(Ordering::Relaxed) && tokio::time::Instant::now() >= next_tick {
                 next_tick = tokio::time::Instant::now() + TIMER_TICK;
                 self.tick(&mut out).await;
             }
+            // Kept current here rather than on the tick, which may not come:
+            // anything that changes the counters woke this loop up.
+            self.refresh_stats();
         }
 
         self.running.store(false, Ordering::Relaxed);
-        self.stats.lock().unwrap().running = false;
+        self.stats.lock().unwrap().stats.running = false;
         // Wake everyone waiting on us.
         for (_, c) in self.conns.drain() {
             if let Some((_, reply, _)) = c.connecting {
@@ -635,17 +713,18 @@ impl Worker {
         log::info!("wg: tunnel to {} stopped", self.endpoint);
     }
 
+    fn refresh_stats(&mut self) {
+        let (since, tx, rx, _, _) = self.tunn.stats();
+        let mut s = self.stats.lock().unwrap();
+        s.handshake_at = since.and_then(|d| std::time::Instant::now().checked_sub(d));
+        s.stats.tx_bytes = tx as u64;
+        s.stats.rx_bytes = rx as u64;
+        s.stats.endpoint = Some(self.endpoint);
+    }
+
+    /// WireGuard's timers, and the deadlines of connects and lookups. Only run
+    /// while there is a network: with none, handshakes would go into the void.
     async fn tick(&mut self, out: &mut [u8]) {
-        // No network: do not spend handshakes on a link that is not there. The
-        // stats are still refreshed so the UI keeps telling the truth.
-        if !self.network_up.load(Ordering::Relaxed) {
-            let (since, tx, rx, _, _) = self.tunn.stats();
-            let mut s = self.stats.lock().unwrap();
-            s.last_handshake_secs = since.map(|d| d.as_secs());
-            s.tx_bytes = tx as u64;
-            s.rx_bytes = rx as u64;
-            return;
-        }
         match self.tunn.update_timers(out) {
             TunnResult::WriteToNetwork(p) => {
                 let _ = self.udp.send_to(p, self.endpoint).await;
@@ -659,12 +738,6 @@ impl Worker {
             TunnResult::Err(e) => log::debug!("wg: timer: {e:?}"),
             _ => {}
         }
-        let (since, tx, rx, _, _) = self.tunn.stats();
-        let mut s = self.stats.lock().unwrap();
-        s.last_handshake_secs = since.map(|d| d.as_secs());
-        s.tx_bytes = tx as u64;
-        s.rx_bytes = rx as u64;
-        s.endpoint = Some(self.endpoint);
 
         // Expire connects and DNS queries.
         let now = tokio::time::Instant::now();
@@ -709,7 +782,7 @@ impl Worker {
                 }
                 TunnResult::WriteToTunnelV4(p, _) | TunnResult::WriteToTunnelV6(p, _) => {
                     self.roam(from);
-                    self.device.rx.push_back(p.to_vec());
+                    self.device.push_rx(p);
                 }
                 TunnResult::Err(e) => log::debug!("wg: decapsulate: {e:?}"),
                 TunnResult::Done => self.roam(from), // e.g. a keepalive that authenticated fine
@@ -914,15 +987,15 @@ impl Worker {
         }
 
         // Ship whatever smoltcp produced.
-        let mut out = vec![0u8; MAX_PACKET];
         while let Some(packet) = self.device.tx.pop_front() {
-            match self.tunn.encapsulate(&packet, &mut out) {
+            match self.tunn.encapsulate(&packet, &mut self.sealed) {
                 TunnResult::WriteToNetwork(p) => {
                     let _ = self.udp.send_to(p, self.endpoint).await;
                 }
                 TunnResult::Err(e) => log::debug!("wg: encapsulate: {e:?}"),
                 _ => {}
             }
+            VirtDevice::recycle(&mut self.device.spare, packet);
         }
     }
 
@@ -1096,7 +1169,7 @@ impl Worker {
                     }
                 }
             }
-            Cmd::Stop => {}
+            Cmd::Stop | Cmd::NetworkChanged => {}
         }
     }
 

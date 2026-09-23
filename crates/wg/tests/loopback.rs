@@ -66,7 +66,7 @@ async fn tcp_echo_through_tunnel() {
     let w = write.await.unwrap();
     stream = r.unsplit(w);
     stream.shutdown().await.unwrap();
-    tokio::time::sleep(std::time::Duration::from_millis(600)).await; // stats refresh on the timer tick
+    tokio::time::sleep(std::time::Duration::from_millis(600)).await; // the last acks are counted
     assert!(client.stats().last_handshake_secs.is_some());
     assert!(client.stats().tx_bytes > 200_000);
 }
@@ -241,6 +241,9 @@ async fn no_network_stops_the_periodic_work_but_not_real_traffic() {
         .expect("timed out with the network flag down")
         .expect("tunnel closed");
     assert_eq!(got, b"still works");
+    // Nothing ticks while the network is down, and the stats still read true.
+    assert!(client.stats().last_handshake_secs.is_some());
+    assert!(client.stats().rx_bytes > 0);
 
     client.set_network_up(true);
     assert!(client.network_up());
