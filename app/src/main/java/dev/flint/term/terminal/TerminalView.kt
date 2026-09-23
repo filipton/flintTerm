@@ -938,18 +938,23 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             }
         }
 
+        // The search hit, under the text like any other background. Whether
+        // the cursor is showing has nothing to do with it, and a program that
+        // hides its cursor — a pager, which is where searching happens — used
+        // to hide the hit with it.
+        searchHighlight?.let { (hr, hc, hl) ->
+            if (hr in 0 until sr) {
+                val y = oy + hr * cellH
+                canvas.drawRect(ox + hc * cellW, y, ox + (hc + hl) * cellW, y + cellH, searchPaint)
+            }
+        }
+
         // Cursor block (drawn under text so the glyph stays readable).
         if (cursorRow in 0 until sr && cursorCol in 0 until sc && cursorShape != CursorShapes.HIDDEN) {
             val x = ox + cursorCol * cellW
             val y = oy + cursorRow * cellH
             val wide = buf.getShort(headerBytes + (cursorRow * sc + cursorCol) * cellBytes + 12).toInt() and FLAG_WIDE != 0
             val w = if (wide) cellW * 2 else cellW
-            searchHighlight?.let { (hr, hc, hl) ->
-                if (hr in 0 until sr) {
-                    val y = oy + hr * cellH
-                    canvas.drawRect(ox + hc * cellW, y, ox + (hc + hl) * cellW, y + cellH, searchPaint)
-                }
-            }
             // An unfocused terminal never blinks: its hollow outline is already
             // saying that this is not where the typing goes.
             if (cursorLit || !focused) {
