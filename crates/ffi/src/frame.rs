@@ -75,6 +75,11 @@ pub fn snapshot_kitty_flags_offset() -> u32 {
 }
 
 #[uniffi::export]
+pub fn snapshot_input_offset() -> u32 {
+    term_core::snapshot::INPUT_OFFSET as u32
+}
+
+#[uniffi::export]
 pub fn snapshot_rows_offset() -> u32 {
     term_core::snapshot::ROWS_OFFSET as u32
 }

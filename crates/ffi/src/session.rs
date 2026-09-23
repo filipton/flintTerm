@@ -12,7 +12,7 @@ use term_core::{
     Modifiers, MouseButton, MouseEvent, Palette, PromptMark, SelectionKind, ViewPoint, CELL_BYTES, GENERATION_OFFSET,
     HEADER_BYTES, LINKS_OFFSET,
 };
-use term_core::snapshot::{IMAGES_OFFSET, KITTY_FLAGS_OFFSET, PREDICTIONS_COUNT_OFFSET, PREDICTIONS_OFFSET};
+use term_core::snapshot::{IMAGES_OFFSET, INPUT_OFFSET, KITTY_FLAGS_OFFSET, PREDICTIONS_COUNT_OFFSET, PREDICTIONS_OFFSET};
 
 use crate::emulator;
 use crate::runtime::{block_on, RUNTIME};
@@ -714,6 +714,9 @@ struct Inner {
     /// The links last found, the generation they were found at, and a count
     /// of the times the set changed; see [`Session::refresh_links`].
     links_last: Mutex<LinksState>,
+    /// What the line being typed looked like at the last snapshot, and a count
+    /// of the times it changed; see [`Session::input_changes`].
+    input_last: Mutex<InputState>,
     /// The frontend's wake-up descriptor, once it asked for one; see
     /// [`Session::open_damage_fd`].
     wake: Mutex<Option<std::os::fd::OwnedFd>>,
@@ -761,6 +764,14 @@ struct WatchLine {
     text: String,
     /// Inside an escape sequence: 0 = no, 1 = after ESC, 2 = CSI, 3 = OSC.
     esc: u8,
+}
+
+/// What [`Session::input_changes`] last saw: nothing while no command is
+/// being typed, else the cursor's row and column and that row's hash.
+#[derive(Default)]
+struct InputState {
+    seen: Option<(i16, i16, u64)>,
+    changes: u32,
 }
 
 /// What [`Session::refresh_links`] last worked out.
@@ -957,6 +968,9 @@ impl Session {
             // Last, over the cells as they will be drawn: the highlights
             // above are part of what a row looks like.
             term_core::rows::append_rows(buf, &mut packed.layout);
+            // After the rows, whose hashes it reads.
+            let input = self.input_changes(buf);
+            buf[INPUT_OFFSET..INPUT_OFFSET + 4].copy_from_slice(&input.to_le_bytes());
         }
         packed.from = Some(key);
         // Read after filling: growing the buffer moves it.
@@ -1014,6 +1028,32 @@ impl Session {
     ///
     /// Scrolling text that holds no links leaves the set empty frame after
     /// frame, so the count stays put and the renderer never asks for them.
+    /// A count that moves when the line being typed may read differently: the
+    /// text on the cursor's row, or the cursor's place on it.
+    ///
+    /// Read from the packed grid this frame was filled with, whose row table
+    /// already holds a hash of every row, so it costs a lookup rather than a
+    /// read of the line. Held still while nothing has been typed since the
+    /// last command, because [`Self::input_line`] gives the same answer then
+    /// however much output goes past, and a streaming command moves the
+    /// cursor on every frame.
+    fn input_changes(&self, buf: &[u8]) -> u32 {
+        let seen = if self.inner.input_start.lock().is_fresh() {
+            None
+        } else {
+            let col = i16::from_le_bytes([buf[4], buf[5]]);
+            let row = i16::from_le_bytes([buf[6], buf[7]]);
+            let hash = usize::try_from(row).ok().and_then(|r| term_core::rows::table_hash(buf, r)).unwrap_or(0);
+            Some((row, col, hash))
+        };
+        let mut state = self.inner.input_last.lock();
+        if state.seen != seen {
+            state.seen = seen;
+            state.changes = state.changes.wrapping_add(1);
+        }
+        state.changes
+    }
+
     fn refresh_links(&self) -> u8 {
         let generation = self.inner.generation.load(Ordering::Acquire) as u32;
         {
@@ -1162,6 +1202,7 @@ impl Session {
                 link_cache: Mutex::new(Default::default()),
                 rows_text: Mutex::new((0, Vec::new())),
                 links_last: Mutex::new(LinksState::default()),
+                input_last: Mutex::new(InputState::default()),
                 wake: Mutex::new(None),
                 input_start: Mutex::new(Default::default()),
                 external: Arc::new(ExternalPipe::new()),
@@ -3226,6 +3267,45 @@ mod tests {
         s.fill_snapshot(&buf, false, false);
         let packed = buf.data.lock();
         assert_eq!(u32::from_le_bytes(packed.bytes[IMAGES_OFFSET..IMAGES_OFFSET + 4].try_into().unwrap()), 1);
+    }
+
+    fn header_u32(buf: &SnapshotBuffer, at: usize) -> u32 {
+        u32::from_le_bytes(buf.data.lock().bytes[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn the_input_count_moves_with_the_line_being_typed_and_not_with_output() {
+        let s = session();
+        let buf = SnapshotBuffer::default();
+        let input = |s: &Session| {
+            s.fill_snapshot(&buf, false, false);
+            header_u32(&buf, INPUT_OFFSET)
+        };
+        s.inner.feed(b"$ ");
+        let start = input(&s);
+        // Output while nothing is typed is not the line changing.
+        s.inner.feed(b"\r\nmore\r\n$ ");
+        assert_eq!(input(&s), start);
+        // A keystroke and its echo.
+        s.send_text("l".into());
+        s.inner.feed(b"l");
+        let typed = input(&s);
+        assert_ne!(typed, start);
+        // A frame drawn again for nothing new.
+        s.inner.mark_dirty();
+        assert_eq!(input(&s), typed);
+        // The cursor moving back along the line.
+        s.inner.feed(b"\x08");
+        let moved = input(&s);
+        assert_ne!(moved, typed);
+        // Enter ends the command, as of the echo that shows it: one change,
+        // and the output after it none.
+        s.send_text("\r".into());
+        s.inner.feed(b"\r\n");
+        let entered = input(&s);
+        assert_ne!(entered, moved);
+        s.inner.feed(b"\r\nfile\r\nother");
+        assert_eq!(input(&s), entered);
     }
 
     #[test]

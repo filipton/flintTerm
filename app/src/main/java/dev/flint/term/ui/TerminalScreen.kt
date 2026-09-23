@@ -273,27 +273,22 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     }
     LaunchedEffect(sessionId, hostHistory.isEmpty(), settings.completeFromHistory, suggesting) {
         if (hostHistory.isEmpty() || !settings.completeFromHistory || !suggesting) return@LaunchedEffect
-        // The screen has to have changed for the answer to change, and the core
-        // counts that for the renderer already. Somebody reading their terminal
-        // without typing is the normal case, and it used to cost two trips over
-        // the bridge and a pass over the history two and a half times a second.
-        var seen = -1
-        while (true) {
-            kotlinx.coroutines.delay(400)
-            val generation = view.snapGeneration
-            if (generation == seen) continue
-            seen = generation
+        // The line has to have changed for the answer to change, and the core
+        // counts that into every frame's header; the view passes it up. This
+        // used to be a loop waking every 400 ms to ask whether the screen had
+        // moved, which somebody reading their terminal without typing paid for
+        // the whole time the screen was up.
+        view.inputChanges.collect {
             // Asked first, and without the bridge: while a command runs there
-            // is no line being typed, and output streaming is exactly when the
-            // generation moves on every tick.
+            // is no line being typed.
             if (!atPrompt()) {
                 if (typed.isNotEmpty()) typed = ""
-                continue
+                return@collect
             }
             val input = runCatching { session.core.inputLine() }.getOrNull()
             if (input == null) {
                 if (typed.isNotEmpty()) typed = ""
-                continue
+                return@collect
             }
             val t = dev.flint.term.data.CommandHistory.typed(input.line, input.typed, input.atEnd, latestHistory)
             if (t != typed) typed = t

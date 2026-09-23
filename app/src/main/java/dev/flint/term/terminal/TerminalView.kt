@@ -43,6 +43,7 @@ import dev.flint.term.core.snapshotImagesOffset
 import dev.flint.term.core.snapshotKittyFlagsOffset
 import dev.flint.term.core.snapshotLinksOffset
 import dev.flint.term.core.snapshotHeaderBytes
+import dev.flint.term.core.snapshotInputOffset
 import dev.flint.term.core.snapshotPredictionsCountOffset
 import dev.flint.term.core.snapshotPredictionsOffset
 import dev.flint.term.core.snapshotRowEntryBytes
@@ -520,6 +521,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private val predictionsOffset = snapshotPredictionsOffset().toInt()
     private val predictionsCountOffset = snapshotPredictionsCountOffset().toInt()
     private val kittyFlagsOffset = snapshotKittyFlagsOffset().toInt()
+    private val inputOffset = snapshotInputOffset().toInt()
     private val rowsOffset = snapshotRowsOffset().toInt()
     private val rowEntryBytes = snapshotRowEntryBytes().toInt()
     private var snapCols = 0
@@ -780,15 +782,24 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private val snapBuffer = dev.flint.term.core.SnapshotBuffer()
 
     /**
+     * How many times the line being typed has changed, as of the last frame.
+     *
+     * The core counts it into the header: the cursor's row reading differently,
+     * or the cursor moving along it, and nothing at all while no command is
+     * being typed. The suggestions upstairs read the line again when it moves,
+     * where they used to wake up every 400 ms to ask whether it had.
+     */
+    val inputChanges: StateFlow<Int> get() = inputFlow
+    private val inputFlow = kotlinx.coroutines.flow.MutableStateFlow(0)
+
+    /**
      * How many times the grid has changed, as of the snapshot being drawn.
      *
      * The core counts it and puts it in the header; a frame whose number is the
      * one before it is a frame drawn for something other than new content, and
-     * anything that reads the grid can sit that one out. Public because the
-     * ghost-text poll upstairs wants the same answer.
+     * anything that reads the grid can sit that one out.
      */
-    @Volatile var snapGeneration = 0
-        private set
+    private var snapGeneration = 0
 
     /** The core's count of changes to the set of links, from the same header. */
     private var snapLinks = 0
@@ -909,6 +920,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             actionMode?.invalidateContentRect()
         }
         snapGeneration = buf.getInt(generationOffset)
+        inputFlow.value = buf.getInt(inputOffset)
         snapLinks = buf.get(linksOffset).toInt() and 0xff
         snapImages = buf.getInt(imagesOffset)
         snapPredictions = buf.getInt(predictionsOffset)

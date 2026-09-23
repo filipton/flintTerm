@@ -12,7 +12,8 @@
 //!   i16 sel_start_col, i16 sel_start_row, i16 sel_end_col, i16 sel_end_row (i16::MIN when none)
 //!   u8  sel_is_block, u32 generation, u8 links_changed
 //!   u32 images_changed, u32 predictions_generation, u16 predictions_count,
-//!   u8  kitty_flags, u32 rows_offset, then zeros up to HEADER_BYTES
+//!   u8  kitty_flags, u32 rows_offset, u8 spare, u32 input_generation,
+//!   then zeros up to HEADER_BYTES
 //! cells (rows * cols * CELL_BYTES):
 //!   u32 codepoint, u32 fg (0x00RRGGBB), u32 bg (0x00RRGGBB), u16 flags
 //! row table, where rows_offset points: see [`crate::rows`]
@@ -22,7 +23,7 @@
 //! paints what it is told. Wide characters occupy two cells: the first carries
 //! the glyph with `WIDE`, the second is a `WIDE_SPACER` with codepoint 0.
 
-pub const HEADER_BYTES: usize = 48;
+pub const HEADER_BYTES: usize = 52;
 /// Where the content counter sits in the header.
 ///
 /// The writer leaves it zero; the session fills it in on the way out, because
@@ -52,6 +53,11 @@ pub const KITTY_FLAGS_OFFSET: usize = 42;
 /// Where the row table starts (u32), or 0 when the session appended none.
 /// See [`crate::rows`].
 pub const ROWS_OFFSET: usize = 43;
+/// A count of changes to the line being typed (u32): the text of the cursor's
+/// row, or where on it the cursor stands. Filled in by the session, and held
+/// still while nothing has been typed, so output streaming past a command
+/// that is running does not move it.
+pub const INPUT_OFFSET: usize = 48;
 pub const CELL_BYTES: usize = 14;
 
 pub mod CellFlags {
