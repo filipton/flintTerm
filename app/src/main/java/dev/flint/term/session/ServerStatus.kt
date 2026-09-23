@@ -543,21 +543,62 @@ class SessionExec(
     var ownConnection: Boolean = false
         private set
 
+    /** Set by a [close] that arrived while a command was using the connection. */
+    @Volatile private var closeAfterRun = false
+
     suspend fun run(command: String): String = lock.withLock {
-        withContext(Dispatchers.IO) {
-            borrowed?.let { return@withContext it.core.execLive(command) }
-            val direct = runCatching { session.core.execLive(command) }
-            direct.getOrNull()?.let { return@withContext it }
-            val host = session.host ?: throw direct.exceptionOrNull() ?: IllegalStateException("no host")
-            val own = sessions.connectHeadless(host)
-            borrowed = own
-            ownConnection = true
-            own.core.execLive(command)
+        try {
+            withContext(Dispatchers.IO) {
+                borrowed?.let { return@withContext it.core.execLive(command) }
+                val direct = runCatching { session.core.execLive(command) }
+                direct.getOrNull()?.let { return@withContext it }
+                val host = session.host ?: throw direct.exceptionOrNull() ?: IllegalStateException("no host")
+                val own = sessions.connectHeadless(host)
+                borrowed = own
+                ownConnection = true
+                own.core.execLive(command)
+            }
+        } finally {
+            if (closeAfterRun) {
+                closeAfterRun = false
+                drop()
+            }
         }
     }
 
-    /** Nobody is asking any more; anything opened for this is closed. */
+    /**
+     * Nobody is asking for now; anything opened for this is closed.
+     *
+     * Not the end of it: the next [run] dials again, which is how a pane that
+     * went behind the lock screen gets its connection back when it returns.
+     * A command already on its way finishes first, and the connection goes
+     * after it rather than out from under it.
+     */
     fun close() {
+        if (lock.tryLock()) {
+            try {
+                drop()
+            } finally {
+                lock.unlock()
+            }
+        } else {
+            closeAfterRun = true
+            // The command may have finished between the two looks, past the
+            // point where it would have seen the flag.
+            if (lock.tryLock()) {
+                try {
+                    if (closeAfterRun) {
+                        closeAfterRun = false
+                        drop()
+                    }
+                } finally {
+                    lock.unlock()
+                }
+            }
+        }
+    }
+
+    private fun drop() {
         borrowed?.let { sessions.closeHeadless(it) }
         borrowed = null
     }

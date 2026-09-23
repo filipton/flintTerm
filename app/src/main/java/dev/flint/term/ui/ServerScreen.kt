@@ -33,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -121,12 +120,16 @@ fun ServerPane(nav: NavController, session: TerminalSession, modifier: Modifier 
     var afterAction by remember(session.id) { mutableStateOf(0) }
     val scope = rememberCoroutineScope()
 
-    DisposableEffect(exec) { onDispose { exec.close() } }
-
     var watching by remember { mutableStateOf(true) }
-    LifecycleResumeEffect(Unit) {
+    LifecycleResumeEffect(exec) {
         watching = true
-        onPauseOrDispose { watching = false }
+        // A Mosh session's pane holds an SSH connection of its own, and one
+        // left open behind the lock screen is keepalives nobody is reading.
+        // It is let go here and dialled again by the first read on the way back.
+        onPauseOrDispose {
+            watching = false
+            exec.close()
+        }
     }
 
     val connected = state is SessionState.Connected
