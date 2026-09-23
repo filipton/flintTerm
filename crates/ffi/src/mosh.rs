@@ -113,16 +113,25 @@ impl Link {
         }
     }
 
-    async fn recv(&mut self, buf: &mut [u8]) -> Result<Vec<u8>, String> {
+    /// The next datagram, read into `buf` rather than copied out of it: a
+    /// session in use receives dozens a second.
+    async fn recv<'b>(&mut self, buf: &'b mut Vec<u8>) -> Result<&'b [u8], String> {
         match self {
             Link::Direct(s) => {
+                buf.resize(RECV_BUFFER, 0);
                 let n = s.recv(buf).await.map_err(|e| e.to_string())?;
-                Ok(buf[..n].to_vec())
+                Ok(&buf[..n])
             }
-            Link::Tunnel(t) => t.recv().await.ok_or_else(|| "tunnel closed".to_string()),
+            // The tunnel hands over a datagram of its own; it takes the place
+            // of the buffer.
+            Link::Tunnel(t) => {
+                *buf = t.recv().await.ok_or_else(|| "tunnel closed".to_string())?;
+                Ok(&buf[..])
+            }
             Link::Socks5 { socket, .. } => {
+                buf.resize(RECV_BUFFER, 0);
                 let n = socket.recv(buf).await.map_err(|e| e.to_string())?;
-                ssh_core::proxy::udp_decapsulate(&buf[..n]).map(|p| p.to_vec()).map_err(|e| e.to_string())
+                ssh_core::proxy::udp_decapsulate(&buf[..n]).map_err(|e| e.to_string())
             }
         }
     }
@@ -280,7 +289,7 @@ pub async fn connect(
     // it still has an SSH connection in hand.
     let start = Instant::now();
     let now = |()| start.elapsed().as_millis() as u64;
-    let mut buf = vec![0u8; 4096];
+    let mut buf = Vec::new();
     let mut first: Option<Vec<TransportEvent>> = None;
     let deadline = tokio::time::Instant::now() + Duration::from_millis(PROBE_MS);
     while tokio::time::Instant::now() < deadline && first.is_none() {
@@ -293,7 +302,7 @@ pub async fn connect(
             Err(e) => return Err(CoreError::Other(format!("mosh: {e}"))),
         }
         if let Ok(Ok(datagram)) = tokio::time::timeout(Duration::from_millis(PROBE_RETRY_MS), link.recv(&mut buf)).await {
-            if let Ok(events) = transport.receive(&datagram, now(())) {
+            if let Ok(events) = transport.receive(datagram, now(())) {
                 first = Some(events);
             }
         }
@@ -316,8 +325,10 @@ pub async fn connect(
 
 /// How long to wait for the first datagram back before giving up on UDP.
 const PROBE_MS: u64 = 4000;
-/// The longest the pump sleeps when the transport has nothing due.
-const IDLE_WAKE_MS: u64 = 1000;
+/// Room for one datagram off the wire; Mosh keeps well under this.
+const RECV_BUFFER: usize = 4096;
+/// How long the server may be silent before the user is told so.
+const QUIET_WARN_MS: u64 = 3000;
 const PROBE_RETRY_MS: u64 = 400;
 
 async fn pump(
@@ -332,7 +343,7 @@ async fn pump(
     start: Instant,
 ) {
     let now = |()| start.elapsed().as_millis() as u64;
-    let mut buf = vec![0u8; 4096];
+    let mut buf = Vec::new();
     let mut warned_quiet = false;
 
     loop {
@@ -361,7 +372,7 @@ async fn pump(
         }
         // Tell the user once when the link goes quiet, the way mosh does.
         match transport.silent_for(now(())) {
-            Some(ms) if ms > 3000 && !warned_quiet => {
+            Some(ms) if ms > QUIET_WARN_MS && !warned_quiet => {
                 warned_quiet = true;
                 progress(format!("Mosh: no reply for {}s", ms / 1000));
             }
@@ -370,11 +381,17 @@ async fn pump(
         }
 
         // The select below already wakes on a datagram or a keystroke, so this
-        // timer only exists for the transport's own deadlines and the quiet
-        // warning above. Capping it at a quarter second woke the CPU four times
-        // a second on a link with nothing to say, which on a phone in a pocket
-        // is the whole cost of an idle session.
-        let wait = Duration::from_millis(transport.wait_time(now(())).clamp(1, IDLE_WAKE_MS));
+        // timer is only for the transport's own deadlines. A fixed cap on it
+        // woke the CPU on a link with nothing to say, which on a phone in a
+        // pocket is the whole cost of an idle session; this way an idle one
+        // wakes only for the heartbeat.
+        //
+        // The quiet warning gets no wake of its own. A healthy idle link is
+        // heard from about once a heartbeat, so a timer set to the warning's
+        // threshold would land on the heartbeat's jitter and warn about a link
+        // that is fine. A link that really went quiet is being retried, and
+        // the retries wake this often enough to warn within a moment.
+        let wait = Duration::from_millis(transport.wait_time(now(())).max(1));
         tokio::select! {
             received = input.recv() => match received {
                 Some(event) => {
@@ -390,7 +407,7 @@ async fn pump(
                 }
             },
             read = link.recv(&mut buf) => match read {
-                Ok(datagram) => match transport.receive(&datagram, now(())) {
+                Ok(datagram) => match transport.receive(datagram, now(())) {
                     Ok(events) => {
                         if let Some(srtt) = transport.srtt_ms() {
                             on_srtt(srtt);
