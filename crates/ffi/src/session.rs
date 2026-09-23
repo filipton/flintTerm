@@ -879,6 +879,12 @@ impl ssh_core::HostKeyVerifier for Verifier {
 }
 
 impl Session {
+    /// The SSH connection this session is up on, for [`crate::follow`] to open
+    /// a channel of its own on. None on the same terms as [`Session::exec_live`].
+    pub(crate) async fn live_ssh(&self) -> Option<Arc<SshClient>> {
+        self.inner.ssh.lock().await.clone()
+    }
+
     /// Packs the grid into `out`, and with `want_links`, works out the links
     /// first so the header can say whether they changed; with
     /// `want_highlights`, the user's colour rules are painted into the cells.

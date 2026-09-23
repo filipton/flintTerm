@@ -13,6 +13,7 @@ mod highlight;
 mod links;
 mod emulator;
 mod external;
+mod follow;
 mod frame;
 mod input;
 mod mosh;
@@ -31,6 +32,7 @@ mod transport;
 mod vpn;
 
 pub use external::ExternalSink;
+pub use follow::*;
 pub use putty::*;
 pub use securitykey::*;
 pub use session::*;

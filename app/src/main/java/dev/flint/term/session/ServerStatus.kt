@@ -1,5 +1,8 @@
 package dev.flint.term.session
 
+import dev.flint.term.core.Follow
+import dev.flint.term.core.FollowListener
+import dev.flint.term.core.Session
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -556,17 +559,34 @@ class SessionExec(
     /** Set by a [close] that arrived while a command was using the connection. */
     @Volatile private var closeAfterRun = false
 
-    suspend fun run(command: String): String = lock.withLock {
+    suspend fun run(command: String): String = onConnection { it.execLive(command) }
+
+    /**
+     * Start [command] on the same connection [run] would use and stream what it
+     * prints into [into]'s screen, until the [Follow] is stopped or the command
+     * ends; `Session.followLogs` in the core says what it expects of the lines.
+     *
+     * Only the start holds the lock. A follow on a connection of our own dies
+     * with it, so the caller stops the follow before it calls [close].
+     */
+    suspend fun followLogs(
+        command: String,
+        into: TerminalSession,
+        resumeAfter: String?,
+        listener: FollowListener,
+    ): Follow = onConnection { it.followLogs(command, into.core, resumeAfter, listener) }
+
+    private suspend fun <T> onConnection(use: (Session) -> T): T = lock.withLock {
         try {
             withContext(Dispatchers.IO) {
-                borrowed?.let { return@withContext it.core.execLive(command) }
-                val direct = runCatching { session.core.execLive(command) }
-                direct.getOrNull()?.let { return@withContext it }
+                borrowed?.let { return@withContext use(it.core) }
+                val direct = runCatching { use(session.core) }
+                if (direct.isSuccess) return@withContext direct.getOrThrow()
                 val host = session.host ?: throw direct.exceptionOrNull() ?: IllegalStateException("no host")
                 val own = sessions.connectHeadless(host)
                 borrowed = own
                 ownConnection = true
-                own.core.execLive(command)
+                use(own.core)
             }
         } finally {
             if (closeAfterRun) {

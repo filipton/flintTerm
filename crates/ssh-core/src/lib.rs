@@ -821,6 +821,17 @@ impl SshClient {
         Ok((out, status))
     }
 
+    /// Start `command` and hand back its channel, for output that is read as it
+    /// comes rather than collected at the end.
+    ///
+    /// Dropping the channel does not close it, and a command such as a log
+    /// follow never ends on its own: the caller closes it when done.
+    pub async fn open_exec(&self, command: &str) -> Result<russh::Channel<russh::client::Msg>, SshError> {
+        let channel = self.handle.channel_open_session().await?;
+        channel.exec(true, command).await?;
+        Ok(channel)
+    }
+
     pub async fn open_sftp(&self) -> Result<Sftp, SshError> {
         let channel = self.handle.channel_open_session().await?;
         channel.request_subsystem(true, "sftp").await?;

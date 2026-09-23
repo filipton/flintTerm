@@ -253,7 +253,6 @@ class ContainersParserTest {
             "podman unpause shop_web_1",
             Containers.actionCommand(ContainerRuntime.PODMAN, ContainerAction.UNPAUSE, "shop_web_1"),
         )
-        assertEquals("docker logs --tail 200 shop-web-1", Containers.logsCommand(ContainerRuntime.DOCKER, "shop-web-1"))
     }
 
     @Test
@@ -261,7 +260,7 @@ class ContainersParserTest {
         assertNull(Containers.actionCommand(ContainerRuntime.DOCKER, ContainerAction.STOP, "abc; rm -rf /"))
         assertNull(Containers.actionCommand(ContainerRuntime.DOCKER, ContainerAction.STOP, "\$(reboot)"))
         assertNull(Containers.actionCommand(ContainerRuntime.DOCKER, ContainerAction.STOP, ""))
-        assertNull(Containers.logsCommand(ContainerRuntime.PODMAN, "a b"))
+        assertNull(Containers.followCommand(ContainerRuntime.PODMAN, "a b"))
     }
 
     @Test
@@ -275,16 +274,22 @@ class ContainersParserTest {
     // ---- following a log --------------------------------------------------
 
     @Test
-    fun `only the lines past the overlap are printed again`() {
-        val first = listOf("a", "b", "c")
-        assertEquals(emptyList<String>(), Containers.newTail(first, first))
-        assertEquals(listOf("d"), Containers.newTail(first, listOf("b", "c", "d")))
-        assertEquals(listOf("d", "e"), Containers.newTail(first, listOf("c", "d", "e")))
-        // Repeated lines are not an overlap to be swallowed: a service logging
-        // the same line twice must print it twice.
-        assertEquals(listOf("x"), Containers.newTail(listOf("x", "x"), listOf("x", "x", "x")))
-        // Nothing in common: the window moved further than it is wide.
-        assertEquals(listOf("y", "z"), Containers.newTail(first, listOf("y", "z")))
-        assertEquals(listOf("a", "b"), Containers.newTail(emptyList(), listOf("a", "b")))
+    fun `a log is followed with stamps, and resumed from the last one`() {
+        assertEquals(
+            "docker logs -f --timestamps --tail 200 shop-web-1",
+            Containers.followCommand(ContainerRuntime.DOCKER, "shop-web-1"),
+        )
+        assertEquals(
+            "podman logs -f --timestamps --tail 200 --since 2026-09-23T10:11:12.123456789+02:00 shop_web_1",
+            Containers.followCommand(ContainerRuntime.PODMAN, "shop_web_1", "2026-09-23T10:11:12.123456789+02:00"),
+        )
+    }
+
+    /** The stamp came back from the server, and goes out again on a command line. */
+    @Test
+    fun `a stamp that is not a stamp is refused rather than quoted`() {
+        assertNull(Containers.followCommand(ContainerRuntime.DOCKER, "web", "2026-09-23T10:11:12Z; reboot"))
+        assertNull(Containers.followCommand(ContainerRuntime.DOCKER, "web", "\$(reboot)"))
+        assertNull(Containers.followCommand(ContainerRuntime.DOCKER, "web", ""))
     }
 }

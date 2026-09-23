@@ -1,6 +1,9 @@
 package dev.flint.term.session
 
+import dev.flint.term.core.FollowListener
 import dev.flint.term.terminal.GridMemory
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -8,6 +11,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -100,7 +104,7 @@ enum class ContainerAction(val verb: String, val label: String) {
  */
 object Containers {
 
-    /** Lines of log fetched each time, and shown when a log tab opens. */
+    /** Lines of log shown when a log tab opens, and at most when it comes back into sight. */
     const val LOG_TAIL = 200
 
     /**
@@ -151,10 +155,27 @@ object Containers {
     fun actionCommand(runtime: ContainerRuntime, action: ContainerAction, id: String): String? =
         if (!safeId(id)) null else "${runtime.command} ${action.verb} $id"
 
-    fun logsCommand(runtime: ContainerRuntime, id: String, tail: Int = LOG_TAIL): String? =
-        if (!safeId(id)) null else "${runtime.command} logs --tail $tail $id"
+    /**
+     * The follow for a log tab, or null if the id or [since] is not one we will
+     * paste into a shell.
+     *
+     * `--timestamps` is for the core, which takes the stamps off before the text
+     * is shown and remembers the last one, so that a follow resumed after a
+     * pause can ask for everything `--since` the line it stopped at. That is the
+     * server's own clock on both ends, which the phone's is not. The tail stays
+     * on a resume too: a container that talked for an hour while the tab was
+     * hidden brings back its last [tail] lines, not the hour.
+     */
+    fun followCommand(runtime: ContainerRuntime, id: String, since: String? = null, tail: Int = LOG_TAIL): String? {
+        if (!safeId(id) || (since != null && !SAFE_STAMP.matches(since))) return null
+        val from = since?.let { " --since $it" }.orEmpty()
+        return "${runtime.command} logs -f --timestamps --tail $tail$from $id"
+    }
 
     private val SAFE_ID = Regex("[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+
+    /** An RFC 3339 stamp as the runtimes print it; it came from the server, so it is checked. */
+    private val SAFE_STAMP = Regex("[0-9][0-9TZ:.+-]{0,47}")
 
     fun safeId(id: String): Boolean = SAFE_ID.matches(id)
 
@@ -368,24 +389,6 @@ object Containers {
         }
     }
 
-    /**
-     * The lines of [fetched] that are not already the tail of [shown].
-     *
-     * A log tab re-reads the last [LOG_TAIL] lines every couple of seconds, so
-     * consecutive reads overlap by almost all of themselves; the new part is
-     * whatever follows the longest overlap. Matching the text rather than
-     * trusting a timestamp is what keeps a line from being printed twice, and
-     * it needs nothing from the server. A container that produced more than
-     * [LOG_TAIL] lines between two reads loses the middle — the overlap is
-     * gone, and there is nothing left to line the two reads up by.
-     */
-    fun newTail(shown: List<String>, fetched: List<String>): List<String> {
-        for (k in minOf(shown.size, fetched.size) downTo 1) {
-            if (shown.takeLast(k) == fetched.take(k)) return fetched.drop(k)
-        }
-        return fetched
-    }
-
     private fun JSONObject.text(vararg keys: String): String? {
         for (key in keys) {
             val v = opt(key)
@@ -437,17 +440,21 @@ class ContainerProbe(private val exec: SessionExec) {
  *
  * The tab is a real session so that it appears in the tab strip and is closed
  * like anything else, but it has nothing behind it: keystrokes go nowhere, and
- * the only thing that ever writes to it is this loop.
+ * the only thing that ever writes to it is the follow.
  *
- * It is a loop and not `logs -f` because the session's exec channel hands back
- * one string when the command ends, and a follow never ends — the tab would sit
- * empty for as long as the container lived. So the last [Containers.LOG_TAIL]
- * lines are re-read every couple of seconds and only the part that is new is
- * printed, which reads on screen the way a follow does.
+ * One exec channel runs `logs -f` for as long as the tab is watched, and the
+ * core writes what it prints straight into the tab's screen. It is closed when
+ * the tab goes out of sight or the app into the background — a follow nobody is
+ * reading keeps the radio up for every line a chatty container prints — and
+ * opened again on the way back, from the last line it showed.
  */
 object ContainerLogs {
 
-    private const val FOLLOW_MILLIS = 2_000L
+    /**
+     * How often the tab is checked for being in sight. Only a look at two local
+     * flags: nothing crosses the network on this beat.
+     */
+    private const val WATCH_MILLIS = 2_000L
 
     fun open(
         sessions: SessionManager,
@@ -455,7 +462,7 @@ object ContainerLogs {
         runtime: ContainerRuntime,
         container: Container,
     ): TerminalSession? {
-        val command = Containers.logsCommand(runtime, container.id) ?: return null
+        val first = Containers.followCommand(runtime, container.id) ?: return null
         val tab = sessions.openPlayback(
             label = "${container.name} logs",
             cols = GridMemory.cols.takeIf { it > 0 } ?: 80,
@@ -467,32 +474,47 @@ object ContainerLogs {
         val exec = SessionExec(sessions, source)
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope.launch {
-            tab.write("$ $command")
-            var shown = emptyList<String>()
+            tab.write("$ $first")
+            val open = { isActive && !tab.destroyed && sessions.get(tab.id) != null }
+            val watched = { dev.flint.term.App.inForeground && tab.onScreen }
+            var since: String? = null
             try {
-                while (isActive && !tab.destroyed && sessions.get(tab.id) != null) {
-                    // Backgrounded, this was opening an exec channel to the host
-                    // every two seconds to fetch a log nobody was reading, which
-                    // on cellular means the radio never settles. Wait it out
-                    // instead, and pick up where it left off on the way back. The
-                    // same goes for a log tab sitting behind another one.
-                    if (!dev.flint.term.App.inForeground || !tab.onScreen) {
-                        delay(FOLLOW_MILLIS)
+                while (open()) {
+                    if (!watched()) {
+                        delay(WATCH_MILLIS)
                         continue
                     }
-                    val read = runCatching { exec.run(command) }
-                    val text = read.getOrElse {
-                        tab.write(it.message ?: "the log stopped")
+                    val command = Containers.followCommand(runtime, container.id, since) ?: break
+                    val ended = CompletableDeferred<String?>()
+                    val listener = object : FollowListener {
+                        override fun onEnd(error: String?) {
+                            ended.complete(error)
+                        }
+                    }
+                    val follow = try {
+                        exec.followLogs(command, tab, since, listener)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        tab.write(e.message ?: "the log stopped")
                         break
                     }
-                    val lines = if (text.isBlank()) emptyList() else text.trimEnd('\n').lines()
-                    // One push for the lot: each is a trip across the FFI and a
-                    // frame for the view, and a busy container adds dozens of
-                    // lines between two reads.
-                    val fresh = Containers.newTail(shown, lines)
-                    if (fresh.isNotEmpty()) tab.write(fresh.joinToString("\r\n"))
-                    shown = lines
-                    delay(FOLLOW_MILLIS)
+                    try {
+                        while (open() && watched() && !ended.isCompleted) {
+                            withTimeoutOrNull(WATCH_MILLIS) { ended.await() }
+                        }
+                        if (ended.isCompleted) {
+                            tab.write(ended.await() ?: "the log stopped")
+                            break
+                        }
+                    } finally {
+                        follow.stop()
+                        since = follow.lastTimestamp() ?: since
+                        follow.destroy()
+                    }
+                    // Out of sight: a connection dialled for this goes too, and
+                    // the next follow dials again.
+                    exec.close()
                 }
             } finally {
                 exec.close()
@@ -502,7 +524,6 @@ object ContainerLogs {
         return tab
     }
 
-    /** An exec channel ends its lines with a bare newline; a terminal needs both. */
     private fun TerminalSession.write(line: String) {
         runCatching { core.pushOutput((line + "\r\n").toByteArray(Charsets.UTF_8)) }
     }
