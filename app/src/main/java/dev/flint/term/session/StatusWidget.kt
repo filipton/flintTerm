@@ -285,11 +285,18 @@ class StatusWidgetWorker(context: Context, params: WorkerParameters) : Coroutine
         // would be the same in ten minutes, and the widget already has numbers
         // to show. It picks itself up on the next run over a cheaper link.
         if (app.sessions.holdTransfers()) return Result.success()
+        // The constraint says connected, but it is read when the job is
+        // queued; a dial into no network only earns a failure to show.
+        if (!app.network.online) return Result.success()
 
+        // A failure is shown and left for the next period rather than retried:
+        // a host that is down now is down in thirty seconds too, and the
+        // backoff would be a connection attempt, with its radio wake-up and
+        // maybe a VPN brought up, several times over for the same answer.
         val session = runCatching { app.sessions.connectHeadless(host) }.getOrElse { e ->
             StatusWidgetPrefs.rememberFailure(context, widgetId, e.message ?: "could not connect")
             StatusWidget.refresh(context, widgetId)
-            return Result.retry()
+            return Result.success()
         }
         return try {
             val status = ServerProbe.parse(session.core.execLive(ServerProbe.SCRIPT))
@@ -299,7 +306,7 @@ class StatusWidgetWorker(context: Context, params: WorkerParameters) : Coroutine
         } catch (e: Throwable) {
             StatusWidgetPrefs.rememberFailure(context, widgetId, e.message ?: "could not read the status")
             StatusWidget.refresh(context, widgetId)
-            Result.retry()
+            Result.success()
         } finally {
             app.sessions.closeHeadless(session)
         }
