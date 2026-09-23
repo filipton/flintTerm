@@ -40,7 +40,10 @@ class SessionService : Service() {
             return START_NOT_STICKY
         }
         promote(build(active))
-        return START_STICKY
+        // Not sticky: the sockets die with the process, so a restarted service
+        // would find nothing open and stop at once. Sessions come back through
+        // [OpenSessions] when the app is next opened, not through this.
+        return START_NOT_STICKY
     }
 
     private fun promote(notification: Notification) {
