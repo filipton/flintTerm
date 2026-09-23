@@ -11,16 +11,18 @@ import android.os.ParcelFileDescriptor
 import android.util.Log
 import dev.flint.term.App
 import dev.flint.term.R
+import dev.flint.term.core.SessionState
 import dev.flint.term.core.VpnStats
 import dev.flint.term.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The whole phone's traffic, sent out from one of your servers.
@@ -116,10 +118,17 @@ class SshVpnService : VpnService() {
     /** Keep the notification honest about what is going through, and notice a dropped session. */
     private suspend fun watch(session: TerminalSession, label: String, generation: Int) {
         while (generation == this.generation) {
-            delay(2000)
+            // The counters are only worth reading every couple of seconds
+            // while somebody can be looking at them. The session ending is not
+            // polled for at all: its state says so the moment it happens, so a
+            // slow reading never leaves the phone routed into a dead tunnel.
+            val interval = if (App.inForeground) FOREGROUND_STATS_MS else BACKGROUND_STATS_MS
+            val ended = withTimeoutOrNull(interval) {
+                session.state.first { it is SessionState.Disconnected }
+            } != null
             if (generation != this.generation) return
-            val stats = runCatching { session.core.vpnStats() }.getOrNull()
-            if (stats == null || session.isFinished) {
+            val stats = if (ended) null else runCatching { session.core.vpnStats() }.getOrNull()
+            if (stats == null) {
                 _state.value = VpnState(error = "the connection to $label ended")
                 shutdown()
                 return
@@ -223,6 +232,10 @@ class SshVpnService : VpnService() {
     companion object {
         private const val TAG = "SshVpn"
         private const val NOTIFICATION_ID = 3
+        /** How often the counters are read while the app is in front. */
+        private const val FOREGROUND_STATS_MS = 2_000L
+        /** And while it is not, when only the state flow behind the UI reads them. */
+        private const val BACKGROUND_STATS_MS = 30_000L
         private const val ACTION_STOP = "dev.flint.term.VPN_STOP"
         private const val EXTRA_HOST = "host"
         /** Small enough to survive the extra headers of anything the packets cross. */
