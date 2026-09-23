@@ -142,6 +142,34 @@ pub struct AlacrittyEmulator {
     /// Tells one pending mark's cells from an older mark's. It only has to be
     /// unique among the marks in the buffer, so wrapping is not a worry.
     mark_serial: u32,
+    /// Counts the lines scrolled into the history while a mark waits; see
+    /// [`ScrollProbe`].
+    probe: Option<ScrollProbe>,
+    /// The probe raised the primary screen's view and a program took the alt
+    /// screen before it could be lowered again; it is lowered as soon as the
+    /// primary screen is back.
+    stale_bump: bool,
+}
+
+/// How far the grid has scrolled since a point in the stream.
+///
+/// A mark waiting on the pen can only have landed on a row that was on the
+/// screen when it was put there, or one that scrolled in since, so that is all
+/// [`AlacrittyEmulator::settle_marks`] has to search — but only if it knows how
+/// many rows went into the history meanwhile. `history_size` stops counting
+/// once the scrollback is full, which is exactly the long session where
+/// searching all of it hurts. `alacritty_terminal` keeps no count of its own,
+/// except one: a view scrolled back is pushed up by every line that scrolls in,
+/// so it keeps showing the same text. The probe borrows that. If the view is at
+/// the bottom it is raised one row for the length of the feed and lowered
+/// again at the end, before anyone can see it.
+struct ScrollProbe {
+    /// The view's offset when the probe started.
+    base: usize,
+    /// Whether the probe raised the view itself, and so has to lower it.
+    bumped: bool,
+    /// Which screen it was started on; the other one has its own offset.
+    alt_screen: bool,
 }
 
 /// A mark that is on the pen, waiting for the shell to print something.
@@ -153,6 +181,9 @@ struct PendingMark {
     /// screen, so one still waiting when a program takes the alt screen is
     /// dropped rather than pinned to the first cell that program draws.
     alt_screen: bool,
+    /// Output reached the grid without a probe counting it, so the mark could
+    /// be anywhere and the whole buffer has to be searched.
+    uncounted: bool,
 }
 
 impl AlacrittyEmulator {
@@ -174,6 +205,8 @@ impl AlacrittyEmulator {
             piece_events: Vec::new(),
             pending_mark: None,
             mark_serial: 0,
+            probe: None,
+            stale_bump: false,
         }
     }
 
@@ -328,7 +361,67 @@ impl AlacrittyEmulator {
         let seq = format!("\x1b]8;;{}\x1b\\", marks::mark_uri(self.mark_serial, &marks));
         self.parser.advance(&mut self.term, seq.as_bytes());
         let alt_screen = self.term.mode().contains(TermMode::ALT_SCREEN);
-        self.pending_mark = Some(PendingMark { serial: self.mark_serial, marks, alt_screen });
+        self.pending_mark = Some(PendingMark { serial: self.mark_serial, marks, alt_screen, uncounted: false });
+        self.start_probe();
+    }
+
+    /// Start counting scrolled lines for the pending mark; see [`ScrollProbe`].
+    fn start_probe(&mut self) {
+        if self.probe.is_some() {
+            return;
+        }
+        self.lower_stale_bump();
+        let alt_screen = self.term.mode().contains(TermMode::ALT_SCREEN);
+        let grid = self.term.grid_mut();
+        let bumped = grid.display_offset() == 0;
+        if bumped {
+            grid.scroll_display(Scroll::Delta(1));
+        }
+        let base = grid.display_offset();
+        // With no history the view cannot be raised, and nothing needs
+        // counting: every row that scrolls into the history from here on is
+        // one the mark could be on.
+        if base > 0 {
+            self.probe = Some(ScrollProbe { base, bumped, alt_screen });
+        }
+    }
+
+    /// Stop the probe, put the view back where it belongs, and say how many
+    /// lines scrolled into the history since it started — or nothing, when
+    /// that cannot be known and the whole history has to be searched.
+    fn end_probe(&mut self) -> Option<usize> {
+        self.lower_stale_bump();
+        let probe = self.probe.take()?;
+        let alt_screen = self.term.mode().contains(TermMode::ALT_SCREEN);
+        if probe.alt_screen != alt_screen {
+            // The probed grid is the inactive one now and out of reach.
+            self.stale_bump = probe.bumped;
+            return None;
+        }
+        let grid = self.term.grid_mut();
+        let now = grid.display_offset();
+        if probe.bumped {
+            grid.scroll_display(Scroll::Bottom);
+        }
+        // Clearing the history drops the view to the bottom, and a view pushed
+        // to the top of a full scrollback stops counting.
+        (now >= probe.base && now < self.config.scrolling_history).then(|| now - probe.base)
+    }
+
+    fn lower_stale_bump(&mut self) {
+        if self.stale_bump && !self.term.mode().contains(TermMode::ALT_SCREEN) {
+            self.term.grid_mut().scroll_display(Scroll::Bottom);
+            self.stale_bump = false;
+        }
+    }
+
+    /// The view's offset as the person looking at it has it, which the probe
+    /// may be borrowing for the length of a feed.
+    fn view_offset(&self) -> usize {
+        match &self.probe {
+            Some(p) if p.bumped && !self.term.mode().contains(TermMode::ALT_SCREEN) => 0,
+            _ => self.term.grid().display_offset(),
+        }
     }
 
     /// Give the pending mark the first cell the shell printed after it, and
@@ -339,8 +432,10 @@ impl AlacrittyEmulator {
     /// screenful of output has no business holding a hyperlink on every cell of
     /// itself.
     fn settle_marks(&mut self) {
+        let scrolled = self.end_probe();
         let Some(pending) = self.pending_mark.as_ref() else { return };
         let serial = pending.serial;
+        let scrolled = if pending.uncounted { None } else { scrolled };
         if pending.alt_screen != self.term.mode().contains(TermMode::ALT_SCREEN) {
             self.pending_mark = None;
             return;
@@ -352,10 +447,12 @@ impl AlacrittyEmulator {
         };
 
         let grid = self.term.grid();
+        let history = grid.history_size();
+        let top = scrolled.map_or(history, |n| n.min(history)) as i32;
         let mut first = None;
-        'find: for line in -(grid.history_size() as i32)..rows {
-            for col in 0..cols {
-                if is_ours(&grid[Line(line)][Column(col)]) {
+        'find: for line in -top..rows {
+            for (col, cell) in grid[Line(line)].into_iter().enumerate().take(cols) {
+                if is_ours(cell) {
                     first = Some(Point::new(Line(line), Column(col)));
                     break 'find;
                 }
@@ -407,7 +504,7 @@ impl AlacrittyEmulator {
             return Vec::new();
         }
         let grid = self.term.grid();
-        let offset = grid.display_offset();
+        let offset = self.view_offset();
         let mut out = Vec::new();
         for row in 0..self.size.rows {
             let grid_row = &grid[Line(row as i32) - offset];
@@ -469,12 +566,24 @@ fn map_intercept(e: InterceptEvent) -> EmulatorEvent {
 
 impl Emulator for AlacrittyEmulator {
     fn feed(&mut self, bytes: &[u8]) {
+        let opts = self.intercept.options();
+        let cut = !self.intercept.passthrough() && (opts.kitty_images || opts.sixel_images || opts.prompt_marks);
+        if !cut {
+            // Output that bypasses the probe could have scrolled the pending
+            // mark anywhere.
+            if let Some(p) = self.pending_mark.as_mut() {
+                p.uncounted = true;
+            }
+        }
         if self.intercept.passthrough() {
             self.parser.advance(&mut self.term, bytes);
+            self.lower_stale_bump();
             return;
         }
-        let opts = self.intercept.options();
-        if opts.kitty_images || opts.sixel_images || opts.prompt_marks {
+        if cut {
+            if self.pending_mark.is_some() {
+                self.start_probe();
+            }
             // An image, and a prompt mark, land at the cursor, so the emulator
             // has to be exactly where the stream said it was when the sequence
             // arrived — and the filter reports a whole chunk at once, which
@@ -511,6 +620,7 @@ impl Emulator for AlacrittyEmulator {
         let events = self.intercept.feed(bytes, &mut filtered);
         self.parser.advance(&mut self.term, &filtered);
         self.filtered = filtered;
+        self.lower_stale_bump();
         if !events.is_empty() {
             let mut sink = self.listener.events.lock().unwrap();
             for e in events {
@@ -532,9 +642,8 @@ impl Emulator for AlacrittyEmulator {
         let offset = grid.display_offset() as i32;
         let mut out = Vec::new();
         for line in -(grid.history_size() as i32)..self.size.rows as i32 {
-            let row = &grid[Line(line)];
-            for col in 0..self.size.cols {
-                let Some(link) = row[Column(col)].hyperlink() else { continue };
+            for cell in &grid[Line(line)] {
+                let Some(link) = cell.hyperlink() else { continue };
                 let Some((_, marks)) = marks::parse_marks(link.uri()) else { continue };
                 out.extend(marks.into_iter().map(|mark| PromptMarkAt { mark, row: line + offset }));
             }
@@ -1450,6 +1559,110 @@ mod tests {
 
         e.feed(b"\x1b[?1049l");
         assert_eq!(marks_of(&e), before);
+    }
+
+    /// Output long enough to scroll the pending mark's row into the history
+    /// before the end of the chunk, which is when the mark is looked for.
+    fn lines(from: usize, n: usize) -> String {
+        (from..from + n).map(|i| format!("out {i}\r\n")).collect()
+    }
+
+    /// Where the one `mark` sits, as the text of its row and its row number.
+    /// A mark found late leaves the cells before it still marked, so there
+    /// being exactly one is half of what is checked.
+    fn where_is(e: &AlacrittyEmulator, mark: PromptMark) -> (String, i32) {
+        let found: Vec<i32> = marks_of(e).iter().filter(|(m, _)| *m == mark).map(|(_, r)| *r).collect();
+        assert_eq!(found.len(), 1, "{mark:?} is not in exactly one place: {found:?}");
+        let row = found[0];
+        let top = e.history_size() as i32 - e.display_offset() as i32;
+        let text = e.all_lines()[(top + row) as usize].trim_end().to_owned();
+        (text, row)
+    }
+
+    #[test]
+    fn a_mark_is_found_after_its_output_scrolls_it_into_the_history() {
+        let mut e = with_marks(20, 4, 100);
+        e.feed(lines(0, 10).as_bytes());
+        e.feed(&command("$ ", "ls", &lines(0, 30), 0));
+        assert_eq!(where_is(&e, PromptMark::OutputStart), ("out 0".to_owned(), -27));
+        assert_eq!(where_is(&e, PromptMark::PromptStart), ("$ ls".to_owned(), -28));
+        assert_eq!(e.display_offset(), 0, "counting the scroll moved the view");
+    }
+
+    #[test]
+    fn a_mark_is_found_when_the_scrollback_is_already_full() {
+        // A full scrollback no longer grows, so its size cannot say how far
+        // the output scrolled.
+        let mut e = with_marks(20, 4, 20);
+        e.feed(lines(0, 100).as_bytes());
+        assert_eq!(e.history_size(), 20);
+        e.feed(&command("$ ", "ls", &lines(0, 12), 0));
+        e.feed(b"\x1b]133;A\x07$ ");
+        assert_eq!(where_is(&e, PromptMark::OutputStart), ("out 0".to_owned(), -9));
+        assert_eq!(where_is(&e, PromptMark::Finished(Some(0))), ("$".to_owned(), 3));
+        assert_eq!(e.display_offset(), 0);
+
+        // Output that outruns the whole scrollback takes the start of it
+        // along, and the mark goes to the oldest of its cells that is left.
+        e.feed(&command("$ ", "ls", &lines(0, 40), 1));
+        e.feed(b"\x1b]133;A\x07$ ");
+        let top = -(e.history_size() as i32);
+        assert!(marks_of(&e).contains(&(PromptMark::OutputStart, top)), "{:?}", marks_of(&e));
+        assert_eq!(where_is(&e, PromptMark::Finished(Some(1))).0, "$");
+    }
+
+    #[test]
+    fn a_mark_waiting_across_chunks_is_found_after_they_scroll() {
+        let mut e = with_marks(20, 4, 20);
+        e.feed(lines(0, 100).as_bytes());
+        // Nothing printed yet: the mark waits on the pen past these chunks.
+        e.feed(b"\x1b]133;C\x07");
+        e.feed(b"\r\n\r\n");
+        e.feed(lines(0, 8).as_bytes());
+        assert_eq!(where_is(&e, PromptMark::OutputStart), ("out 0".to_owned(), -5));
+        assert_eq!(e.display_offset(), 0);
+    }
+
+    #[test]
+    fn a_mark_on_the_top_row_is_found_after_it_scrolls() {
+        // The first cell printed is as high as the mark can be: the top row
+        // of the screen it was announced on.
+        let mut e = with_marks(20, 4, 20);
+        e.feed(lines(0, 100).as_bytes());
+        e.feed(format!("\x1b]133;C\x07\x1b[Htop\x1b[K\x1b[4;1H{}", lines(0, 6)).as_bytes());
+        assert_eq!(where_is(&e, PromptMark::OutputStart), ("top".to_owned(), -6));
+    }
+
+    #[test]
+    fn a_view_scrolled_back_stays_on_its_text_while_a_mark_settles() {
+        let mut e = with_marks(20, 4, 100);
+        e.feed(lines(0, 40).as_bytes());
+        e.scroll_display(5);
+        let shown = e.row_text(0);
+        e.feed(&command("$ ", "ls", &lines(0, 6), 0));
+        assert_eq!(e.row_text(0), shown, "the scrolled-back view moved off its text");
+        assert_eq!(where_is(&e, PromptMark::OutputStart).0, "out 0");
+    }
+
+    #[test]
+    fn a_mark_cut_off_by_the_alt_screen_leaves_the_view_at_the_bottom() {
+        let mut e = with_marks(20, 4, 100);
+        e.feed(lines(0, 10).as_bytes());
+        e.feed(b"\x1b]133;C\x07\x1b[?1049h\x1b[Hvim");
+        assert!(e.modes().alt_screen);
+        e.feed(b"\x1b[?1049l");
+        assert_eq!(e.display_offset(), 0, "the primary screen came back scrolled");
+        assert_eq!(e.row_text(2), "out 9");
+    }
+
+    #[test]
+    fn a_mark_is_found_after_the_history_is_cleared_under_it() {
+        let mut e = with_marks(20, 4, 20);
+        e.feed(lines(0, 100).as_bytes());
+        e.feed(b"\x1b]133;C\x07\x1b[H\x1b[2J\x1b[3J");
+        e.feed(lines(0, 10).as_bytes());
+        assert_eq!(where_is(&e, PromptMark::OutputStart), ("out 0".to_owned(), -7));
+        assert_eq!(e.display_offset(), 0);
     }
 
     #[test]

@@ -37,6 +37,24 @@ fn snapshot_cost() {
 
 #[test]
 #[ignore]
+fn prompt_cost() {
+    // A long session: the scrollback full, and a shell marking every prompt.
+    let mut e = AlacrittyEmulator::new(120, 40, 10_000);
+    e.set_intercept(term_core::InterceptOptions { prompt_marks: true, ..Default::default() });
+    let line = "x".repeat(100);
+    for _ in 0..10_100 {
+        e.feed(format!("{line}\r\n").as_bytes());
+    }
+    let n = 200;
+    let t = Instant::now();
+    for i in 0..n {
+        e.feed(format!("\x1b]133;D;0\x07\x1b]133;A\x07$ \x1b]133;B\x07ls {i}\r\n\x1b]133;C\x07one\r\n").as_bytes());
+    }
+    println!("prompt: {:>8.1} us/prompt", t.elapsed().as_secs_f64() * 1e6 / n as f64);
+}
+
+#[test]
+#[ignore]
 fn row_text_cost() {
     let e = loaded();
     for _ in 0..200 {
