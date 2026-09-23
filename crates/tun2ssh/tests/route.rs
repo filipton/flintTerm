@@ -309,3 +309,75 @@ async fn a_name_lookup_goes_to_the_servers_resolver_over_tcp() {
     let got = spin(&mut phone, |p| p.sockets.get_mut::<smoltcp::socket::udp::Socket>(udp_handle).can_recv()).await;
     assert!(got, "the answer never came back to the phone");
 }
+
+#[tokio::test]
+async fn bytes_held_back_for_a_slow_far_side_move_once_it_reads() {
+    // The router leaves bytes in its socket while the channel to the far side
+    // is full. When the far side catches up, nothing else need happen for them
+    // to move on: the phone here is not even polled, so no packet of its own
+    // can be what wakes the router.
+    let _ = env_logger::builder().is_test(true).try_init();
+    let (router_fd, phone_fd) = socket_pair();
+    let dialer = Arc::new(FakeDialer {
+        asked: Arc::new(Mutex::new(Vec::new())),
+        given: Arc::new(Mutex::new(Vec::new())),
+        refuse: AtomicBool::new(false),
+    });
+    let _router = Router::start(
+        router_fd,
+        Config {
+            mtu: 1400,
+            resolver: std::net::Ipv4Addr::new(1, 1, 1, 1),
+            dns_address: std::net::Ipv4Addr::new(10, 60, 0, 1),
+        },
+        dialer.clone(),
+    ).unwrap();
+
+    let mut phone = Phone::new(phone_fd);
+    let handle = phone.sockets.add(tcp::Socket::new(
+        tcp::SocketBuffer::new(vec![0u8; 64 * 1024]),
+        tcp::SocketBuffer::new(vec![0u8; 64 * 1024]),
+    ));
+    {
+        let sock = phone.sockets.get_mut::<tcp::Socket>(handle);
+        sock.connect(phone.iface.context(), (IpAddress::v4(93, 184, 216, 34), 80), 40004).unwrap();
+    }
+    let connected = spin(&mut phone, |p| p.sockets.get_mut::<tcp::Socket>(handle).may_send()).await;
+    assert!(connected, "the router never completed the handshake");
+    let mut far = dialer.given.lock().unwrap().pop().unwrap();
+
+    // Send until the router stops acknowledging: everything it has taken is
+    // then in its socket, the channel, or the pipe.
+    let chunk = vec![7u8; 16 * 1024];
+    let mut sent = 0usize;
+    let mut acked = 0usize;
+    let mut steady = Instant::now();
+    let started = Instant::now();
+    while steady.elapsed() < Duration::from_millis(300) && started.elapsed() < Duration::from_secs(10) {
+        let sock = phone.sockets.get_mut::<tcp::Socket>(handle);
+        if sock.can_send() {
+            sent += sock.send_slice(&chunk).unwrap();
+        }
+        let now_acked = sent - phone.sockets.get_mut::<tcp::Socket>(handle).send_queue();
+        if now_acked != acked {
+            acked = now_acked;
+            steady = Instant::now();
+        }
+        phone.poll();
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert!(acked > 128 * 1024, "the router took too little to be holding any back: {acked}");
+
+    let mut got = 0;
+    let mut buf = vec![0u8; 64 * 1024];
+    let _ = tokio::time::timeout(Duration::from_secs(3), async {
+        while got < acked {
+            match far.read(&mut buf).await {
+                Ok(0) | Err(_) => break,
+                Ok(n) => got += n,
+            }
+        }
+    })
+    .await;
+    assert_eq!(got, acked, "bytes the router took were left sitting in it");
+}

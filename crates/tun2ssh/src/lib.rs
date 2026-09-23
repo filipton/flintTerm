@@ -36,7 +36,7 @@ use smoltcp::wire::{
 };
 use tokio::io::unix::AsyncFd;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 
 /// Anything the router can pump bytes through: an SSH channel, or a pipe in a test.
 pub trait Stream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin {}
@@ -175,37 +175,67 @@ struct VirtDevice {
     rx: VecDeque<Vec<u8>>,
     tx: VecDeque<Vec<u8>>,
     mtu: usize,
+    /// The packet smoltcp is reading. It is kept here rather than handed over,
+    /// so its buffer can go back to `spare` once smoltcp is done with it.
+    reading: Vec<u8>,
+    /// Emptied packet buffers, reused for the next packets either way.
+    spare: Vec<Vec<u8>>,
 }
 
-struct VRx(Vec<u8>);
-struct VTx<'a>(&'a mut VecDeque<Vec<u8>>);
+/// Packet buffers kept for reuse, so a busy tunnel is not allocating one per
+/// packet; beyond this they are freed.
+const SPARE_BUFFERS: usize = 64;
 
-impl smoltcp::phy::RxToken for VRx {
+impl VirtDevice {
+    /// A buffer for the next packet, emptied.
+    fn buffer(&mut self) -> Vec<u8> {
+        self.spare.pop().unwrap_or_default()
+    }
+
+    /// Hand back a packet buffer that has been dealt with.
+    fn recycle(spare: &mut Vec<Vec<u8>>, mut buf: Vec<u8>) {
+        if spare.len() < SPARE_BUFFERS && buf.capacity() > 0 {
+            buf.clear();
+            spare.push(buf);
+        }
+    }
+}
+
+struct VRx<'a>(&'a [u8]);
+struct VTx<'a> {
+    tx: &'a mut VecDeque<Vec<u8>>,
+    spare: &'a mut Vec<Vec<u8>>,
+}
+
+impl smoltcp::phy::RxToken for VRx<'_> {
     fn consume<R, F: FnOnce(&[u8]) -> R>(self, f: F) -> R {
-        f(&self.0)
+        f(self.0)
     }
 }
 
 impl<'a> smoltcp::phy::TxToken for VTx<'a> {
     fn consume<R, F: FnOnce(&mut [u8]) -> R>(self, len: usize, f: F) -> R {
-        let mut buf = vec![0u8; len];
+        let mut buf = self.spare.pop().unwrap_or_default();
+        buf.resize(len, 0);
         let r = f(&mut buf);
-        self.0.push_back(buf);
+        self.tx.push_back(buf);
         r
     }
 }
 
 impl Device for VirtDevice {
-    type RxToken<'a> = VRx where Self: 'a;
+    type RxToken<'a> = VRx<'a> where Self: 'a;
     type TxToken<'a> = VTx<'a> where Self: 'a;
 
     fn receive(&mut self, _ts: SmolInstant) -> Option<(Self::RxToken<'_>, Self::TxToken<'_>)> {
         let p = self.rx.pop_front()?;
-        Some((VRx(p), VTx(&mut self.tx)))
+        let done = std::mem::replace(&mut self.reading, p);
+        Self::recycle(&mut self.spare, done);
+        Some((VRx(&self.reading), VTx { tx: &mut self.tx, spare: &mut self.spare }))
     }
 
     fn transmit(&mut self, _ts: SmolInstant) -> Option<Self::TxToken<'_>> {
-        Some(VTx(&mut self.tx))
+        Some(VTx { tx: &mut self.tx, spare: &mut self.spare })
     }
 
     fn capabilities(&self) -> DeviceCapabilities {
@@ -223,6 +253,8 @@ struct Conn {
     to_remote: Option<mpsc::Sender<Vec<u8>>>,
     /// Bytes that arrived before the socket could take them.
     pending: VecDeque<Vec<u8>>,
+    /// How much of the front of [pending] the socket has already taken.
+    pending_sent: usize,
     /// The far side is gone; close once [pending] has drained.
     remote_closed: bool,
     /// The dial is still in flight — nothing may be read off the socket yet, or
@@ -252,6 +284,10 @@ const CHANNEL_DEPTH: usize = 32;
 /// that a hundred connections do not add up to anything the phone notices.
 const SOCKET_BUFFER: usize = 64 * 1024;
 const MAX_PACKET: usize = 9000;
+/// How long the worker sleeps when nothing at all is due. Everything that
+/// needs it sooner wakes it: a packet, an event, a smoltcp timer, or a channel
+/// draining after backpressure.
+const IDLE_WAIT: Duration = Duration::from_secs(60);
 /// A name lookup that has not answered by now is not going to.
 const DNS_TIMEOUT: Duration = Duration::from_secs(5);
 /// A connection the server cannot make deserves a refusal, not a socket held
@@ -271,6 +307,26 @@ struct Worker {
     events_rx: mpsc::UnboundedReceiver<Event>,
     stats: Arc<Mutex<Stats>>,
     running: Arc<AtomicBool>,
+    drained: Arc<Drained>,
+}
+
+/// How a channel that was full tells the worker it has room again. Bytes left
+/// in a socket for backpressure would otherwise wait for whatever woke the
+/// worker next, which on an idle tunnel may be a long time.
+#[derive(Default)]
+struct Drained {
+    notify: Notify,
+    /// Set by the worker when it found a channel full, so the pumps only
+    /// signal when someone is waiting for it.
+    stalled: AtomicBool,
+}
+
+impl Drained {
+    fn took_one(&self) {
+        if self.stalled.swap(false, Ordering::AcqRel) {
+            self.notify.notify_one();
+        }
+    }
 }
 
 impl Worker {
@@ -281,7 +337,13 @@ impl Worker {
         stats: Arc<Mutex<Stats>>,
         running: Arc<AtomicBool>,
     ) -> io::Result<Worker> {
-        let mut device = VirtDevice { rx: VecDeque::new(), tx: VecDeque::new(), mtu: config.mtu.clamp(576, 9000) };
+        let mut device = VirtDevice {
+            rx: VecDeque::new(),
+            tx: VecDeque::new(),
+            mtu: config.mtu.clamp(576, 9000),
+            reading: Vec::new(),
+            spare: Vec::new(),
+        };
         let mut iface = Interface::new(IfaceConfig::new(HardwareAddress::Ip), &mut device, SmolInstant::now());
         // The stack answers for whatever address the phone was talking to, which
         // is the whole point of sitting in front of a default route.
@@ -321,26 +383,21 @@ impl Worker {
             events_rx,
             stats,
             running,
+            drained: Arc::new(Drained::default()),
         })
     }
 
     async fn run(mut self) {
-        let mut buf = vec![0u8; MAX_PACKET];
+        let mut batch: Vec<Vec<u8>> = Vec::new();
         while self.running.load(Ordering::Relaxed) {
             self.poll_stack();
             self.flush_out();
 
-            let delay = if self.device.tx.is_empty() {
-                self.iface
-                    .poll_delay(SmolInstant::now(), &self.sockets)
-                    .map(|d| Duration::from_micros(d.total_micros()))
-                    .unwrap_or(Duration::from_millis(500))
-            } else {
-                // Something is waiting to go to the phone and the descriptor
-                // was not ready for it. Come straight back rather than sitting
-                // on the packet until the next timer.
-                Duration::from_millis(2)
-            };
+            let delay = self
+                .iface
+                .poll_delay(SmolInstant::now(), &self.sockets)
+                .map(|d| Duration::from_micros(d.total_micros()))
+                .unwrap_or(IDLE_WAIT);
 
             tokio::select! {
                 r = self.tun.readable() => {
@@ -351,23 +408,28 @@ impl Worker {
                             // Collected first, then handed on: the guard borrows
                             // the descriptor, and looking at a packet needs the
                             // rest of the worker.
-                            let mut batch: Vec<Vec<u8>> = Vec::new();
                             loop {
-                                match guard.try_io(|inner| inner.get_ref().read(&mut buf)) {
+                                let mut buf = self.device.buffer();
+                                buf.resize(MAX_PACKET, 0);
+                                let read = guard.try_io(|inner| inner.get_ref().read(&mut buf));
+                                if let Ok(Ok(n @ 1..)) = read {
+                                    buf.truncate(n);
+                                    batch.push(buf);
+                                    if batch.len() >= 256 { break; }
+                                    continue;
+                                }
+                                VirtDevice::recycle(&mut self.device.spare, buf);
+                                match read {
                                     // Nothing more will ever come out of a
                                     // descriptor at end of file — Android has
                                     // taken the VPN away — and retrying would
                                     // spin for as long as the tunnel lived.
-                                    Ok(Ok(0)) => {
+                                    Ok(Ok(_)) => {
                                         log::debug!("tun closed");
                                         self.running.store(false, Ordering::Relaxed);
                                         break;
                                     }
                                     Err(_) => break,
-                                    Ok(Ok(n)) => {
-                                        batch.push(buf[..n].to_vec());
-                                        if batch.len() >= 256 { break; }
-                                    }
                                     Ok(Err(e)) => {
                                         if e.kind() != io::ErrorKind::WouldBlock {
                                             log::warn!("tun read: {e}");
@@ -376,7 +438,7 @@ impl Worker {
                                     }
                                 }
                             }
-                            for packet in batch {
+                            for packet in batch.drain(..) {
                                 self.intercept(&packet);
                                 self.device.rx.push_back(packet);
                             }
@@ -387,7 +449,36 @@ impl Worker {
                         }
                     }
                 }
+                // Something is waiting to go to the phone and the descriptor
+                // was not ready for it: wait until it is, rather than sitting
+                // on the packet until the next timer or polling for room.
+                r = self.tun.writable(), if !self.device.tx.is_empty() => {
+                    match r {
+                        Ok(mut guard) => {
+                            // Written through the guard, so a descriptor that
+                            // is still full clears its readiness and the next
+                            // wait really waits.
+                            while let Some(p) = self.device.tx.front() {
+                                match guard.try_io(|inner| inner.get_ref().write(p)) {
+                                    Err(_) => break,
+                                    Ok(r) => {
+                                        if let Err(e) = r {
+                                            log::warn!("tun write: {e}");
+                                        }
+                                        let p = self.device.tx.pop_front().unwrap();
+                                        VirtDevice::recycle(&mut self.device.spare, p);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::warn!("tun writable: {e}");
+                            break;
+                        }
+                    }
+                }
                 Some(ev) = self.events_rx.recv() => self.on_event(ev),
+                _ = self.drained.notify.notified() => {}
                 _ = tokio::time::sleep(delay) => {}
             }
         }
@@ -397,9 +488,9 @@ impl Worker {
     fn flush_out(&mut self) {
         while let Some(p) = self.device.tx.pop_front() {
             match self.tun.get_ref().write(&p) {
-                Ok(_) => {}
+                Ok(_) => VirtDevice::recycle(&mut self.device.spare, p),
                 Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    // Rare on a tun: put it back and let the next turn retry.
+                    // Rare on a tun: put it back for the loop to wait on.
                     self.device.tx.push_front(p);
                     break;
                 }
@@ -425,31 +516,21 @@ impl Worker {
                     Ok(v) => v,
                     Err(_) => return,
                 };
-                (
-                    IpAddress::Ipv4(ip.src_addr()),
-                    IpAddress::Ipv4(ip.dst_addr()),
-                    ip.next_header(),
-                    ip.payload().to_vec(),
-                )
+                (IpAddress::Ipv4(ip.src_addr()), IpAddress::Ipv4(ip.dst_addr()), ip.next_header(), ip.payload())
             }
             Some(6) => {
                 let ip = match Ipv6Packet::new_checked(packet) {
                     Ok(v) => v,
                     Err(_) => return,
                 };
-                (
-                    IpAddress::Ipv6(ip.src_addr()),
-                    IpAddress::Ipv6(ip.dst_addr()),
-                    ip.next_header(),
-                    ip.payload().to_vec(),
-                )
+                (IpAddress::Ipv6(ip.src_addr()), IpAddress::Ipv6(ip.dst_addr()), ip.next_header(), ip.payload())
             }
             _ => return,
         };
         if protocol != smoltcp::wire::IpProtocol::Tcp {
             return;
         }
-        let tcp_packet = match TcpPacket::new_checked(&payload[..]) {
+        let tcp_packet = match TcpPacket::new_checked(payload) {
             Ok(v) => v,
             Err(_) => return,
         };
@@ -467,10 +548,12 @@ impl Worker {
         // Nagle would add a round trip to every small write, and the phone's
         // stack has already made that decision for the application.
         sock.set_nagle_enabled(false);
-        // A connection whose far side has gone quiet is worth giving up on
-        // rather than holding a channel open for ever.
+        // Data the phone never acknowledges is worth giving up on rather than
+        // holding a channel open for ever. There is no keepalive on top: the
+        // phone is right here, and an app that dies is reset by its own
+        // kernel, so probing it would only wake the phone once a minute for
+        // every idle connection.
         sock.set_timeout(Some(smoltcp::time::Duration::from_secs(600)));
-        sock.set_keep_alive(Some(smoltcp::time::Duration::from_secs(60)));
         if sock.listen(IpEndpoint::new(dst, tcp_packet.dst_port())).is_err() {
             return;
         }
@@ -478,7 +561,7 @@ impl Worker {
         let target = SocketAddr::new(to_ip(dst), tcp_packet.dst_port());
         self.conns.insert(
             key,
-            Conn { handle, to_remote: None, pending: VecDeque::new(), remote_closed: false, dialing: true },
+            Conn { handle, to_remote: None, pending: VecDeque::new(), pending_sent: 0, remote_closed: false, dialing: true },
         );
         // The DNS address is ours, not the server's: refuse rather than dial it.
         if target.ip() == IpAddr::V4(self.config.dns_address) {
@@ -493,6 +576,7 @@ impl Worker {
     fn open_channel(&mut self, key: ConnKey, target: SocketAddr) {
         let dialer = self.dialer.clone();
         let events = self.events_tx.clone();
+        let drained = self.drained.clone();
         tokio::spawn(async move {
             let host = match target.ip() {
                 IpAddr::V4(v4) => v4.to_string(),
@@ -515,7 +599,7 @@ impl Worker {
             if events.send(Event::Opened(key, tx)).is_err() {
                 return;
             }
-            pump(stream, rx, key, events).await;
+            pump(stream, rx, key, events, drained).await;
         });
     }
 
@@ -574,14 +658,16 @@ impl Worker {
                 if !sock.can_send() {
                     break;
                 }
-                match sock.send_slice(front) {
+                let rest = &front[conn.pending_sent..];
+                match sock.send_slice(rest) {
                     Ok(0) => break,
-                    Ok(n) if n < front.len() => {
-                        conn.pending[0] = front[n..].to_vec();
+                    Ok(n) if n < rest.len() => {
+                        conn.pending_sent += n;
                         break;
                     }
                     Ok(_) => {
                         conn.pending.pop_front();
+                        conn.pending_sent = 0;
                     }
                     Err(_) => break,
                 }
@@ -591,10 +677,18 @@ impl Worker {
             if let Some(tx) = conn.to_remote.clone() {
                 while sock.can_recv() {
                     // Backpressure: leave it in the socket if the far side is
-                    // behind, and TCP will close the window by itself.
+                    // behind, and TCP will close the window by itself. Marked
+                    // stalled before the second look, so a pump that makes
+                    // room after it is sure to say so.
                     let permit = match tx.try_reserve() {
                         Ok(p) => p,
-                        Err(_) => break,
+                        Err(_) => {
+                            self.drained.stalled.store(true, Ordering::Release);
+                            match tx.try_reserve() {
+                                Ok(p) => p,
+                                Err(_) => break,
+                            }
+                        }
                     };
                     let chunk = sock.recv(|buf| {
                         let take = buf.len().min(16 * 1024);
@@ -672,12 +766,19 @@ impl Worker {
 }
 
 /// Move bytes between one SSH channel and the worker until either end stops.
-async fn pump(mut stream: Box<dyn Stream>, mut rx: mpsc::Receiver<Vec<u8>>, key: ConnKey, events: mpsc::UnboundedSender<Event>) {
+async fn pump(
+    mut stream: Box<dyn Stream>,
+    mut rx: mpsc::Receiver<Vec<u8>>,
+    key: ConnKey,
+    events: mpsc::UnboundedSender<Event>,
+    drained: Arc<Drained>,
+) {
     let mut buf = vec![0u8; 32 * 1024];
     loop {
         tokio::select! {
             out = rx.recv() => match out {
                 Some(bytes) => {
+                    drained.took_one();
                     if stream.write_all(&bytes).await.is_err() {
                         break;
                     }
