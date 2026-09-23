@@ -12,6 +12,10 @@ import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import dev.flint.term.data.Host
 import dev.flint.term.ui.MainActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /** Home-screen and launcher shortcuts that connect straight to a host. */
 object Shortcuts {
@@ -40,10 +44,42 @@ object Shortcuts {
         return ShortcutManagerCompat.requestPinShortcut(context, info(context, host), null)
     }
 
-    /** Long-press-the-app-icon shortcuts: the most recently used hosts. */
+    /**
+     * One at a time, off the main thread: each shortcut is a bitmap drawn and
+     * handed to the launcher over binder, which is not work for a tap to wait on.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
+
+    /** What the launcher was last given, so the same list is not drawn again. */
+    @Volatile private var shown: List<ShortcutFace>? = null
+
+    /** Everything a dynamic shortcut shows; when none of it moved, neither does the launcher. */
+    data class ShortcutFace(val id: String, val name: String, val color: Int)
+
+    /** The hosts the long-press menu offers, most recent first, as they would be drawn. */
+    fun recentFaces(hosts: List<Host>): List<ShortcutFace> =
+        hosts.filter { it.lastConnected > 0 }.sortedByDescending { it.lastConnected }.take(4)
+            .map { ShortcutFace(it.id, it.displayName, it.color) }
+
+    /**
+     * Long-press-the-app-icon shortcuts: the most recently used hosts.
+     *
+     * Called on every connection, and nearly every time the answer is the one
+     * the launcher already has — the host at the top was connected to again.
+     * Only a change in which hosts, their order or how they look redraws them.
+     */
     fun updateDynamic(context: Context, hosts: List<Host>) {
-        val recent = hosts.filter { it.lastConnected > 0 }.sortedByDescending { it.lastConnected }.take(4)
-        runCatching { ShortcutManagerCompat.setDynamicShortcuts(context, recent.map { info(context, it) }) }
+        val faces = recentFaces(hosts)
+        if (faces == shown) return
+        shown = faces
+        val byId = hosts.associateBy { it.id }
+        val recent = faces.mapNotNull { byId[it.id] }
+        val app = context.applicationContext
+        scope.launch {
+            runCatching { ShortcutManagerCompat.setDynamicShortcuts(app, recent.map { info(app, it) }) }
+                .onFailure { shown = null }
+        }
     }
 
     /** A rounded tile in the host's accent color with its initial. */
