@@ -24,6 +24,8 @@ import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
+import kotlin.concurrent.thread
 
 /**
  * Puts every SSH host into Android's file picker and the Files app, so any app
@@ -38,6 +40,12 @@ class SftpDocumentsProvider : DocumentsProvider() {
 
     private class Connection(val session: TerminalSession, val sftp: SftpClient) {
         @Volatile var lastUsed: Long = System.currentTimeMillis()
+        /**
+         * Calls running on it right now. A streamed read goes at the pace of
+         * whoever is reading the pipe and can outlast [IDLE_MS] while never
+         * being idle, so the reaper leaves a busy connection alone.
+         */
+        val busy = AtomicInteger()
         val alive: Boolean get() = session.isConnected
         fun close() {
             runCatching { sftp.shutdown() }
@@ -54,7 +62,7 @@ class SftpDocumentsProvider : DocumentsProvider() {
         override fun run() {
             val now = System.currentTimeMillis()
             val more = synchronized(connections) {
-                val dead = connections.filterValues { now - it.lastUsed > IDLE_MS || !it.alive }
+                val dead = connections.filterValues { (now - it.lastUsed > IDLE_MS && it.busy.get() == 0) || !it.alive }
                 dead.forEach { (id, c) -> c.close(); connections.remove(id) }
                 connections.isNotEmpty()
             }
@@ -163,6 +171,15 @@ class SftpDocumentsProvider : DocumentsProvider() {
     override fun openDocument(documentId: String, mode: String, signal: CancellationSignal?): ParcelFileDescriptor {
         val (hostId, path) = split(documentId)
         val writing = mode.contains('w')
+        if (mode == "r") {
+            val entry = try {
+                withSftp(hostId) { it.stat(path) }
+            } catch (e: Exception) {
+                throw FileNotFoundException("cannot read $path: ${e.message}")
+            }
+            if (entry.isDir) throw FileNotFoundException("$path is a directory")
+            if (streams(mimeOf(entry.name), entry.size.toLong())) return stream(hostId, path)
+        }
         val cache = File(context!!.cacheDir, "docs").apply { mkdirs() }
         val local = File.createTempFile("doc", null, cache)
         try {
@@ -194,6 +211,28 @@ class SftpDocumentsProvider : DocumentsProvider() {
                 local.delete()
             }
         }
+    }
+
+    /**
+     * Hand the reader a pipe and fill it as the file arrives, so it can start
+     * on the first bytes instead of waiting for the whole file to land in the
+     * cache first — and so a large file never has to fit in the cache at all.
+     */
+    private fun stream(hostId: String, path: String): ParcelFileDescriptor {
+        val (readEnd, writeEnd) = ParcelFileDescriptor.createReliablePipe()
+        thread(name = "sftp-stream", isDaemon = true) {
+            try {
+                // Rust takes (and closes) a duplicate; the original stays with
+                // writeEnd so the reader gets our verdict when it is closed —
+                // a failed download must not look like a short file.
+                withSftp(hostId) { it.downloadFd(path, writeEnd.dup().detachFd(), Silent) }
+                writeEnd.close()
+            } catch (e: Exception) {
+                Log.w(TAG, "streaming $path failed: ${e.message}")
+                runCatching { writeEnd.closeWithError(e.message ?: "SFTP read failed") }
+            }
+        }
+        return readEnd
     }
 
     override fun createDocument(parentDocumentId: String, mimeType: String, displayName: String): String {
@@ -266,12 +305,16 @@ class SftpDocumentsProvider : DocumentsProvider() {
             }
         }
         connection.lastUsed = System.currentTimeMillis()
+        connection.busy.incrementAndGet()
         return try {
-            body(connection.sftp).also { connection.lastUsed = System.currentTimeMillis() }
+            body(connection.sftp)
         } catch (e: IOException) {
             throw e
         } catch (e: Exception) {
             throw FileNotFoundException(e.message ?: "SFTP failed")
+        } finally {
+            connection.lastUsed = System.currentTimeMillis()
+            connection.busy.decrementAndGet()
         }
     }
 
@@ -312,6 +355,38 @@ class SftpDocumentsProvider : DocumentsProvider() {
         }
 
         fun join(dir: String, name: String) = if (dir.isEmpty() || dir == "/") "/$name" else "${dir.trimEnd('/')}/$name"
+
+        /** Below this a file is one or two round trips; the cached copy costs nothing and seeks. */
+        const val STREAM_ABOVE = 1L shl 20
+
+        /**
+         * Whether a read-only open gets a pipe rather than a cached copy.
+         *
+         * A pipe cannot seek, and some readers must: media players jump to an
+         * MP4's index at the end, PdfRenderer and the package installer refuse
+         * anything but a real file, and zip-based formats (office documents,
+         * EPUB, archives) start from the directory at the end. Those keep the
+         * cached copy. What is left — text, logs, dumps, and the Files app
+         * copying something to the phone — is read front to back.
+         */
+        fun streams(mime: String, size: Long): Boolean {
+            if (size <= STREAM_ABOVE) return false
+            val seeks = mime.startsWith("image/") || mime.startsWith("video/") || mime.startsWith("audio/") ||
+                mime.startsWith("application/vnd.") || mime in SEEKING_TYPES
+            return !seeks
+        }
+
+        private val SEEKING_TYPES = setOf(
+            "application/pdf",
+            "application/zip",
+            "application/epub+zip",
+            "application/java-archive",
+            "application/x-7z-compressed",
+            "application/x-rar-compressed",
+            "application/x-iso9660-image",
+            "application/x-sqlite3",
+            "application/msword",
+        )
 
         fun mimeOf(name: String): String {
             val ext = name.substringAfterLast('.', "").lowercase()

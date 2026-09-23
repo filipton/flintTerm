@@ -835,8 +835,7 @@ impl SshClient {
     pub async fn open_sftp(&self) -> Result<Sftp, SshError> {
         let channel = self.handle.channel_open_session().await?;
         channel.request_subsystem(true, "sftp").await?;
-        let session = russh_sftp::client::SftpSession::new(channel.into_stream()).await?;
-        Ok(Sftp::new(session))
+        Sftp::start(channel.into_stream()).await
     }
 
     /// Listen on `bind` locally and tunnel each connection to `target_host:target_port`
