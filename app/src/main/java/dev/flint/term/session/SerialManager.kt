@@ -171,6 +171,12 @@ class SerialConnection(
 ) : ExternalSink, SerialInputOutputManager.Listener {
     private val io = SerialInputOutputManager(port, this)
 
+    // Keystrokes arrive on the core's single I/O worker, and a write to an
+    // adapter that stopped answering blocks for the whole timeout. Handing the
+    // write to a thread of its own keeps that stall on this port instead of
+    // freezing every other session with it; one thread keeps the bytes in order.
+    private val writer = java.util.concurrent.Executors.newSingleThreadExecutor { Thread(it, "serial-write") }
+
     @Volatile
     private var closed = false
 
@@ -189,14 +195,21 @@ class SerialConnection(
         // Unplugged, or the adapter stopped answering: end the session with a reason.
         runCatching { session.core.note("Serial port closed: ${e.message ?: e.javaClass.simpleName}") }
         runCatching { session.core.externalClosed() }
+        writer.shutdown()
         runCatching { port.close() }
     }
 
     // ---- terminal -> device ----
     override fun onInput(data: ByteArray) {
         if (closed) return
-        runCatching { port.write(data, WRITE_TIMEOUT_MS) }
-            .onFailure { Log.w("SerialConnection", "write failed: ${it.message}") }
+        runCatching {
+            writer.execute {
+                if (!closed) {
+                    runCatching { port.write(data, WRITE_TIMEOUT_MS) }
+                        .onFailure { Log.w("SerialConnection", "write failed: ${it.message}") }
+                }
+            }
+        }
     }
 
     /** A serial line has no window-size channel; the far end learns it via `stty` if at all. */
@@ -205,6 +218,7 @@ class SerialConnection(
     override fun onClose() {
         if (closed) return
         closed = true
+        writer.shutdown()
         runCatching { io.stop() }
         runCatching { port.close() }
     }
