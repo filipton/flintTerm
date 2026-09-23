@@ -508,15 +508,17 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     }
 
     session.host?.let { host ->
-        view.onCommandEntered = { line ->
+        view.onCommandEntered = {
             // Recording uses the same reading of the line the suggestions do,
             // and only at a prompt: Enter in an editor is not a command. The
             // cursor being back inside the line does not matter here, since
             // the shell runs all of it, so only the guess is second-guessed.
-            val input = runCatching { session.core.inputLine() }.getOrNull()
+            // One trip for the line: it is the same text the view used to
+            // fetch on its own before calling here.
             if (atPrompt()) {
+                val input = runCatching { session.core.inputLine() }.getOrNull()
                 val command = input?.typed
-                    ?: dev.flint.term.data.CommandHistory.typed(input?.line ?: line, historyAll[host.id].orEmpty())
+                    ?: dev.flint.term.data.CommandHistory.typed(input?.line.orEmpty(), historyAll[host.id].orEmpty())
                 app.store.rememberCommand(host.id, command)
             }
             typed = ""

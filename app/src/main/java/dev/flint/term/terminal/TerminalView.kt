@@ -186,11 +186,11 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         }
 
     /**
-     * The command on the line when Enter was pressed, for the history that backs
-     * completions. Read before the key goes out, because after it the line is
-     * whatever the shell prints next.
+     * Enter was pressed, for the history that backs completions. Called before
+     * the key goes out, because after it the line is whatever the shell prints
+     * next; the listener reads the line itself, in the one trip it needs.
      */
-    var onCommandEntered: ((String) -> Unit)? = null
+    var onCommandEntered: (() -> Unit)? = null
 
     /**
      * A sideways fling asking for the next (`true`) or previous session.
@@ -2499,9 +2499,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             if (onAcceptGhost?.invoke() == true) return
         }
         if (press && key == KeyCode.Enter && !ctrl && !alt) {
-            onCommandEntered?.let { report ->
-                runCatching { core?.currentInput() }.getOrNull()?.let { report(it) }
-            }
+            onCommandEntered?.invoke()
         }
         val mods = modifierState.value
         val wantsCtrl = ctrl || mods.ctrl != ModState.OFF
