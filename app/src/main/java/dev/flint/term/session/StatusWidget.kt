@@ -301,7 +301,7 @@ class StatusWidgetWorker(context: Context, params: WorkerParameters) : Coroutine
             StatusWidget.refresh(context, widgetId)
             Result.retry()
         } finally {
-            session.destroy()
+            app.sessions.closeHeadless(session)
         }
     }
 

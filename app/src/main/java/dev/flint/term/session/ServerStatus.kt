@@ -558,7 +558,7 @@ class SessionExec(
 
     /** Nobody is asking any more; anything opened for this is closed. */
     fun close() {
-        borrowed?.destroy()
+        borrowed?.let { sessions.closeHeadless(it) }
         borrowed = null
     }
 }

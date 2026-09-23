@@ -182,7 +182,7 @@ class SshVpnService : VpnService() {
     /** Let go of the tunnel and the connection carrying it, keeping the service. */
     private fun release() {
         runCatching { session?.core?.stopVpn() }
-        session?.destroy()
+        session?.let { (application as App).sessions.closeHeadless(it) }
         session = null
         // The core closed the descriptor it was given; this only lets go of the
         // wrapper, which no longer owns anything.

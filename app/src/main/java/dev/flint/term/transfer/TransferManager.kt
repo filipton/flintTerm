@@ -211,7 +211,8 @@ class TransferManager(private val context: Context) {
         ) { t, sftp, upd ->
             // A headless session of its own: the destination need not be open in
             // the app, and this one goes away with the transfer.
-            val (destSession, destSftp) = (context.applicationContext as App).sessions.openSftpSession(destHost)
+            val sessions = (context.applicationContext as App).sessions
+            val (destSession, destSftp) = sessions.openSftpSession(destHost)
             t.destSftp = destSftp
             try {
                 if (t.cancelled.get()) throw CancelledException()
@@ -219,7 +220,7 @@ class TransferManager(private val context: Context) {
                 else copyOne(sftp, destSftp, entry.path, join(destDir, entry.name), t, upd, 0L, entry.size.toLong())
             } finally {
                 runCatching { destSftp.shutdown() }
-                runCatching { destSession.destroy() }
+                runCatching { sessions.closeHeadless(destSession) }
             }
         }
 

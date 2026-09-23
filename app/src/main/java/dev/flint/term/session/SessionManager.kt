@@ -383,13 +383,19 @@ class SessionManager(
         // Plain SSH even for a Mosh host: one command needs an exec channel, and
         // going through the Mosh bootstrap would only take the channel away again.
         val prepared = prepare(host, forceWake = false, allowWake = false, allowMosh = false)
-        prepared.knock?.let { PortKnock.send(it) }
         val backend = prepared.backend
         val session = TerminalSession(host = host, label = host.displayName, backend = backend, initialCols = 80, initialRows = 24, scrollback = 100, palette = Palettes.forTheme(host.theme, store.settings.value.theme), options = store.settings.value.coreOptions(host), verifyHostKey = ::verifyHostKey, prompter = prompts.prompter())
+        headless += session
         try {
+            // The same wait the other connections make: a node that is only
+            // starting fails the dial with "not connected yet", which reads as
+            // the host being down.
+            prepared.tailscaleId?.let { id -> tailscale?.let { ts -> kotlinx.coroutines.runBlocking { ts.awaitUp(id) } } }
+            prepared.knock?.let { PortKnock.send(it) }
             session.core.execOnce(command)
         } finally {
             session.destroy()
+            releaseHeadless(session)
         }
     }
 
@@ -423,7 +429,7 @@ class SessionManager(
             commands.size
         } finally {
             runCatching { sftp.shutdown() }
-            session.destroy()
+            closeHeadless(session)
         }
     }
 
@@ -440,7 +446,7 @@ class SessionManager(
         return try {
             session to withContext(Dispatchers.IO) { session.core.openSftp() }
         } catch (e: Throwable) {
-            session.destroy()
+            closeHeadless(session)
             throw e
         }
     }
@@ -448,9 +454,14 @@ class SessionManager(
     /**
      * An SSH connection with no terminal behind it, connected and ready.
      *
-     * The caller owns it and must destroy it. Nothing about it reaches the
-     * session list, so a background job — the file provider, the VPN — does not
-     * put a tab on the user's screen.
+     * The caller owns it and must end it, with [closeHeadless] where it can.
+     * Nothing about it reaches the session list, so a background job — the
+     * file provider, the VPN — does not put a tab on the user's screen.
+     *
+     * It does count as a user of the tunnel or tailnet it went through, which
+     * then stays up until the connection ends and is let go after it like any
+     * other. A plain [TerminalSession.destroy] ends it too: the disconnect
+     * that follows is noticed here.
      */
     suspend fun connectHeadless(host: Host): TerminalSession {
         // Plain SSH even for a Mosh host: what these connections do — SFTP, a
@@ -475,6 +486,7 @@ class SessionManager(
             // dialog appears over whichever screen they are on.
             prompter = prompts.prompter(),
         )
+        holdWhileConnected(session)
         try {
             prepared.tailscaleId?.let { tailscale?.awaitUp(it) }
             prepared.knock?.let { withContext(Dispatchers.IO) { PortKnock.send(it) } }
@@ -488,9 +500,37 @@ class SessionManager(
             }
             return session
         } catch (e: Throwable) {
-            session.destroy()
+            closeHeadless(session)
             throw e
         }
+    }
+
+    /**
+     * Connections with no tab that are using a tunnel or a tailnet: the widget,
+     * the VPN, the file provider, a one-off command. Without them in the count,
+     * a VPN brought up for one of them was only ever taken down by a terminal
+     * session ending, which on a phone that only uses the widget is never.
+     */
+    private val headless: MutableSet<TerminalSession> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    private fun holdWhileConnected(session: TerminalSession) {
+        headless += session
+        scope.launch {
+            // Also what a caller's own destroy() ends in, since the core
+            // reports the disconnect it makes on the way out.
+            session.state.first { it is SessionState.Disconnected }
+            releaseHeadless(session)
+        }
+    }
+
+    private fun releaseHeadless(session: TerminalSession) {
+        if (headless.remove(session)) releaseIdleTunnels()
+    }
+
+    /** End a connection from [connectHeadless], and let its tunnel go once nothing else needs it. */
+    fun closeHeadless(session: TerminalSession) {
+        session.destroy()
+        releaseHeadless(session)
     }
 
     fun openSsh(
@@ -792,17 +832,22 @@ class SessionManager(
     private fun releaseIdleTunnels() {
         scope.launch {
             kotlinx.coroutines.delay(IDLE_TUNNEL_GRACE_MS)
-            val live = _sessions.value.filterNot { it.isFinished }
-            val stillNeeded = live.mapNotNull { it.host }.let { hosts ->
-                hosts.flatMap { h -> store.jumpChain(h).map { it.tunnelId } + listOf(h.tunnelId) }.filterNotNull().toSet()
-            }
+            val live = (_sessions.value + headless).filterNot { it.isFinished || it.destroyed }
+            val hosts = live.mapNotNull { it.host }
+            val stillNeeded = hosts.flatMap { h ->
+                store.jumpChain(h).map { it.tunnelId } + listOf(h.tunnelId) + h.addresses.map { it.tunnelId }
+            }.filterNotNull().toSet()
+            // The core starts a tunnel on first use without telling the
+            // manager, so its last reading can say "stopped" about one that
+            // is up; asked again here, or such a tunnel would never be stopped.
+            withContext(Dispatchers.IO) { runCatching { tunnels.refreshStats() } }
             for (t in store.tunnels.value) {
                 if (t.id !in stillNeeded && tunnels.stats.value[t.id]?.running == true) {
                     tunnels.stop(t.id)
                 }
             }
-            val tailnetsInUse = live.mapNotNull { it.host }
-                .flatMap { h -> store.jumpChain(h).map { it.tailscaleId } + listOf(h.tailscaleId) }
+            val tailnetsInUse = hosts
+                .flatMap { h -> store.jumpChain(h).map { it.tailscaleId } + listOf(h.tailscaleId) + h.addresses.map { it.tailscaleId } }
                 .filterNotNull().toSet()
             for (p in store.tailscaleProfiles.value) {
                 if (p.id !in tailnetsInUse) tailscale?.downIfIdle(p.id)
