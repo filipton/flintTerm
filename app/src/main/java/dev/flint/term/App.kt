@@ -18,14 +18,32 @@ class App : Application() {
         private set
     lateinit var sessions: SessionManager
         private set
-    lateinit var transfers: TransferManager
-        private set
+    /**
+     * Built on first use rather than in [onCreate]: the process is also started
+     * for a quick settings tile, a widget or a reconnect in the background, and
+     * none of those move a file.
+     */
+    val transfers: TransferManager by lazy {
+        TransferManager(this).apply {
+            // Transfers are the one thing worth holding back on mobile data.
+            holdForWifi = { sessions.holdTransfers() }
+            awaitUnmetered = { network.state.first { !it.metered && it.online } }
+        }
+    }
     lateinit var tunnels: TunnelManager
         private set
-    lateinit var tailscale: TailscaleManager
-        private set
-    lateinit var serial: dev.flint.term.session.SerialManager
-        private set
+    /**
+     * Built when a tailnet exists or a screen asks, not at every start: a
+     * running manager watches the network and polls the embedded node once a
+     * minute, which is battery spent on nothing for anybody without a tailnet.
+     * Sessions only look for it through [SessionManager.tailscale], so building
+     * it is what hands it to them.
+     */
+    val tailscale: TailscaleManager by lazy {
+        TailscaleManager(this, store).also { sessions.tailscale = it }
+    }
+    /** Only a USB device, or the hosts screen looking for one, needs this. */
+    val serial: dev.flint.term.session.SerialManager by lazy { dev.flint.term.session.SerialManager(this) }
     lateinit var network: dev.flint.term.session.NetworkMonitor
         private set
     /** What was open last time, and the record of what is open now. */
@@ -38,13 +56,22 @@ class App : Application() {
         initLogging(BuildConfig.DEBUG)
         store = Store(this)
         tunnels = TunnelManager(store)
-        tailscale = TailscaleManager(this, store)
         network = dev.flint.term.session.NetworkMonitor(this)
         sessions = SessionManager(this, store, network)
-        serial = dev.flint.term.session.SerialManager(this)
         open = dev.flint.term.session.OpenSessions(java.io.File(filesDir, "open.json"), appScope)
-        sessions.tailscale = tailscale
         sessions.tunnels = tunnels
+        // A host can only point at a tailnet that exists, so the manager has to
+        // be there before any session starts once there is one — now, if the
+        // store already has it, or the moment one arrives (added, or restored
+        // from a backup) otherwise.
+        if (store.tailscaleProfiles.value.isNotEmpty()) {
+            tailscale
+        } else {
+            appScope.launch {
+                store.tailscaleProfiles.first { it.isNotEmpty() }
+                tailscale
+            }
+        }
         sessions.openSessions = open
         // Six hundred palettes in an asset: parsed once, here, off the main
         // thread, so no session or screen ever waits on the file. A session
@@ -69,10 +96,6 @@ class App : Application() {
             override fun onActivitySaveInstanceState(a: android.app.Activity, b: android.os.Bundle) {}
             override fun onActivityDestroyed(a: android.app.Activity) {}
         })
-        transfers = TransferManager(this)
-        // Transfers are the one thing worth holding back on mobile data.
-        transfers.holdForWifi = { sessions.holdTransfers() }
-        transfers.awaitUnmetered = { network.state.first { !it.metered && it.online } }
         // WireGuard's timers would otherwise keep retrying handshakes with no
         // link at all, which is pure battery and data on a spotty connection.
         appScope.launch {
