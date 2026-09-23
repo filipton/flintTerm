@@ -15,6 +15,7 @@ use term_core::{
     CellFlags, CursorLine, Emulator, EmulatorEvent, InterceptEvent, InterceptOptions, Interceptor, Palette,
     PromptMark, SelectionKind, SnapshotHeader, SnapshotWriter, TermModes, ViewPoint,
 };
+use term_core::snapshot::{encode_cell, CELL_BYTES, HEADER_BYTES};
 
 /// Collects events emitted by the terminal so the owner can drain them after
 /// each `feed`.
@@ -736,13 +737,17 @@ impl Emulator for AlacrittyEmulator {
             history_size: grid.history_size() as u32,
             selection,
         };
-        let mut w = SnapshotWriter::new(out, &header);
+        SnapshotWriter::new(out, &header);
+        // The cells are written into place rather than appended one at a time,
+        // which would check the capacity for every one of them.
+        out.resize(HEADER_BYTES + rows * cols * CELL_BYTES, 0);
+        let dst_rows = out[HEADER_BYTES..].chunks_exact_mut(cols * CELL_BYTES);
 
-        for row in 0..rows {
+        for (row, dst_row) in dst_rows.enumerate() {
             let line = Line(row as i32) - display_offset;
             let grid_row = &grid[line];
-            for col in 0..cols {
-                let cell = &grid_row[Column(col)];
+            let cells = grid_row.into_iter().zip(dst_row.as_chunks_mut::<CELL_BYTES>().0);
+            for (col, (cell, dst)) in cells.enumerate() {
                 let flags = cell.flags;
                 let cell_fg = if self.bold_is_bright && flags.contains(Flags::BOLD) {
                     brighten(cell.fg)
@@ -802,7 +807,7 @@ impl Emulator for AlacrittyEmulator {
                     }
                 }
                 let cp = if out_flags & CellFlags::WIDE_SPACER != 0 { 0 } else { cell.c as u32 };
-                w.cell(cp, fg, bg, out_flags);
+                encode_cell(dst, cp, fg, bg, out_flags);
             }
         }
     }
