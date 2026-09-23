@@ -69,48 +69,82 @@ class TailscaleManager(private val context: Context, private val store: Store) {
     /** Profiles brought up only to get through a first login. */
     private val joining = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
-    init {
-        if (available) {
-            migrateSingleNodeLayout()
-            pushInterfaces()
-            runCatching {
-                val cm = context.getSystemService(ConnectivityManager::class.java)
-                cm.registerNetworkCallback(NetworkRequest.Builder().build(), object : ConnectivityManager.NetworkCallback() {
-                    override fun onAvailable(network: Network) = pushInterfaces()
-                    override fun onLost(network: Network) = pushInterfaces()
-                    override fun onLinkPropertiesChanged(network: Network, lp: android.net.LinkProperties) = pushInterfaces()
-                })
-            }
-            // Nothing is started here: a profile means "may be used", not "keep
-            // a node up". The poll only has to be quick while something is
-            // actually happening, so an idle phone with every node stopped asks
-            // once a minute instead of twelve times, and a device that cannot
-            // run Tailscale at all never asks.
-            scope.launch {
-                while (true) {
-                    val watched = watchers.get() > 0
-                    val live = _statuses.value.values.any { it.state != "stopped" }
-                    if (watched || live) refresh()
-                    val busy = _statuses.value.values.any { it.state == "starting" || it.state == "needs-login" }
-                    val wait = when {
-                        busy -> 1_500L
-                        watched -> 5_000L
-                        live -> 15_000L
-                        else -> 60_000L
-                    }
-                    // Anything that starts a node pokes this, so waiting a
-                    // minute never delays a connection.
-                    withTimeoutOrNull(wait) { wake.receive() }
-                }
-            }
-        }
-    }
-
     /** Screens showing live node state, so the poll knows to keep up. */
     private val watchers = java.util.concurrent.atomic.AtomicInteger(0)
 
     /** Wakes the status poll when something has just changed. */
     private val wake = kotlinx.coroutines.channels.Channel<Unit>(kotlinx.coroutines.channels.Channel.CONFLATED)
+
+    /** Registered only while a node is running; see [followNetworks]. */
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
+    init {
+        if (available) {
+            migrateSingleNodeLayout()
+            // Nothing is started here: a profile means "may be used", not "keep
+            // a node up". The poll only has to be quick while something is
+            // actually happening, and with every node stopped and no screen
+            // showing them there is nothing to ask at all, so it sleeps until
+            // something starts a node or opens a screen, both of which wake it.
+            // A device that cannot run Tailscale never asks.
+            scope.launch {
+                var loginSince = 0L
+                while (true) {
+                    val watched = watchers.get() > 0
+                    // A node in "error" is not doing anything that a poll
+                    // could see change; the next ensureUp rebuilds it and
+                    // wakes this loop.
+                    val live = _statuses.value.values.any { it.state != "stopped" && it.state != "error" }
+                    if (watched || live) refresh()
+                    val statuses = _statuses.value.values
+                    followNetworks(statuses.any { it.state != "stopped" && it.state != "error" })
+                    val starting = statuses.any { it.state == "starting" }
+                    val login = statuses.any { it.state == "needs-login" }
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    loginSince = if (!login) 0L else loginSince.takeIf { it > 0 } ?: now
+                    val wait = when {
+                        starting -> 1_500L
+                        // Quick while somebody is plausibly in the browser
+                        // finishing the login, but a node left waiting on one
+                        // overnight has no business polling every second.
+                        login -> if (now - loginSince < LOGIN_QUICK_MS) 1_500L else 30_000L
+                        watched -> 5_000L
+                        live -> 15_000L
+                        else -> null
+                    }
+                    // Anything that starts a node pokes this, so waiting never
+                    // delays a connection.
+                    if (wait == null) wake.receive() else withTimeoutOrNull(wait) { wake.receive() }
+                }
+            }
+        }
+    }
+
+    /**
+     * Keep the nodes' view of the phone's interfaces current, only while one
+     * is running.
+     *
+     * Every network change on a phone — each Wi-Fi scan result and cell
+     * handover — would otherwise wake the app to list the interfaces for
+     * nodes that are not there to read them. A node that starts gets a fresh
+     * list anyway, in [ensureUp].
+     */
+    @Synchronized
+    private fun followNetworks(any: Boolean) {
+        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return
+        val current = networkCallback
+        if (any && current == null) {
+            val cb = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) = pushInterfaces()
+                override fun onLost(network: Network) = pushInterfaces()
+                override fun onLinkPropertiesChanged(network: Network, lp: android.net.LinkProperties) = pushInterfaces()
+            }
+            if (runCatching { cm.registerNetworkCallback(NetworkRequest.Builder().build(), cb) }.isSuccess) networkCallback = cb
+        } else if (!any && current != null) {
+            runCatching { cm.unregisterNetworkCallback(current) }
+            networkCallback = null
+        }
+    }
 
     /** Called by a screen that is showing node state, and again when it goes. */
     fun watch() {
@@ -214,6 +248,7 @@ class TailscaleManager(private val context: Context, private val store: Store) {
     fun ensureUp(id: String) {
         if (!available) return
         scope.launch {
+            followNetworks(true)
             pushInterfaces()
             // A node that failed to start cannot be restarted in place; rebuild it.
             if (status(id).state == "error") runCatching { tailscaleDown(id) }
@@ -332,6 +367,9 @@ class TailscaleManager(private val context: Context, private val store: Store) {
 
     private companion object {
         const val TEST_TIMEOUT_MS = 25_000L
+
+        /** How long a node waiting for a login is polled quickly. */
+        const val LOGIN_QUICK_MS = 60_000L
     }
 
     private fun defaultHostname(): String =
