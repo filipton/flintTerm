@@ -70,6 +70,7 @@ class TransferService : Service() {
 
         for (t in all.filter { !it.isActive && it.id !in finalized }) {
             finalized += t.id
+            posted.remove(t.id)
             if (foregroundId == t.id.hashCode()) standDown()
             nm.cancel(t.id.hashCode())
             if (t.status != TransferStatus.CANCELLED) nm.notify(t.id.hashCode() + 1, buildFinal(t))
@@ -87,12 +88,53 @@ class TransferService : Service() {
 
         // The first active transfer carries the foreground notification; the rest are ordinary ones.
         val first = active.first()
-        if (foregroundId != null && foregroundId != first.id.hashCode()) {
+        val handover = foregroundId != first.id.hashCode()
+        if (foregroundId != null && handover) {
             stopForeground(STOP_FOREGROUND_DETACH)
         }
-        promote(first.id.hashCode(), buildProgress(first))
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (handover || awaitingPromotion || due(first, now)) {
+            promote(first.id.hashCode(), buildProgress(first))
+            posted[first.id] = Posted.of(first, now)
+        }
         foregroundId = first.id.hashCode()
-        for (t in active.drop(1)) nm.notify(t.id.hashCode(), buildProgress(t))
+        for (t in active.drop(1)) {
+            if (!due(t, now)) continue
+            nm.notify(t.id.hashCode(), buildProgress(t))
+            posted[t.id] = Posted.of(t, now)
+        }
+    }
+
+    /** What each transfer's notification last said, and when. */
+    private val posted = HashMap<String, Posted>()
+
+    /**
+     * Whether a transfer's notification is worth posting again.
+     *
+     * The manager reports progress a few times a second for the screen that
+     * shows it, and each post is a binder call and a relayout in SystemUI that
+     * wakes the CPU with the screen off. So a change in what the notification
+     * says — started, the next file, a total found — goes out at once, while
+     * mere progress goes out at most once a second, and only when the bar
+     * would actually move.
+     */
+    private fun due(t: Transfer, now: Long): Boolean {
+        val last = posted[t.id] ?: return true
+        val next = Posted.of(t, now)
+        if (next.shape != last.shape) return true
+        return next.progress != last.progress && now - last.at >= PROGRESS_INTERVAL_MS
+    }
+
+    private data class Posted(val shape: List<Any?>, val progress: Long, val at: Long) {
+        companion object {
+            fun of(t: Transfer, at: Long) = Posted(
+                listOf(t.status, t.name, t.filesDone, t.filesTotal, t.currentFile, t.route, t.total == null),
+                // Whole percent when the size is known; with no total the bar
+                // is indeterminate and the byte count is all that moves.
+                t.fraction?.let { (it * 100).toLong() } ?: t.done,
+                at,
+            )
+        }
     }
 
     private fun promote(id: Int, notification: Notification) {
@@ -209,6 +251,8 @@ class TransferService : Service() {
         private const val ACTION_CANCEL = "dev.flint.term.transfer.CANCEL"
         private const val IDLE_ID = 0x7d000001
         private const val EXTRA_ID = "id"
+        /** The fastest a progress notification is re-posted. */
+        private const val PROGRESS_INTERVAL_MS = 1_000L
 
         /** Start (or poke) the service; it then follows the manager's state on its own. */
         fun refresh(context: Context) {

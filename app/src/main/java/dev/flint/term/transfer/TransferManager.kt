@@ -422,7 +422,11 @@ class TransferManager(private val context: Context) {
         override fun onProgress(done: ULong, fileTotal: ULong?): Boolean = !r.cancelled.get()
     }
 
-    /** Progress callback with speed/ETA, throttled to ~5 updates per second. */
+    /**
+     * Progress callback with speed/ETA, throttled to ~5 updates per second
+     * while the app is in front and once a second otherwise, when only the
+     * notification — itself held to that — is there to read it.
+     */
     private fun progressListener(r: Running, upd: ((Transfer) -> Transfer) -> Unit, baseDone: Long, total: Long?): TransferListener {
         val samples = ArrayDeque<Pair<Long, Long>>() // (time ms, bytes)
         var lastPush = 0L
@@ -433,7 +437,8 @@ class TransferManager(private val context: Context) {
                 val absolute = baseDone + done.toLong()
                 samples.addLast(now to absolute)
                 while (samples.size > 2 && now - samples.first().first > 3000) samples.removeFirst()
-                if (now - lastPush < 200 && fileTotal?.toLong() != done.toLong()) return true
+                val interval = if (App.inForeground) 200L else 1_000L
+                if (now - lastPush < interval && fileTotal?.toLong() != done.toLong()) return true
                 lastPush = now
                 val (t0, b0) = samples.first()
                 val dt = now - t0
