@@ -9,21 +9,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import java.io.File
 
 /**
  * Single JSON document on disk, secrets encrypted with [Crypto]. Small enough
- * that a full rewrite on every change is cheaper than a database.
+ * that a full rewrite is cheaper than a database, as long as a burst of changes
+ * is one rewrite and not one each: see [CoalescingWriter] and [SecretCache].
  */
 class Store(context: Context) {
     private val appContext = context.applicationContext
     private val file = File(context.filesDir, "store.json")
     private val tmp = File(context.filesDir, "store.json.tmp")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val writeLock = Mutex()
+    private val secrets = SecretCache(Crypto::encrypt, Crypto::decrypt)
+    private val writer = CoalescingWriter<Snapshot>(scope, WRITE_QUIET_MS, ::write)
 
     private val _hosts = MutableStateFlow<List<Host>>(emptyList())
     val hosts: StateFlow<List<Host>> = _hosts
@@ -256,18 +256,19 @@ class Store(context: Context) {
         val trimmed = command.trim()
         if (after === before || after == before) {
             // Already known, but running it again is exactly what the count is for.
-            if (CommandHistory.worthKeeping(command) && trimmed in after) bumpCount(hostId, trimmed)
-            return
+            if (!CommandHistory.worthKeeping(command) || trimmed !in after) return
+        } else {
+            _history.update { it + (hostId to after) }
         }
-        _history.update { it + (hostId to after) }
-        bumpCount(hostId, trimmed)
+        bumpCount(hostId, trimmed, after)
         persist()
     }
 
-    private fun bumpCount(hostId: String, command: String) {
+    private fun bumpCount(hostId: String, command: String, kept: List<String>) {
         _historyCounts.update { all ->
             val forHost = all[hostId].orEmpty()
-            all + (hostId to (forHost + (command to ((forHost[command] ?: 0) + 1))))
+            val bumped = forHost + (command to ((forHost[command] ?: 0) + 1))
+            all + (hostId to CommandHistory.prune(bumped, kept))
         }
     }
 
@@ -281,7 +282,7 @@ class Store(context: Context) {
                 val forHost = all[hostId].orEmpty()
                 // The file's own repetitions are better evidence than anything
                 // counted here, so they win rather than adding to it.
-                all + (hostId to (forHost + counts.mapValues { (c, n) -> maxOf(n, forHost[c] ?: 0) }))
+                all + (hostId to CommandHistory.prune(forHost + counts.mapValues { (c, n) -> maxOf(n, forHost[c] ?: 0) }, merged))
             }
         }
         persist()
@@ -324,42 +325,64 @@ class Store(context: Context) {
         persist()
     }
 
+    /**
+     * A slider calls this on every frame of a drag, most of which land on the
+     * value it already has, so a change to nothing is not a change at all.
+     */
     fun updateSettings(block: (Settings) -> Settings) {
-        _settings.update(block)
+        while (true) {
+            val old = _settings.value
+            val new = block(old)
+            if (new == old) return
+            if (_settings.compareAndSet(old, new)) break
+        }
         Schemes.setCustom(_settings.value.customSchemes)
         persist()
     }
 
     // ---- persistence -----------------------------------------------------
 
+    /**
+     * Queues the current state for the disk. Taking the snapshot is only
+     * gathering references to immutable values, so it is done here, where the
+     * state is known to be the one just changed; turning it into JSON and
+     * sealing its secrets is left to the writer, off whichever thread called.
+     */
     private fun persist() {
-        val snapshot = toJson()
-        scope.launch {
-            writeLock.withLock {
-                try {
-                    tmp.writeText(snapshot.toString())
-                    if (!tmp.renameTo(file)) {
-                        file.writeText(snapshot.toString())
-                    }
-                } catch (e: Exception) {
-                    Log.e("Store", "persist failed", e)
-                }
+        writer.submit(snapshot())
+    }
+
+    /**
+     * Puts any change still waiting on disk before returning. For when the
+     * process may be about to go: the app leaving the screen is the last word
+     * Android promises before it may kill us.
+     */
+    fun flush() = writer.flush()
+
+    private fun write(snap: Snapshot) {
+        try {
+            val text = secrets.write { seal -> StoreJson.write(snap, seal) }.toString()
+            tmp.writeText(text)
+            if (!tmp.renameTo(file)) {
+                file.writeText(text)
             }
+        } catch (e: Exception) {
+            Log.e("Store", "persist failed", e)
         }
     }
 
     private fun load() {
         if (!file.exists()) return
         try {
-            fromJson(JSONObject(file.readText()))
+            val snap = StoreJson.read(JSONObject(file.readText()), secrets::open)
+            // Files from before the counts were bounded can hold a count for
+            // every command ever run; only those still in the history matter.
+            val counts = snap.historyCounts.mapValues { (id, c) -> CommandHistory.prune(c, snap.history[id].orEmpty()) }
+            replace(snap.copy(historyCounts = counts))
         } catch (e: Exception) {
             Log.e("Store", "load failed", e)
         }
     }
-
-    private fun toJson(): JSONObject = StoreJson.write(snapshot(), Crypto::encrypt)
-
-    private fun fromJson(root: JSONObject) = replace(StoreJson.read(root, Crypto::decrypt))
 
     /** Everything, as plain values; what a backup is made from. */
     fun snapshot(): Snapshot = Snapshot(
@@ -391,6 +414,9 @@ class Store(context: Context) {
     fun restore(snap: Snapshot) {
         replace(snap)
         persist()
+        // Not left to wait out the quiet period: a restore is the one change
+        // somebody is likely to check survived by closing the app straight away.
+        scope.launch { writer.flush() }
         // Hosts shown in the Files app may have arrived or changed name.
         dev.flint.term.files.SftpDocumentsProvider.refreshRoots(appContext)
     }
@@ -402,5 +428,8 @@ class Store(context: Context) {
          * directory can be moved into place.
          */
         const val LEGACY_TAILSCALE_ID = "tailscale-default"
+
+        /** Long enough to fold a drag or a burst of commands into one write. */
+        private const val WRITE_QUIET_MS = 750L
     }
 }

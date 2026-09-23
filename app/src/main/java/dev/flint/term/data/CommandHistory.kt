@@ -186,6 +186,21 @@ object CommandHistory {
         return counts
     }
 
+    /**
+     * [counts] without the commands [kept] no longer holds.
+     *
+     * A count is only read beside its command in the history, so one for a
+     * command pushed out past [LIMIT] is dead weight — and a history file can
+     * bring thousands. Nothing is dropped until the counts outnumber the
+     * history, which keeps them bounded by [LIMIT] and costs nothing on the
+     * Enter that did not push anything out.
+     */
+    fun prune(counts: Map<String, Int>, kept: List<String>): Map<String, Int> {
+        if (counts.size <= kept.size) return counts
+        val keep = kept.toHashSet()
+        return counts.filterKeys { it in keep }
+    }
+
     fun parseShellHistory(text: String): List<String> {
         val out = LinkedHashSet<String>()
         for (raw in text.lineSequence()) {

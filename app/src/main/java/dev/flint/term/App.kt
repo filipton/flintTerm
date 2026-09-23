@@ -83,7 +83,16 @@ class App : Application() {
         }
         registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(a: android.app.Activity) { foregroundActivities++ }
-            override fun onActivityStopped(a: android.app.Activity) { foregroundActivities--; if (foregroundActivities <= 0) lastBackgroundedAt = System.currentTimeMillis() }
+            override fun onActivityStopped(a: android.app.Activity) {
+                foregroundActivities--
+                if (foregroundActivities <= 0) {
+                    lastBackgroundedAt = System.currentTimeMillis()
+                    // Leaving the screen is the last notice Android gives before
+                    // it may kill the process, so a change still waiting out the
+                    // store's quiet period is written now rather than lost.
+                    store.flush()
+                }
+            }
             override fun onActivityCreated(a: android.app.Activity, b: android.os.Bundle?) {}
             // A biometric prompt needs an activity to attach to, and the only
             // one it may attach to is the one the person is looking at.
