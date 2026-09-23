@@ -4,6 +4,7 @@
 pub mod agent;
 pub mod cert;
 pub mod forward;
+pub mod keepalive;
 pub mod keys;
 pub mod proxy;
 pub mod sftp;
@@ -22,6 +23,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::Mutex;
 
 pub use forward::{LocalForward, RemoteForward};
+pub use keepalive::KeepaliveSwitch;
 pub use agent::{AgentKeys, AgentPolicy, AllowAll};
 pub use cert::{CertificateInfo, Validity};
 pub use proxy::{ProxyConfig, ProxyKind};
@@ -206,6 +208,7 @@ pub struct ConnectOptions {
     pub username: String,
     /// Tried in order until one succeeds.
     pub auth: Vec<Auth>,
+    /// The interval on screen; see [`SshClient::set_background`] for the other one.
     pub keepalive_interval: Option<Duration>,
     pub connect_timeout: Duration,
     /// Route the TCP connection through a SOCKS5/HTTP proxy.
@@ -253,6 +256,8 @@ struct ClientHandler {
     agent: Option<AgentKeys>,
     on_banner: Option<Arc<dyn BannerSink>>,
     kex: KexAlgorithm,
+    /// Stamped as data arrives, so the keepalive waits for a quiet link.
+    activity: Arc<keepalive::Activity>,
 }
 
 /// What the two sides settled on, once they have; shared with the client so it
@@ -278,6 +283,30 @@ impl client::Handler for ClientHandler {
         _session: &mut client::Session,
     ) -> Result<(), Self::Error> {
         *self.kex.lock().unwrap() = Some(names.kex.as_ref().to_string());
+        Ok(())
+    }
+
+    // Anything the server sends is proof it is there, and every byte of a
+    // session's output passes through one of these three. Stamping them is what
+    // keeps a connection with output flowing from sending keepalives at all.
+    async fn data(&mut self, _channel: russh::ChannelId, _data: &[u8], _session: &mut client::Session) -> Result<(), Self::Error> {
+        self.activity.stamp();
+        Ok(())
+    }
+
+    async fn extended_data(
+        &mut self,
+        _channel: russh::ChannelId,
+        _ext: u32,
+        _data: &[u8],
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        self.activity.stamp();
+        Ok(())
+    }
+
+    async fn window_adjusted(&mut self, _channel: russh::ChannelId, _new_size: u32, _session: &mut client::Session) -> Result<(), Self::Error> {
+        self.activity.stamp();
         Ok(())
     }
 
@@ -374,6 +403,8 @@ pub struct SshClient {
     remote_targets: RemoteTargets,
     forward_agent: bool,
     kex: KexAlgorithm,
+    /// Dropped with the client, which is what ends its keepalive task.
+    keepalive: Arc<keepalive::Control>,
 }
 
 impl SshClient {
@@ -402,9 +433,10 @@ impl SshClient {
     where
         R: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
+        // russh's own keepalive reads its interval once and cannot be moved
+        // afterwards; ours runs instead (see `keepalive`), so this one is off.
         let config = client::Config {
-            keepalive_interval: opts.keepalive_interval,
-            keepalive_max: 3,
+            keepalive_interval: None,
             nodelay: true,
             preferred: russh::Preferred {
                 kex: std::borrow::Cow::Borrowed(KEX_ORDER),
@@ -416,6 +448,9 @@ impl SshClient {
         let remote_targets: RemoteTargets = Default::default();
         let forward_agent = opts.agent.is_some();
         let kex: KexAlgorithm = Default::default();
+        let activity = Arc::new(keepalive::Activity::new());
+        let cut = keepalive::Cut::new();
+        let stream = keepalive::Severable::new(stream, cut.clone());
         let handler = ClientHandler {
             host: opts.host.clone(),
             port: opts.port,
@@ -424,6 +459,7 @@ impl SshClient {
             agent: opts.agent.clone(),
             on_banner: opts.on_banner.clone(),
             kex: kex.clone(),
+            activity: activity.clone(),
         };
         let mut handle = client::connect_stream(Arc::new(config), stream, handler).await.map_err(|e| match e {
             SshError::Ssh(russh::Error::UnknownKey) => SshError::HostKeyRejected,
@@ -434,7 +470,9 @@ impl SshClient {
         for auth in &opts.auth {
             match Self::try_auth(&mut handle, &opts.username, auth, opts.prompter.as_ref()).await {
                 Ok(()) => {
-                    return Ok(SshClient { handle: Arc::new(handle), remote_targets, forward_agent, kex });
+                    let handle = Arc::new(handle);
+                    let keepalive = Self::start_keepalive(&handle, opts.keepalive_interval, activity, cut);
+                    return Ok(SshClient { handle, remote_targets, forward_agent, kex, keepalive });
                 }
                 Err(SshError::AuthFailed(reason)) => last_reason = reason,
                 Err(e) => return Err(e),
@@ -442,6 +480,51 @@ impl SshClient {
         }
         let _ = handle.disconnect(Disconnect::ByApplication, "auth failed", "en").await;
         Err(SshError::AuthFailed(last_reason))
+    }
+
+    /// Keepalives start only once logged in, as russh's did: before that the
+    /// login itself is the traffic, and a prompt waiting on a person is not a
+    /// dead server.
+    fn start_keepalive(
+        handle: &Arc<Handle<ClientHandler>>,
+        every: Option<Duration>,
+        activity: Arc<keepalive::Activity>,
+        cut: Arc<keepalive::Cut>,
+    ) -> Arc<keepalive::Control> {
+        let (control, interval) = keepalive::Control::new(every);
+        // Weak, so the task never keeps a connection open that everything else
+        // has let go of.
+        let handle = Arc::downgrade(handle);
+        activity.stamp();
+        tokio::spawn(async move {
+            let ping = || {
+                let handle = handle.upgrade();
+                async move {
+                    match handle {
+                        // send_ping also returns once the session has ended,
+                        // with nothing answered; the closed check tells the two apart.
+                        Some(h) => h.send_ping().await.is_ok() && !h.is_closed(),
+                        None => false,
+                    }
+                }
+            };
+            if keepalive::run(interval, &activity, ping).await == keepalive::Ended::Unanswered {
+                log::info!("no answer to {} keepalives; dropping the connection", keepalive::MAX_UNANSWERED);
+                cut.sever();
+            }
+        });
+        control
+    }
+
+    /// Move the keepalive between the interval the connection was made with and
+    /// the longer one for a session nobody is looking at. Takes effect at once.
+    pub fn set_background(&self, background: bool) {
+        self.keepalive.set_background(background);
+    }
+
+    /// A handle on [`SshClient::set_background`] that does not keep the client alive.
+    pub fn keepalive_switch(&self) -> KeepaliveSwitch {
+        KeepaliveSwitch(Arc::downgrade(&self.keepalive))
     }
 
     /// The key exchange both sides settled on ("mlkem768x25519-sha256"), once

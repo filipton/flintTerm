@@ -13,3 +13,5 @@ rsa = { version = "0.9", default-features = false, features = ["std", "sha2"] }
 sha2 = "0.10"
 
 [dev-dependencies]
+# Paused time, for the keepalive tests: minutes of idling in no time at all.
+tokio = { workspace = true, features = ["test-util"] }

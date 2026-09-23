@@ -82,11 +82,14 @@ class App : Application() {
             sessions.applyTheme()
         }
         registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
-            override fun onActivityStarted(a: android.app.Activity) { foregroundActivities++ }
+            override fun onActivityStarted(a: android.app.Activity) {
+                if (foregroundActivities++ == 0) sessions.setBackground(false)
+            }
             override fun onActivityStopped(a: android.app.Activity) {
                 foregroundActivities--
                 if (foregroundActivities <= 0) {
                     lastBackgroundedAt = System.currentTimeMillis()
+                    sessions.setBackground(true)
                     // Leaving the screen is the last notice Android gives before
                     // it may kill the process, so a change still waiting out the
                     // store's quiet period is written now rather than lost.

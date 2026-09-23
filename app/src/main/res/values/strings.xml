@@ -1230,7 +1230,7 @@
     <string name="battery_why_redraw_limit">Under a flood of output a limit saves about a fifth of the battery, on text going past too fast to read.</string>
     <string name="battery_why_data_saver">Waits for Wi-Fi to transfer files and sends keepalives less often.</string>
     <string name="battery_keepalive">Keepalive interval</string>
-    <string name="battery_why_keepalive">Every %1$d seconds each open session sends a packet, which wakes the radio. Sixty seconds or more is easier on it.</string>
+    <string name="battery_why_keepalive">On screen, every %1$d seconds each quiet session sends a packet, which wakes the radio; in the background it waits at least three minutes. Sixty seconds or more is easier on it.</string>
     <string name="battery_why_blink">A blinking cursor redraws the screen twice a second while the terminal is in front.</string>
     <string name="battery_why_discovery">Listens for servers announcing themselves whenever the host list is open.</string>
     <string name="battery_mosh">Use Mosh where you can</string>

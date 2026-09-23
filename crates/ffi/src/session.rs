@@ -757,6 +757,12 @@ struct Inner {
     sink: Mutex<Option<Arc<dyn OutputSink>>>,
     /// What this session is allowed to do beyond plain terminal behavior.
     options: Mutex<Options>,
+    /// Whether the app is out of sight; see [`Session::set_background`].
+    background: AtomicBool,
+    /// Every SSH connection this session has made — target, jump hosts, the
+    /// one holding a Mosh agent socket — held weakly, so the app going to the
+    /// background reaches all of their keepalives.
+    keepalives: Mutex<Vec<ssh_core::KeepaliveSwitch>>,
 }
 
 #[derive(Default)]
@@ -1147,8 +1153,23 @@ impl Session {
                 vpn: Mutex::new(None),
                 sink: Mutex::new(None),
                 options: Mutex::new(options),
+                background: AtomicBool::new(false),
+                keepalives: Mutex::new(Vec::new()),
             }),
         })
+    }
+
+    /// Tell the session whether the app is on screen.
+    ///
+    /// Its SSH connections move to a longer keepalive interval while it is not
+    /// ([`ssh_core::keepalive::BACKGROUND_FLOOR`]): the keepalive is what wakes
+    /// the radio when nothing else is happening, and a session in the
+    /// background only needs its NAT mapping held, not a dead link noticed
+    /// within the minute. Safe to call before connecting; the connections made
+    /// later start with it. Mosh's own traffic is not SSH and is unaffected.
+    pub fn set_background(&self, background: bool) {
+        self.inner.background.store(background, Ordering::SeqCst);
+        self.inner.keepalives.lock().retain(|k| k.set_background(background));
     }
 
     /// Change what the session is allowed to do while it is up, so a switch
@@ -2065,6 +2086,17 @@ impl Inner {
         }
     }
 
+    /// Put a new connection's keepalive under [`Session::set_background`].
+    ///
+    /// The flag is read after the switch is in the list, so a change racing a
+    /// connection still reaches it: either the change sees the switch, or this
+    /// sees the change.
+    fn track_keepalive(&self, client: &SshClient) {
+        let switch = client.keepalive_switch();
+        self.keepalives.lock().push(switch.clone());
+        switch.set_background(self.background.load(Ordering::SeqCst));
+    }
+
     async fn close_jumps(&self) {
         let jumps = std::mem::take(&mut *self.jumps.lock().await);
         for j in jumps.into_iter().rev() {
@@ -2398,6 +2430,7 @@ impl Inner {
                         .await
                     {
                         Ok(client) => {
+                            self.track_keepalive(&client);
                             *self.used_endpoint.lock() = Some(candidate.clone());
                             self.step(&key, format!("Connected to {name}"), StepStatus::Done);
                             self.note_kex(&client);
@@ -2465,6 +2498,7 @@ impl Inner {
                 }
             };
             self.step(&key, format!("Jump host {} — authenticated", hop.host), StepStatus::Done);
+            self.track_keepalive(&client);
             let client = Arc::new(client);
             self.jumps.lock().await.push(client.clone());
             previous = Some(client);
@@ -2480,6 +2514,7 @@ impl Inner {
             verifier,
         )
         .await?;
+        self.track_keepalive(&client);
         self.note_kex(&client);
         self.progress("Authenticated");
         if config.forward_agent {

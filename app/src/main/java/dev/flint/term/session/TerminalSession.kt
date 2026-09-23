@@ -291,6 +291,11 @@ class TerminalSession(
         if (path.startsWith("/")) _home.value = path.trimEnd('/').ifEmpty { "/" }
     }
 
+    /** Longer SSH keepalives while nobody is looking; see the core's `setBackground`. */
+    fun setBackground(background: Boolean) {
+        if (!destroyed) runCatching { core.setBackground(background) }
+    }
+
     /** Follow a switch that changed while this session was already up. */
     fun setOptions(o: Options) {
         if (!destroyed) runCatching { core.setOptions(o) }

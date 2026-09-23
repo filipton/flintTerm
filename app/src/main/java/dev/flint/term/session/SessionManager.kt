@@ -777,6 +777,9 @@ class SessionManager(
     private fun register(session: TerminalSession, tailscaleId: String? = null, knock: KnockPlan? = null) {
         // What it was built with, which every caller took from the same settings.
         appliedOptions[session.id] = store.settings.value.coreOptions(session.host)
+        // Before it starts, so a session restored while the app is in the
+        // background never runs its first minutes on the on-screen keepalive.
+        session.setBackground(!App.inForeground)
         _sessions.update { it + session }
         recordOpen()
         startWhenRoutable(session, tailscaleId, knock)
@@ -890,6 +893,15 @@ class SessionManager(
 
     fun closeAll() {
         _sessions.value.forEach { it.close() }
+    }
+
+    /**
+     * The app went out of sight or came back. Every session's SSH keepalive
+     * follows: a session left running in the background still needs its NAT
+     * mapping held, but not a request and reply on the radio every half minute.
+     */
+    fun setBackground(background: Boolean) {
+        _sessions.value.forEach { it.setBackground(background) }
     }
 
     fun applyTheme() {
