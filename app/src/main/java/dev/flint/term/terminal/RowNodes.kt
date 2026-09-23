@@ -4,54 +4,49 @@ import android.graphics.RenderNode
 import androidx.annotation.RequiresApi
 
 /**
- * Recorded rows of the grid, keyed on what is in them rather than where they
- * are.
+ * Which of a fixed set of slots holds the recording of which row content.
  *
  * Most frames change a line or two, and a frame that scrolls moves every row
- * up by one without changing any of them. Recording a row once and drawing
- * the recording again costs a translate and a pointer; walking its cells again
- * cost the text pass its shaping, batching and hundreds of draw calls. The key
- * is the row hash the core packs next to the cells, so a line that scrolled
- * finds the recording it had one row further down.
+ * up by one without changing any of them. The key is the row hash the core
+ * packs next to the cells, so a line that scrolled finds the recording it had
+ * one row further down.
  *
- * A fixed set of slots, reused least recently used first, and scanned rather
- * than hashed: a handful of rows are looked up in a frame that changed some,
- * the scan is over a few hundred longs, and nothing here boxes a key. Each
- * slot keeps its [RenderNode] for life, so evicting one re-records into the
- * same object instead of making another.
+ * Slots are reused least recently used first, and scanned rather than hashed:
+ * only rows that changed are looked for past the slot they were in last
+ * frame, the scan is over a few hundred longs, and nothing here boxes a key.
+ * Kept apart from the nodes themselves so the bookkeeping can be tested off a
+ * device.
  */
-@RequiresApi(29)
-internal class RowNodes {
+internal class RowSlots {
     private var keys = LongArray(0)
     private var filled = BooleanArray(0)
-    private var inked = BooleanArray(0)
     private var used = LongArray(0)
-    private var nodes = arrayOfNulls<RenderNode>(0)
-    /** The slot each row was drawn from last frame, the one worth trying first. */
+    /** The slot each row was drawn from last, the one worth trying first. */
     private var atRow = IntArray(0)
     private var tick = 0L
 
+    val capacity get() = keys.size
+
     /**
-     * Room for [rows] rows, several screens' worth.
+     * Room for [rows] rows, several screens' worth; true when that emptied
+     * every slot.
      *
      * More than one screen is not only for scrolling back and forth. A frame
      * draws at most [rows] slots, so with three times that the least recently
      * used slot is never one this frame has drawn already — re-recording that
      * one would change a row above this one that has already been put down.
      */
-    fun fit(rows: Int) {
+    fun fit(rows: Int): Boolean {
         val capacity = rows * 3 + 4
-        if (keys.size == capacity && atRow.size == rows) return
-        clear()
+        if (keys.size == capacity && atRow.size == rows) return false
         keys = LongArray(capacity)
         filled = BooleanArray(capacity)
-        inked = BooleanArray(capacity)
         used = LongArray(capacity)
-        nodes = arrayOfNulls(capacity)
         atRow = IntArray(rows) { -1 }
+        return true
     }
 
-    /** The slot already holding [key] for [row], or -1 when it has to be recorded. */
+    /** The slot already holding [key], for [row], or -1 when it has to be recorded. */
     fun find(row: Int, key: Long): Int {
         tick++
         val last = atRow[row]
@@ -69,10 +64,7 @@ internal class RowNodes {
         return -1
     }
 
-    /**
-     * A slot to record [key] into for [row]: an empty one, or the one drawn
-     * longest ago. Its node's old recording is dropped.
-     */
+    /** A slot for [key] at [row]: an empty one, or the one drawn longest ago. */
     fun claim(row: Int, key: Long): Int {
         var slot = -1
         var oldest = Long.MAX_VALUE
@@ -86,19 +78,56 @@ internal class RowNodes {
                 slot = i
             }
         }
+        keys[slot] = key
+        filled[slot] = true
+        used[slot] = ++tick
+        atRow[row] = slot
+        return slot
+    }
+
+    fun clear() {
+        filled.fill(false)
+        atRow.fill(-1)
+    }
+}
+
+/**
+ * Recorded rows of the grid, keyed on what is in them rather than where they
+ * are; see [RowSlots].
+ *
+ * Recording a row once and drawing the recording again costs a translate and
+ * a pointer; walking its cells again cost the text pass its shaping, batching
+ * and hundreds of draw calls. Each slot keeps its [RenderNode] for life, so
+ * evicting one re-records into the same object instead of making another.
+ */
+@RequiresApi(29)
+internal class RowNodes {
+    private val slots = RowSlots()
+    private var nodes = arrayOfNulls<RenderNode>(0)
+    private var inked = BooleanArray(0)
+
+    fun fit(rows: Int) {
+        if (!slots.fit(rows)) return
+        discard()
+        nodes = arrayOfNulls(slots.capacity)
+        inked = BooleanArray(slots.capacity)
+    }
+
+    /** The slot already holding [key] for [row], or -1 when it has to be recorded. */
+    fun find(row: Int, key: Long): Int = slots.find(row, key)
+
+    /** A slot to record [key] into for [row], its node's old recording dropped. */
+    fun claim(row: Int, key: Long): Int {
+        val slot = slots.claim(row, key)
         val node = nodes[slot] ?: RenderNode("row").also {
             // Ink that pokes out of a cell — a descender, an accent, italic
-            // overhang — is drawn in the row next to it today, so a row is
-            // not cut off at its own edges.
+            // overhang — has always been drawn into the row next to it, so a
+            // row is not cut off at its own edges.
             it.setClipToBounds(false)
             nodes[slot] = it
         }
         node.discardDisplayList()
-        keys[slot] = key
-        filled[slot] = true
         inked[slot] = false
-        used[slot] = ++tick
-        atRow[row] = slot
         return slot
     }
 
@@ -113,10 +142,11 @@ internal class RowNodes {
 
     /** Forget every recording: what they were drawn with has changed. */
     fun clear() {
-        for (i in nodes.indices) {
-            nodes[i]?.discardDisplayList()
-            filled[i] = false
-        }
-        atRow.fill(-1)
+        slots.clear()
+        discard()
+    }
+
+    private fun discard() {
+        for (node in nodes) node?.discardDisplayList()
     }
 }

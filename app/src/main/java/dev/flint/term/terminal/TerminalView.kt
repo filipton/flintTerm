@@ -68,6 +68,10 @@ import kotlin.math.roundToInt
  * when the core reported damage) and paints it with plain Canvas calls:
  * background runs first, then text runs, then cursor and selection handles.
  * No per-cell object allocation happens on the draw path.
+ *
+ * From API 29 each row is recorded once into a [android.graphics.RenderNode]
+ * kept under the hash of its content, from draw runs the core has already
+ * laid out, and a frame replays the recordings; see [RowNodes].
  */
 class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
 
@@ -819,6 +823,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     /** The same memory seen as a buffer; remade only when it moves or grows. */
     private var snapDirect: ByteBuffer? = null
+    private var snapInts: java.nio.IntBuffer? = null
+    private var snapFloats: java.nio.FloatBuffer? = null
     private var snapPtr = 0L
     private var snapLen = 0L
 
@@ -847,18 +853,25 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         var flags = 0
         if (detectLinks) flags = flags or FrameBridge.WANT_LINKS
         if (highlightRules.isNotEmpty()) flags = flags or FrameBridge.WANT_HIGHLIGHTS
+        syncLayout()
         val len = FrameBridge.snapshotInto(sessionHandle, bufferHandle, flags)
         if (len <= 0L) return
         // The buffer only moves when it has to grow, and growing changes its
         // length, so the address is only asked for then.
         if (len != snapLen) {
             val ptr = FrameBridge.bufferAddress(bufferHandle)
-            snapDirect = com.sun.jna.Pointer(ptr)
+            val direct = com.sun.jna.Pointer(ptr)
                 .getByteBuffer(0, len)
                 .order(ByteOrder.LITTLE_ENDIAN)
+            snapDirect = direct
+            // Views of the same memory, for copying glyph numbers and
+            // positions out in bulk; they take the byte order set above.
+            snapInts = direct.asIntBuffer()
+            snapFloats = direct.asFloatBuffer()
             snapPtr = ptr
             snapLen = len
         }
+        snapLayout = layoutSerial
         val buf = snapDirect ?: return
         snapCols = buf.getShort(0).toInt() and 0xffff
         snapRows = buf.getShort(2).toInt() and 0xffff
@@ -1148,12 +1161,16 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             val styleFlags = flags and STYLE_MASK
             val ascii = cp in 0x20..0x7e
             val blank = cp == 0 || cp == 0x20
-            // Flush when attributes change or a non-ASCII glyph appears.
-            if (runLen > 0 && (fg != runFg || styleFlags != runFlags || !ascii || runLen >= runChars.size - 2)) {
+            val hidden = flags and FLAG_HIDDEN != 0
+            // Flush when attributes change or a non-ASCII glyph appears. A
+            // hidden cell ends the run as well: skipped inside one, the text
+            // after it was drawn a column early. The core cuts its runs the
+            // same way, and the two have to agree.
+            if (runLen > 0 && (fg != runFg || styleFlags != runFlags || !ascii || hidden || runLen >= runChars.size - 2)) {
                 drawRun(canvas, x + runStartCol * cellW, textY, runLen, runFg, runFlags)
                 runLen = 0
             }
-            if (flags and FLAG_WIDE_SPACER != 0 || flags and FLAG_HIDDEN != 0) continue
+            if (flags and FLAG_WIDE_SPACER != 0 || hidden) continue
             if (ascii) {
                 if (runLen == 0) {
                     runStartCol = c
@@ -1270,12 +1287,26 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
                 val node = cache.node(slot)
                 node.setPosition(0, 0, w, h)
                 val rc = node.beginRecording(w, h)
+                // The core's runs for this row, where it laid them out with
+                // what the view has now. The row under a block cursor walks
+                // its cells instead: the runs know nothing of the cursor.
+                val runsAt = if (blockCol < 0 && snapLayout == layoutSerial) {
+                    buf.getInt(table + r * rowEntryBytes + if (text) 12 else 8)
+                } else {
+                    0
+                }
                 val inked = if (text) {
-                    batching = glyphRuns()
-                    val drew = drawRowText(rc, buf, r, sc, 0f, 0f, bgColor, blockCol)
-                    flushBatches(rc, prune = false)
-                    batching = false
-                    drew
+                    if (runsAt > 0) {
+                        recordTextRuns(rc, buf, runsAt)
+                    } else {
+                        batching = glyphRuns()
+                        val drew = drawRowText(rc, buf, r, sc, 0f, 0f, bgColor, blockCol)
+                        flushBatches(rc, prune = false)
+                        batching = false
+                        drew
+                    }
+                } else if (runsAt > 0) {
+                    recordBackgroundRuns(rc, buf, runsAt, bgColor)
                 } else {
                     drawRowBackground(rc, buf, r, sc, 0f, 0f, bgColor, blockCol)
                 }
@@ -1294,6 +1325,176 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     /** A row's key with a block cursor at [col] in it; see [drawRowNodes]. */
     private fun cursorKey(hash: Long, col: Int): Long =
         (hash xor ((col + 1).toLong() * -0x61c8864680b583ebL)) * -0x3d4d51c2d82b14b1L
+
+    // ---- row runs from the core -------------------------------------------
+
+    /** What the core's row runs were last laid out for; any of it moving lays them out again. */
+    private var layoutFaces: TermFonts.Faces? = null
+    private var layoutTextSize = 0f
+    private var layoutCellW = 0f
+    private var layoutBaseline = 0f
+    private var layoutFlags = -1
+    private var layoutLigatures = false
+    private var layoutBuffer = 0L
+
+    /** Counts the times the core's layout was reset; [snapLayout] is the count the snapshot was packed at. */
+    private var layoutSerial = 0
+    private var snapLayout = -1
+
+    /**
+     * The fonts glyph numbers in the runs refer to, by the number the core
+     * was given. Glyph numbers only mean anything inside their own font.
+     */
+    private val runFonts = ArrayList<android.graphics.fonts.Font>(8)
+
+    /** Whether each face's ASCII glyphs have been handed to the core since the last reset. */
+    private val slotAsked = BooleanArray(FrameBridge.SLOTS)
+
+    /**
+     * Tell the core what to lay row runs out with before it packs, whenever
+     * that has changed: the cell size and baseline the glyphs are placed by,
+     * and whether icons have their own face. The glyph numbers it was told
+     * are forgotten with it, and handed over again as rows need them.
+     *
+     * Before the packing, not after: a row recorded from runs placed for the
+     * last font size would be kept under its hash and drawn wrong until it
+     * changed.
+     */
+    private fun syncLayout() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || bufferHandle == 0L) return
+        val flags = FrameBridge.LAYOUT_RUNS or if (nerdGlyphs) FrameBridge.LAYOUT_NERD else 0
+        if (layoutBuffer == bufferHandle && layoutFaces === faces && layoutTextSize == textPaint.textSize &&
+            layoutCellW == cellW && layoutBaseline == baseline && layoutFlags == flags && layoutLigatures == ligatures
+        ) {
+            return
+        }
+        layoutBuffer = bufferHandle
+        layoutFaces = faces
+        layoutTextSize = textPaint.textSize
+        layoutCellW = cellW
+        layoutBaseline = baseline
+        layoutFlags = flags
+        layoutLigatures = ligatures
+        layoutSerial++
+        runFonts.clear()
+        slotAsked.fill(false)
+        FrameBridge.resetGlyphs(bufferHandle, flags, cellW, baseline)
+    }
+
+    /** One row's backgrounds from the core's merged rectangles; the default colour is left to the view. */
+    private fun recordBackgroundRuns(canvas: Canvas, buf: ByteBuffer, at: Int, bgColor: Int): Boolean {
+        var drew = false
+        var p = at + 4
+        repeat(buf.getInt(at)) {
+            val span = buf.getInt(p)
+            val color = buf.getInt(p + 4)
+            p += 8
+            if (color != bgColor) {
+                bgPaint.color = 0xff000000.toInt() or color
+                canvas.drawRect((span and 0xffff) * cellW, 0f, (span ushr 16) * cellW, cellH, bgPaint)
+                drew = true
+            }
+        }
+        return drew
+    }
+
+    /**
+     * One row's text from the core's runs: what could not be drawn by number
+     * as text, then decorations, then one [Canvas.drawGlyphs] per colour and
+     * font with the numbers and positions copied out in bulk. No cell is
+     * looked at here.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    private fun recordTextRuns(canvas: Canvas, buf: ByteBuffer, at: Int): Boolean {
+        val fallbacks = buf.getInt(at)
+        val decorations = buf.getInt(at + 4)
+        val batches = buf.getInt(at + 8)
+        var p = at + 12
+        repeat(fallbacks) {
+            val span = buf.getInt(p)
+            val color = buf.getInt(p + 4)
+            val meta = buf.getInt(p + 8)
+            p += 12
+            val n = span ushr 16
+            val first = buf.getInt(p)
+            var len = 0
+            repeat(n) {
+                len += Character.toChars(buf.getInt(p), runChars, len)
+                p += 4
+            }
+            val slot = (meta ushr 16) and 0xff
+            setPaintFor(color, meta and 0xffff, slot == FrameBridge.SLOT_SYMBOL)
+            canvas.drawText(runChars, 0, len, (span and 0xffff) * cellW, baseline, textPaint)
+            if (meta and FrameBridge.FALLBACK_LEARN != 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !ligatures) {
+                learnGlyphs(slot, n, first)
+            }
+        }
+        repeat(decorations) {
+            val span = buf.getInt(p)
+            drawDecorations(canvas, (span and 0xffff) * cellW, 0f, (span ushr 16) * cellW, buf.getInt(p + 4), buf.getInt(p + 8))
+            p += 12
+        }
+        if (batches > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val ints = snapInts ?: return true
+            val floats = snapFloats ?: return true
+            repeat(batches) {
+                val color = buf.getInt(p)
+                val font = buf.getInt(p + 4)
+                val n = buf.getInt(p + 8)
+                p += 12
+                if (glyphIds.size < n) {
+                    glyphIds = IntArray(n * 2)
+                    glyphPos = FloatArray(n * 4)
+                }
+                ints.position(p / 4)
+                ints.get(glyphIds, 0, n)
+                p += n * 4
+                floats.position(p / 4)
+                floats.get(glyphPos, 0, n * 2)
+                p += n * 8
+                if (font in runFonts.indices) {
+                    textColor(color)
+                    canvas.drawGlyphs(glyphIds, 0, glyphPos, 0, n, runFonts[font], textPaint)
+                }
+            }
+        }
+        return fallbacks + decorations + batches > 0
+    }
+
+    /**
+     * Teach the core the glyphs a fallback run could have been drawn with, so
+     * the next packing draws them by number: the face's ASCII table the first
+     * time the face turns up, and a character outside ASCII once it has been
+     * shaped. The paint is already set to the run's face.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+    private fun learnGlyphs(slot: Int, n: Int, cp: Int) {
+        // The icon slot without an icon font is drawn in the style's face,
+        // which a slot of its own cannot stand for.
+        val usable = slot != FrameBridge.SLOT_SYMBOL || symbolFace != null
+        val table = if (usable) cachedTable() else null
+        if (!slotAsked[slot]) {
+            slotAsked[slot] = true
+            if (table == null) {
+                FrameBridge.setGlyphs(bufferHandle, slot, -1, 0L)
+            } else {
+                val ids = com.sun.jna.Memory((table.ids.size * 4).toLong())
+                ids.write(0, table.ids, 0, table.ids.size)
+                FrameBridge.setGlyphs(bufferHandle, slot, fontIndex(table.font), com.sun.jna.Pointer.nativeValue(ids))
+                ids.close()
+            }
+        }
+        if (table == null || n != 1 || cp in 0x20..0x7e) return
+        val ref = glyphOf(table, cp)
+        FrameBridge.learnGlyph(bufferHandle, slot, cp, ref?.let { fontIndex(it.font) } ?: -1, ref?.id ?: -1)
+    }
+
+    /** The core's number for [font], given one the first time it turns up. */
+    private fun fontIndex(font: android.graphics.fonts.Font): Int {
+        for (i in runFonts.indices) if (runFonts[i] === font || runFonts[i] == font) return i
+        runFonts.add(font)
+        return runFonts.size - 1
+    }
 
     /**
      * The cells predictive echo is drawing, fetched only when the header says

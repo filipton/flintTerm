@@ -106,6 +106,89 @@ pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_snapshotInto(
     .unwrap_or(-1)
 }
 
+/// Bit 0 of `flags` in `resetGlyphs`: lay out each row's runs, not only its hash.
+const LAYOUT_RUNS: i32 = 1;
+/// Bit 1: private-use codepoints go to the icon font's slot.
+const LAYOUT_NERD: i32 = 2;
+
+/// New metrics or a new font: every glyph the buffer was told about is
+/// forgotten, and the next packing lays its runs out again.
+#[no_mangle]
+pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_resetGlyphs(
+    _env: *mut c_void,
+    _class: *mut c_void,
+    buffer: i64,
+    flags: i32,
+    cell_w: f32,
+    baseline: f32,
+) {
+    if buffer == 0 {
+        return;
+    }
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: as in `snapshotInto`.
+        let buffer = unsafe { &*(buffer as usize as *const SnapshotBuffer) };
+        buffer.with_layout(|l| l.reset(flags & LAYOUT_RUNS != 0, flags & LAYOUT_NERD != 0, cell_w, baseline));
+    }));
+}
+
+/// The glyph numbers of printable ASCII after the space in one face, all out
+/// of the renderer's font number `font`: `ids` is the address of that many
+/// i32s, or 0 when the face cannot be drawn by number at all.
+///
+/// An address rather than an array, because an array would need the JNI
+/// environment to read, and nothing else here does; the renderer keeps the
+/// memory alive for the length of the call.
+#[no_mangle]
+pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_setGlyphs(
+    _env: *mut c_void,
+    _class: *mut c_void,
+    buffer: i64,
+    slot: i32,
+    font: i32,
+    ids: i64,
+) {
+    if buffer == 0 || slot < 0 {
+        return;
+    }
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: as in `snapshotInto`.
+        let buffer = unsafe { &*(buffer as usize as *const SnapshotBuffer) };
+        let table = if ids != 0 && font >= 0 {
+            // SAFETY: the caller hands over ASCII_GLYPHS i32s at `ids`, alive
+            // until this returns; read unaligned, as nothing promises more.
+            let ids = unsafe { std::ptr::read_unaligned(ids as usize as *const [i32; term_core::rows::ASCII_GLYPHS]) };
+            Some((font as u32, ids))
+        } else {
+            None
+        };
+        buffer.with_layout(|l| l.set_ascii(slot as usize, table.as_ref().map(|(f, ids)| (*f, ids))));
+    }));
+}
+
+/// What one codepoint shaped to in one face: glyph `glyph` of font `font`,
+/// or a negative glyph when it is not a single glyph and stays text.
+#[no_mangle]
+pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_learnGlyph(
+    _env: *mut c_void,
+    _class: *mut c_void,
+    buffer: i64,
+    slot: i32,
+    cp: i32,
+    font: i32,
+    glyph: i32,
+) {
+    if buffer == 0 || slot < 0 || cp < 0 {
+        return;
+    }
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: as in `snapshotInto`.
+        let buffer = unsafe { &*(buffer as usize as *const SnapshotBuffer) };
+        let found = (glyph >= 0 && font >= 0).then_some((font as u32, glyph));
+        buffer.with_layout(|l| l.learn(slot as usize, cp as u32, found));
+    }));
+}
+
 /// A scroll gesture; see [`Session::scroll`]. Sent for every line a finger
 /// or a fling moves, which is dozens of calls a second.
 #[no_mangle]

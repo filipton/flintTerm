@@ -794,6 +794,9 @@ struct Packed {
     bytes: Vec<u8>,
     /// What `bytes` was packed from, or None when it has to be packed again.
     from: Option<FillKey>,
+    /// The renderer's glyph numbers and metrics the row runs are laid out
+    /// with; see `term_core::rows`.
+    layout: term_core::rows::Layout,
 }
 
 /// Everything a packed grid depends on, as counters: when all of them are
@@ -805,6 +808,9 @@ struct FillKey {
     repaint: u64,
     /// Which extras were asked for; see [`crate::frame`].
     flags: u8,
+    /// [`term_core::rows::Layout::generation`]: the runs are laid out anew
+    /// when the renderer's glyphs or metrics change, grid or no grid.
+    layout: u64,
 }
 
 /// Hands out [`Inner::id`].
@@ -823,6 +829,11 @@ impl SnapshotBuffer {
     /// grow, and growing changes its length.
     pub(crate) fn address(&self) -> u64 {
         self.data.lock().bytes.as_ptr() as u64
+    }
+
+    /// What the next packing lays its row runs out with.
+    pub(crate) fn with_layout<R>(&self, f: impl FnOnce(&mut term_core::rows::Layout) -> R) -> R {
+        f(&mut self.data.lock().layout)
     }
 }
 
@@ -901,14 +912,16 @@ impl Session {
         // Read before anything is packed. Content newer than these numbers
         // only costs one more fill on the next frame; content older than them
         // would be kept as if it were current.
-        let key = FillKey {
+        let mut key = FillKey {
             session: self.inner.id,
             generation: self.inner.generation.load(Ordering::Acquire),
             repaint: self.inner.repaint.load(Ordering::Acquire),
             flags: want_links as u8 | (want_highlights as u8) << 1,
+            layout: 0,
         };
         {
             let mut packed = out.data.lock();
+            key.layout = packed.layout.generation();
             if packed.from == Some(key) && packed.bytes.len() >= HEADER_BYTES {
                 // Guesses time out on a clock rather than on anything counted.
                 self.stamp_predictions(&mut packed.bytes);
@@ -919,7 +932,8 @@ impl Session {
         // locks the grid does while holding theirs.
         let links = if want_links { self.refresh_links() } else { self.inner.links_last.lock().changes };
         let (cols, rows) = *self.inner.size.lock();
-        let mut packed = out.data.lock();
+        let mut guard = out.data.lock();
+        let packed = &mut *guard;
         packed.from = None;
         let buf = &mut packed.bytes;
         buf.clear();
@@ -942,7 +956,7 @@ impl Session {
             }
             // Last, over the cells as they will be drawn: the highlights
             // above are part of what a row looks like.
-            term_core::rows::append_rows(buf);
+            term_core::rows::append_rows(buf, &mut packed.layout);
         }
         packed.from = Some(key);
         // Read after filling: growing the buffer moves it.
@@ -3152,6 +3166,28 @@ mod tests {
         s.fill_snapshot(&buf, false, true);
         assert_ne!(hash(0), plain, "a recording of the uncoloured row would be drawn");
         assert_eq!(hash(1), blank, "a row the rules did not touch keeps its recording");
+    }
+
+    #[test]
+    fn a_glyph_learned_packs_the_runs_again_on_an_unchanged_grid() {
+        let s = session();
+        s.inner.feed(b"ab");
+        let buf = SnapshotBuffer::default();
+        buf.with_layout(|l| l.reset(true, true, 8.0, 12.0));
+        s.fill_snapshot(&buf, false, false);
+        let from = buf.data.lock().from;
+        s.fill_snapshot(&buf, false, false);
+        assert_eq!(buf.data.lock().from, from, "nothing moved, nothing packed");
+        let ids = [7i32; term_core::rows::ASCII_GLYPHS];
+        buf.with_layout(|l| l.set_ascii(term_core::rows::SLOT_REGULAR, Some((0, &ids))));
+        s.fill_snapshot(&buf, false, false);
+        assert_ne!(buf.data.lock().from, from);
+        // And what was packed now draws the letters by number.
+        let packed = buf.data.lock();
+        let table = u32::from_le_bytes(packed.bytes[term_core::snapshot::ROWS_OFFSET..][..4].try_into().unwrap()) as usize;
+        let text_at = u32::from_le_bytes(packed.bytes[table + 12..table + 16].try_into().unwrap()) as usize;
+        let batches = u32::from_le_bytes(packed.bytes[text_at + 8..text_at + 12].try_into().unwrap());
+        assert_eq!(batches, 1);
     }
 
     #[test]

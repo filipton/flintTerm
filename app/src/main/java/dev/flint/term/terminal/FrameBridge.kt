@@ -35,6 +35,39 @@ internal object FrameBridge {
     /** Fills the buffer and returns its length, or -1. */
     @JvmStatic external fun snapshotInto(session: Long, buffer: Long, flags: Int): Long
 
+    /** Bit for [resetGlyphs]: lay out each row's draw runs, not only its hash. */
+    const val LAYOUT_RUNS = 1
+
+    /** Bit for [resetGlyphs]: private-use codepoints go to the icon font's slot. */
+    const val LAYOUT_NERD = 2
+
+    /** The faces a run can be in; the core numbers them the same way. */
+    const val SLOT_REGULAR = 0
+    const val SLOT_BOLD = 1
+    const val SLOT_ITALIC = 2
+    const val SLOT_BOLD_ITALIC = 3
+    const val SLOT_SYMBOL = 4
+    const val SLOTS = 5
+
+    /** On a fallback run: the core would draw this by number if told its glyphs. */
+    const val FALLBACK_LEARN = 1 shl 24
+
+    /**
+     * New metrics or a new font for the buffer's row runs: everything told to
+     * it through [setGlyphs] and [learnGlyph] is forgotten.
+     */
+    @JvmStatic external fun resetGlyphs(buffer: Long, flags: Int, cellW: Float, baseline: Float)
+
+    /**
+     * The glyphs printable ASCII after the space draws with in one face, all
+     * out of font number [font]: [idsAddr] points at 94 native ints, or is 0
+     * when the face cannot be drawn by number.
+     */
+    @JvmStatic external fun setGlyphs(buffer: Long, slot: Int, font: Int, idsAddr: Long)
+
+    /** What [cp] shaped to in one face; a negative [glyphId] keeps it text. */
+    @JvmStatic external fun learnGlyph(buffer: Long, slot: Int, cp: Int, font: Int, glyphId: Int)
+
     /** Where the buffer starts; it only moves when its length changes. */
     @JvmStatic external fun bufferAddress(buffer: Long): Long
 

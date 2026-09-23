@@ -24,6 +24,9 @@ object RunSplitter {
      * and plane 15 (U+F0000–U+FFFFF), the two ranges Nerd Fonts patch icons
      * into. Plane 16 is left alone — nothing puts glyphs there, and it is
      * where a codepoint that is really a bug tends to land.
+     *
+     * The core applies the same rule (`term_core::rows::is_symbol`) when it
+     * lays out row runs, and the two have to agree.
      */
     fun isSymbol(cp: Int): Boolean = cp in 0xE000..0xF8FF || cp in 0xF0000..0xFFFFF
 
