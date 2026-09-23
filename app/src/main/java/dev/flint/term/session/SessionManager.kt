@@ -541,6 +541,8 @@ class SessionManager(
         extraStartup: String? = null,
         /** Send the Wake-on-LAN packet even when auto-wake is off. */
         forceWake: Boolean = false,
+        /** An auto-reconnect of a session that was already open, rather than somebody asking. */
+        automatic: Boolean = false,
     ): TerminalSession {
         val settings = store.settings.value
         val prepared = prepare(host, forceWake)
@@ -577,8 +579,13 @@ class SessionManager(
         }
         if (host.notifyPatterns.isNotEmpty()) runCatching { session.core.setWatchPatterns(host.notifyPatterns.filter { it.isNotBlank() }) }
         register(session, prepared.tailscaleId, prepared.knock)
-        store.touchHost(host.id)
-        Shortcuts.updateDynamic(context, store.hosts.value)
+        // A reconnect is the same visit, not a new one: the host was touched
+        // when it was opened, and a link that drops every few minutes would
+        // otherwise be a disk write and a launcher update every few minutes.
+        if (!automatic) {
+            store.touchHost(host.id)
+            Shortcuts.updateDynamic(context, store.hosts.value)
+        }
         watchForAlerts(session, host)
         // Once connected: auto-start forwards and type the startup command.
         val autoForwards = host.forwards.filter { it.autoStart }
@@ -598,7 +605,8 @@ class SessionManager(
         }
         // Telnet consoles have no shell to ask, and no exec channel to ask over.
         if (!host.isTelnet) {
-            detectOs(session, host)
+            // The machine did not change what it runs while the link was down.
+            if (!automatic || (store.host(host.id) ?: host).detectedOs.isEmpty()) detectOs(session, host)
             learnHistory(session, host)
         }
         return session
@@ -915,11 +923,18 @@ class SessionManager(
         }
         if (host.persistent) {
             watcherScope(session.id).launch {
+                var upSince = 0L
                 session.state.collect { st ->
                     when (st) {
-                        is SessionState.Connected -> session.reconnectAttempts = 0
+                        // Not a reset yet: a server that accepts the login and
+                        // drops it straight away would otherwise be retried
+                        // for ever, three seconds at a time.
+                        is SessionState.Connected -> upSince = android.os.SystemClock.elapsedRealtime()
                         is SessionState.Disconnected -> {
                             if (session.closedByUser || session.destroyed || st.error == null && st.exitCode == 0) return@collect
+                            if (upSince > 0 && android.os.SystemClock.elapsedRealtime() - upSince >= STABLE_CONNECTION_MS) {
+                                session.reconnectAttempts = 0
+                            }
                             val attempt = session.reconnectAttempts
                             if (attempt >= 6) return@collect
                             val delayMs = listOf(3L, 5L, 10L, 20L, 30L, 60L)[attempt] * 1000
@@ -931,10 +946,13 @@ class SessionManager(
                             if (!network.online) {
                                 runCatching { session.core.note("Waiting for a network…") }
                                 network.awaitOnline()
-                                kotlinx.coroutines.delay(500) // let the new link settle
+                                // Let the new link settle, and spread out the
+                                // sessions that were all waiting for it, so they
+                                // do not dial in one burst.
+                                kotlinx.coroutines.delay(500 + kotlin.random.Random.nextLong(RECONNECT_JITTER_MS))
                             }
                             if (session.closedByUser || session.destroyed || get(session.id) == null) return@collect
-                            val fresh = openSsh(host)
+                            val fresh = openSsh(host, automatic = true)
                             fresh.reconnectAttempts = attempt + 1
                             runCatching { fresh.core.note("Reconnected automatically (attempt ${attempt + 1})") }
                             _replacements.tryEmit(session.id to fresh.id)
@@ -1020,6 +1038,12 @@ class SessionManager(
     }
 
     companion object {
+        /** How long a session has to stay up before its reconnects start counting from one again. */
+        private const val STABLE_CONNECTION_MS = 60_000L
+
+        /** The spread of reconnects that were all waiting for the same network. */
+        private const val RECONNECT_JITTER_MS = 3_000L
+
         /** How long a tunnel is kept after the last session that needed it. */
         private const val IDLE_TUNNEL_GRACE_MS = 20_000L
 
