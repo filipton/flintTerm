@@ -17,6 +17,7 @@ mod frame;
 mod input;
 mod mosh;
 mod putty;
+mod recording;
 mod runtime;
 mod securitykey;
 mod session;

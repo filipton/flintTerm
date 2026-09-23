@@ -347,43 +347,6 @@ class TerminalSession(
     val commandFinished: SharedFlow<CommandFinished> = _commandFinished
 
     /**
-     * The one place the raw stream is taken apart.
-     *
-     * Both readers want the same bytes, so the core is given a single sink and
-     * this fans out — the recording takes the stream as it is, the watcher
-     * takes it with the escape sequences removed, since a prompt drawn in color
-     * is still a prompt.
-     */
-    private val sink = object : dev.flint.term.core.OutputSink {
-        override fun onOutput(bytes: ByteArray) {
-            CoreThreads.keepAttached()
-            // Only a recording reads the raw stream now, and only while one is
-            // running: decoding a chunk nobody wants was the most expensive
-            // thing this class did per byte.
-            val recording = _recording.value ?: return
-            recording.append(bytes)
-        }
-    }
-
-    /**
-     * Attached while a recording is running, and only then.
-     *
-     * Capture is not free: every chunk of output crosses back into Kotlin as
-     * its own array and is decoded to a string. A session watching a program
-     * that redraws itself produces chunks by the dozen per second, so nothing
-     * but a recording — which the user asked for and can see — is worth that.
-     */
-    @Synchronized
-    private fun updateCapture() {
-        val wanted = _recording.value != null
-        if (wanted == capturing) return
-        capturing = wanted
-        runCatching { if (wanted) core.captureOutput(sink) else core.stopOutputCapture() }
-    }
-
-    private var capturing = false
-
-    /**
      * Start telling this session's watchers when a slow command ends.
      *
      * The watching itself happens in the core, next to the bytes: the stream
@@ -399,26 +362,31 @@ class TerminalSession(
      * Start writing this session to [dir], and return the recording (or the one
      * already running).
      *
-     * The recorder is fed the terminal's own byte stream, so a cast replays
-     * exactly what the session looked like — colors, cursor moves, the lot —
-     * and the text log is that stream with the escape sequences taken out.
+     * The core records the terminal's own byte stream, next to where it
+     * arrives, so a cast replays exactly what the session looked like — colors,
+     * cursor moves, the lot — and the text log is that stream with the escape
+     * sequences taken out. Nothing crosses the bridge per chunk; this side only
+     * names the files.
      */
+    @Synchronized
     fun startRecording(dir: File, format: RecordingFormat, cols: Int, rows: Int): SessionRecording? {
         _recording.value?.let { return it }
         if (destroyed) return null
-        val rec = SessionRecording(dir, host?.displayName ?: label, format, cols, rows)
+        val rec = SessionRecording(dir, host?.displayName ?: label, format)
+        val started = runCatching {
+            core.startRecording(rec.textFile?.path, rec.castFile?.path, cols.toUShort(), rows.toUShort(), rec.startedAt.toULong())
+        }
+        if (started.isFailure) return null
         _recording.value = rec
-        updateCapture()
         return rec
     }
 
     /** Stops the recording and returns the files it wrote; empty when none was running. */
+    @Synchronized
     fun stopRecording(): List<File> {
         val rec = _recording.value ?: return emptyList()
         _recording.value = null
-        updateCapture()
-        rec.finish()
-        return rec.files
+        return runCatching { core.stopRecording().map(::File) }.getOrDefault(rec.files)
     }
 
     fun close() {

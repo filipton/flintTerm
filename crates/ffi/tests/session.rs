@@ -114,18 +114,13 @@ fn wait_for(session: &Session, needle: &str) -> String {
     }
 }
 
-/// A recording still sees the stream, and stops seeing it when it ends.
+/// A recording started late still sees the stream, and stops seeing it when it
+/// ends.
 ///
-/// `feed` skips the whole look when nothing is listening, so a tap that arms
-/// without saying so would go quiet rather than fail loudly.
+/// The pump only taps the stream while a recording runs, so one that arms
+/// without the pump noticing would go quiet rather than fail loudly.
 #[test]
-fn a_capture_started_late_still_sees_the_output() {
-    struct Collect(Mutex<Vec<u8>>);
-    impl OutputSink for Collect {
-        fn on_output(&self, bytes: Vec<u8>) {
-            self.0.lock().unwrap().extend_from_slice(&bytes);
-        }
-    }
+fn a_recording_started_late_still_sees_the_output() {
     let listener = Listener::new();
     let backend = Backend::Local {
         config: LocalShellConfig {
@@ -138,28 +133,33 @@ fn a_capture_started_late_still_sees_the_output() {
     };
     let session = Session::new(backend, 40, 10, 1000, listener.clone(), Arc::new(Accept), Arc::new(NoQuestions), Options::default());
     session.start();
-    session.send_text("echo before-capture
-".into());
-    wait_for(&session, "before-capture");
+    session.send_text("echo before-rec\n".into());
+    wait_for(&session, "before-rec");
 
     // Armed only now: the session has already been running with no taps at all.
-    let sink = Arc::new(Collect(Mutex::new(Vec::new())));
-    session.capture_output(sink.clone());
-    session.send_text("echo after-capture
-".into());
-    wait_for(&session, "after-capture");
-    let seen = String::from_utf8_lossy(&sink.0.lock().unwrap()).to_string();
-    assert!(seen.contains("after-capture"), "capture saw nothing; got {seen:?}");
+    let dir = std::env::temp_dir().join(format!("flintterm-session-rec-{}", std::process::id()));
+    let log = dir.join("local.log");
+    let cast = dir.join("local.cast");
+    let path = |p: &std::path::Path| p.to_string_lossy().into_owned();
+    session.start_recording(Some(path(&log)), Some(path(&cast)), 40, 10, 1_700_000_000_000).unwrap();
+    session.send_text("echo after-rec\n".into());
+    wait_for(&session, "after-rec");
+    assert_eq!(session.stop_recording(), vec![path(&log), path(&cast)]);
 
-    session.stop_output_capture();
-    sink.0.lock().unwrap().clear();
-    session.send_text("echo after-stop
-".into());
+    session.send_text("echo after-stop\n".into());
     wait_for(&session, "after-stop");
-    assert!(
-        !String::from_utf8_lossy(&sink.0.lock().unwrap()).contains("after-stop"),
-        "capture kept going after it was stopped",
-    );
+    // The files are closed on the recorder's own thread once it has the last chunk.
+    let start = Instant::now();
+    let read = |p: &std::path::Path| std::fs::read_to_string(p).unwrap_or_default();
+    while !read(&log).contains("after-rec") && start.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let (text, replay) = (read(&log), read(&cast));
+    assert!(text.contains("after-rec"), "the log saw nothing; got {text:?}");
+    assert!(!text.contains("before-rec") && !text.contains("after-stop"), "the log is not the recording's; got {text:?}");
+    assert!(replay.starts_with("{\"version\":2,\"width\":40,\"height\":10,\"timestamp\":1700000000,"), "{replay:?}");
+    assert!(replay.contains("after-rec") && !replay.contains("after-stop"), "{replay:?}");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

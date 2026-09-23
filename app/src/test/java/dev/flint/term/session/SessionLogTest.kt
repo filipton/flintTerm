@@ -5,67 +5,14 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SessionLogTest {
-    private val esc = "\u001B"
-    private val bel = "\u0007"
+    // Lines as the core writes them (see `recording.rs`, whose tests pin these
+    // same bytes), so reading back is checked against the real format.
+    private fun header(cols: Int, rows: Int, startedAt: Long) =
+        "{\"version\":2,\"width\":$cols,\"height\":$rows,\"timestamp\":${startedAt / 1000}," +
+            "\"env\":{\"TERM\":\"xterm-256color\"}}"
 
-    @Test
-    fun `plain text comes out as it went in`() {
-        val text = "total 12\ndrwxr-xr-x  3 pi pi 4096 Jan  1 10:00 .\n\tindented"
-        assertEquals(text, SessionLog.stripEscapes(text))
-    }
-
-    @Test
-    fun `color and cursor sequences are dropped`() {
-        val colored = "${esc}[1;32mpi@raspberrypi${esc}[0m:${esc}[01;34m~${esc}[00m$ "
-        assertEquals("pi@raspberrypi:~$ ", SessionLog.stripEscapes(colored))
-        assertEquals("done", SessionLog.stripEscapes("${esc}[2J${esc}[Hdone"))
-    }
-
-    @Test
-    fun `an OSC title goes with either of its terminators`() {
-        assertEquals("ls", SessionLog.stripEscapes("$esc]0;pi@raspberrypi: ~$bel" + "ls"))
-        assertEquals("ls", SessionLog.stripEscapes("$esc]0;pi@raspberrypi: ~$esc\\ls"))
-    }
-
-    @Test
-    fun `a charset selection takes its final character with it`() {
-        assertEquals("plain", SessionLog.stripEscapes("$esc(Bplain"))
-    }
-
-    @Test
-    fun `carriage returns and bells leave the text alone`() {
-        assertEquals("50%75%\n", SessionLog.stripEscapes("50%\r75%$bel\r\n"))
-    }
-
-    @Test
-    fun `a cast line quotes what would otherwise break the JSON`() {
-        val line = SessionLog.castEvent(1_500, "say \"hi\"\\\r\n\u0001")
-        assertEquals("[1.500000,\"o\",\"say \\\"hi\\\"\\\\\\r\\n\\u0001\"]", line)
-    }
-
-    @Test
-    fun `the elapsed time is the seconds since the recording started`() {
-        assertTrue(SessionLog.castEvent(0, "x").startsWith("[0.000000,"))
-        assertTrue(SessionLog.castEvent(90_061, "x").startsWith("[90.061000,"))
-    }
-
-    @Test
-    fun `the header carries the size the recording was made at`() {
-        val header = SessionLog.castHeader(cols = 132, rows = 43, startedAt = 1_700_000_123_456, shell = "/bin/zsh")
-        assertEquals(
-            "{\"version\":2,\"width\":132,\"height\":43,\"timestamp\":1700000123," +
-                "\"env\":{\"TERM\":\"xterm-256color\",\"SHELL\":\"/bin/zsh\"}}",
-            header,
-        )
-    }
-
-    @Test
-    fun `a header without a known shell claims none`() {
-        assertEquals(
-            "{\"version\":2,\"width\":80,\"height\":24,\"timestamp\":0,\"env\":{\"TERM\":\"xterm-256color\"}}",
-            SessionLog.castHeader(80, 24, 0),
-        )
-    }
+    private fun event(ms: Long, json: String) =
+        "[" + String.format(java.util.Locale.US, "%.6f", ms / 1000.0) + ",\"o\",\"" + json + "\"]"
 
     @Test
     fun `file names carry the host and the moment, and nothing a path would mind`() {
@@ -76,9 +23,9 @@ class SessionLogTest {
 
     @Test
     fun `a cast reads back as the frames that were written`() {
-        val cast = SessionLog.castHeader(cols = 100, rows = 30, startedAt = 1_700_000_000_000) + "\n" +
-            SessionLog.castEvent(0, "hello\r\n") + "\n" +
-            SessionLog.castEvent(1500, "\u001B[31mred\u001B[0m") + "\n"
+        val cast = header(cols = 100, rows = 30, startedAt = 1_700_000_000_000) + "\n" +
+            event(0, "hello\\r\\n") + "\n" +
+            event(1500, "\\u001b[31mred\\u001b[0m") + "\n"
         val read = SessionLog.parseCast(cast)
         assertEquals(100, read.cols)
         assertEquals(30, read.rows)
@@ -126,8 +73,8 @@ class SessionLogTest {
     fun `a huge cast keeps its header so the grid is still known`() {
         val f = java.io.File.createTempFile("rec", ".cast").apply { deleteOnExit() }
         f.writeText(
-            SessionLog.castHeader(cols = 123, rows = 45, startedAt = 0) + "\n" +
-                (1..3000).joinToString("\n") { SessionLog.castEvent(it * 10L, "frame $it") } + "\n",
+            header(cols = 123, rows = 45, startedAt = 0) + "\n" +
+                (1..3000).joinToString("\n") { event(it * 10L, "frame $it") } + "\n",
         )
         val tail = SessionLog.castTail(f, 500)
         assertTrue(tail.truncated)
@@ -141,49 +88,22 @@ class SessionLogTest {
 
     @Test
     fun `a broken line costs only itself`() {
-        val cast = SessionLog.castHeader(80, 24, 0) + "\n" +
-            SessionLog.castEvent(0, "before\n") + "\n" +
+        val cast = header(80, 24, 0) + "\n" +
+            event(0, "before\\n") + "\n" +
             "[not a frame\n" +
-            SessionLog.castEvent(20, "after\n") + "\n"
+            event(20, "after\\n") + "\n"
         val read = SessionLog.parseCast(cast)
         assertEquals(listOf("before\n", "after\n"), read.frames.map { it.text })
     }
 
     @Test
-    fun `a character split between chunks comes out whole`() {
-        val bytes = "é─ok😀".toByteArray()
-        val utf8 = Utf8Chunks()
-        // Every cut, including through the four bytes of the emoji.
-        for (cut in 1 until bytes.size) {
-            val out = utf8.decode(bytes.copyOfRange(0, cut)) + utf8.decode(bytes.copyOfRange(cut, bytes.size))
-            assertEquals("é─ok😀", out)
-        }
-        assertEquals("", utf8.decode(byteArrayOf(0xE2.toByte())))
-        assertEquals("─", utf8.decode(byteArrayOf(0x94.toByte(), 0x80.toByte())))
-    }
-
-    @Test
-    fun `a byte that can never start a character is replaced, not held`() {
-        assertEquals("a�b", Utf8Chunks().decode(byteArrayOf(0x61, 0xFF.toByte(), 0x62)))
-    }
-
-    @Test
-    fun `a recording fed bytes writes them whole and closes`() {
-        val dir = java.nio.file.Files.createTempDirectory("rec").toFile().apply { deleteOnExit() }
-        val rec = SessionRecording(dir, "host", dev.flint.term.data.RecordingFormat.BOTH, 80, 24)
-        val stream = "${esc}[1mé${esc}[0m\n"
-        val bytes = stream.toByteArray()
-        // Cut through the middle of the é.
-        rec.append(bytes.copyOfRange(0, 6))
-        rec.append(bytes.copyOfRange(6, bytes.size))
-        rec.finish()
-        val log = rec.files.first { it.name.endsWith(".log") }
-        val cast = rec.files.first { it.name.endsWith(".cast") }
-        // Closing the files is what writes them out, and that happens on the
-        // recording's own thread once it has taken the last chunk.
-        val deadline = System.currentTimeMillis() + 5_000
-        while ((log.length() == 0L || !cast.readText().contains('é')) && System.currentTimeMillis() < deadline) Thread.sleep(20)
-        assertEquals("é\n", log.readText())
-        assertEquals(stream, SessionLog.parseCast(cast.readText()).frames.joinToString("") { it.text })
+    fun `a recording names one file per format, both after the same moment`() {
+        val dir = java.io.File("rec")
+        val both = SessionRecording(dir, "pi@box", dev.flint.term.data.RecordingFormat.BOTH, startedAt = 0)
+        assertEquals(listOf(both.textFile, both.castFile), both.files)
+        assertEquals(both.textFile!!.name.removeSuffix(".log"), both.castFile!!.name.removeSuffix(".cast"))
+        val text = SessionRecording(dir, "pi@box", dev.flint.term.data.RecordingFormat.TEXT, startedAt = 0)
+        assertEquals(null, text.castFile)
+        assertEquals(listOf(text.textFile), text.files)
     }
 }

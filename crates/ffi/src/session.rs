@@ -395,17 +395,6 @@ fn split_mark(m: PromptMark) -> (PromptKind, Option<i32>) {
     }
 }
 
-/// A copy of everything the terminal receives, for whoever asked for it.
-///
-/// The emulator eats the byte stream and keeps only a grid, so anything that
-/// needs the stream itself — a recording that must replay with its colors and
-/// its timing, a watcher for the prompt coming back — has to be handed the
-/// bytes as they arrive. Nothing is copied unless somebody is listening.
-#[uniffi::export(with_foreign)]
-pub trait OutputSink: Send + Sync {
-    fn on_output(&self, bytes: Vec<u8>);
-}
-
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct PaletteConfig {
     /// Exactly 16 ANSI colors as 0x00RRGGBB.
@@ -753,8 +742,8 @@ struct Inner {
     started: std::time::Instant,
     /// The phone's traffic, while this session is being used as a VPN.
     vpn: Mutex<Option<crate::vpn::Vpn>>,
-    /// Set while the app wants the raw output stream as well as the grid.
-    sink: Mutex<Option<Arc<dyn OutputSink>>>,
+    /// Writes the output stream to disk while the app has asked it to.
+    recording: crate::recording::Recorder,
     /// What this session is allowed to do beyond plain terminal behavior.
     options: Mutex<Options>,
     /// Whether the app is out of sight; see [`Session::set_background`].
@@ -1151,7 +1140,7 @@ impl Session {
                 predict: Mutex::new(mosh::Predictor::new(cols.max(2))),
                 started: std::time::Instant::now(),
                 vpn: Mutex::new(None),
-                sink: Mutex::new(None),
+                recording: Default::default(),
                 options: Mutex::new(options),
                 background: AtomicBool::new(false),
                 keepalives: Mutex::new(Vec::new()),
@@ -1727,19 +1716,25 @@ impl Session {
         Ok(())
     }
 
-    /// Send every byte the terminal receives to [sink] as well, until
-    /// [`Session::stop_output_capture`].
-    pub fn capture_output(&self, sink: Arc<dyn OutputSink>) {
-        // Armed before it is set, so a chunk already on its way finds the sink
-        // rather than skipping the whole look.
-        self.inner.taps.store(true, Ordering::Release);
-        *self.inner.sink.lock() = Some(sink);
+    /// Record everything the terminal receives from here on: a text log to
+    /// `text_path` and an asciinema cast to `cast_path`, whichever are given.
+    /// The app names the files; `started_at_millis` is the moment it named
+    /// them after. A recording already running is left alone.
+    pub fn start_recording(
+        &self,
+        text_path: Option<String>,
+        cast_path: Option<String>,
+        cols: u16,
+        rows: u16,
+        started_at_millis: u64,
+    ) -> Result<(), CoreError> {
+        self.inner.recording.start(text_path, cast_path, cols, rows, started_at_millis)
     }
 
-    pub fn stop_output_capture(&self) {
-        *self.inner.sink.lock() = None;
-        // Only the sink went; the others may still want the stream.
-        self.inner.refresh_taps();
+    /// Stop recording and return the files it wrote to; empty when none was
+    /// running. The last of the output reaches them shortly after.
+    pub fn stop_recording(&self) -> Vec<String> {
+        self.inner.recording.stop()
     }
 
     // ---- the phone's traffic ---------------------------------------------
@@ -1904,9 +1899,7 @@ impl Inner {
 
     /// Recompute whether anything still wants each chunk of output.
     fn refresh_taps(&self) {
-        let any = !self.watch.lock().is_empty()
-            || self.command_watch.lock().is_some()
-            || self.sink.lock().is_some();
+        let any = !self.watch.lock().is_empty() || self.command_watch.lock().is_some();
         self.taps.store(any, Ordering::Release);
     }
 
@@ -2784,7 +2777,10 @@ impl Inner {
 
         let result = loop {
             match reader.next().await {
-                Event::Data(data) => self.feed(&data),
+                Event::Data(data) => {
+                    self.recording.tap(&data).await;
+                    self.feed(&data)
+                }
                 Event::Exit(code) => break (code, None),
                 Event::Closed => break (None, None),
             }
@@ -2889,12 +2885,6 @@ impl Inner {
         if self.taps.load(Ordering::Acquire) {
             self.watch_output(data);
             self.watch_commands_output(data);
-            // Cloned out of the lock first: the sink is foreign code, and
-            // holding a mutex across a call into the app makes deadlocks.
-            let sink = self.sink.lock().clone();
-            if let Some(sink) = sink {
-                sink.on_output(data.to_vec());
-            }
         }
         let events = {
             let mut emu = self.emu.lock();
