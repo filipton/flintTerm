@@ -13,6 +13,7 @@ import dev.flint.term.core.SessionState
 import dev.flint.term.data.Host
 import dev.flint.term.data.PortForward
 import dev.flint.term.data.RecordingFormat
+import dev.flint.term.terminal.FrameBridge
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -156,9 +157,6 @@ class TerminalSession(
     /** What the server printed before login, if it printed anything. */
     private val _banner = MutableStateFlow<String?>(null)
     val banner: StateFlow<String?> = _banner
-    /** The image store changed; the view should ask for the placements again. */
-    private val _imagesChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val imagesChanged: SharedFlow<Unit> = _imagesChanged
     /** The user closed/disconnected this session on purpose (no auto-reconnect). */
     @Volatile var closedByUser: Boolean = false
     /** Consecutive automatic reconnects; reset on a successful connection. */
@@ -183,22 +181,6 @@ class TerminalSession(
 
     fun removeDamageListener(listener: () -> Unit) {
         damageListeners.remove(listener)
-    }
-
-    /**
-     * Also held per view, and for the same reason: the view has no scope of its
-     * own to collect [imagesChanged] in, and the only thing it needs to know is
-     * that this session has images at all — after that it reads their positions
-     * out of every frame.
-     */
-    private val imagesListeners = CopyOnWriteArrayList<() -> Unit>()
-
-    fun addImagesListener(listener: () -> Unit) {
-        imagesListeners.addIfAbsent(listener)
-    }
-
-    fun removeImagesListener(listener: () -> Unit) {
-        imagesListeners.remove(listener)
     }
 
     val core: Session = Session(
@@ -277,12 +259,6 @@ class TerminalSession(
                 // Kept rather than emitted: it is shown for as long as the
                 // connection sheet is open, and again from the menu afterwards.
                 _banner.value = text.trimEnd().ifBlank { null }
-            }
-
-            override fun onImagesChanged() {
-                CoreThreads.keepAttached()
-                _imagesChanged.tryEmit(Unit)
-                imagesListeners.forEach { it() }
             }
         },
         object : HostKeyVerifier {
@@ -479,13 +455,40 @@ class TerminalSession(
         stopRecording()
         close()
         damageListeners.clear()
-        imagesListeners.clear()
         scope.cancel()
         damageFd?.let {
             runCatching { android.os.Looper.getMainLooper().queue.removeOnFileDescriptorEventListener(it.fileDescriptor) }
             runCatching { it.close() }
         }
         runCatching { core.destroy() }
+        // After the core: this reference is what keeps the session alive for
+        // a key that is on its way across as this runs, on another thread.
+        synchronized(keyLock) {
+            if (keyHandle != 0L) FrameBridge.releaseSession(keyHandle)
+            keyHandle = 0L
+        }
+    }
+
+    /**
+     * A strong reference for [FrameBridge.sendKey], taken on the first key.
+     *
+     * Keys go the plain-JNI way because typing is constant, and through uniffi
+     * each one built its record by reflection on both sides. The lock is only
+     * ever contended by [destroy], which can run on another thread.
+     */
+    private val keyLock = Any()
+    private var keyHandle = 0L
+
+    fun sendKey(press: dev.flint.term.core.KeyPress) {
+        synchronized(keyLock) {
+            if (destroyed) return
+            if (keyHandle == 0L) keyHandle = runCatching { core.frameHandle().toLong() }.getOrDefault(0L)
+            if (keyHandle != 0L) {
+                FrameBridge.sendKey(keyHandle, press)
+                return
+            }
+        }
+        runCatching { core.sendKey(press) }
     }
 
 }

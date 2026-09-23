@@ -8,7 +8,6 @@ struct Listener {
     damage: AtomicUsize,
     states: Mutex<Vec<SessionState>>,
     progress: Mutex<Vec<String>>,
-    images: AtomicUsize,
     /// (elapsed, exit status) for each long command the core reported.
     commands: Mutex<Vec<(u64, Option<i32>)>>,
 }
@@ -18,7 +17,6 @@ impl Listener {
             damage: AtomicUsize::new(0),
             states: Mutex::new(vec![]),
             progress: Mutex::new(vec![]),
-            images: AtomicUsize::new(0),
             commands: Mutex::new(vec![]),
         })
     }
@@ -54,9 +52,6 @@ impl SessionListener for Listener {
     fn on_banner(&self, text: String) {
         self.progress.lock().unwrap().push(format!("BANNER {text}"));
     }
-    fn on_images_changed(&self) {
-        self.images.fetch_add(1, Ordering::Relaxed);
-    }
 }
 struct Accept;
 impl HostKeyVerifier for Accept {
@@ -91,6 +86,20 @@ fn screen_text(session: &Session) -> String {
         s.push('\n');
     }
     s
+}
+
+/// Fills `buffer` from `session` and hands back its bytes.
+fn packed(session: &Session, buffer: &Arc<SnapshotBuffer>) -> &'static mut [u8] {
+    let span = session.snapshot_into(buffer.clone());
+    // SAFETY: the buffer outlives every use the tests make of this, and
+    // nothing else fills it in the meantime.
+    unsafe { std::slice::from_raw_parts_mut(span.ptr as usize as *mut u8, span.len as usize) }
+}
+
+fn header_u32(session: &Session, buffer: &Arc<SnapshotBuffer>, offset: u32) -> u32 {
+    let b = packed(session, buffer);
+    let at = offset as usize;
+    u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
 }
 
 fn wait_for(session: &Session, needle: &str) -> String {
@@ -1704,7 +1713,8 @@ fn an_image_reaches_the_view_through_the_session() {
     session.push_output(out);
 
     let start = Instant::now();
-    while listener.images.load(Ordering::Relaxed) == 0 {
+    let buffer = SnapshotBuffer::new();
+    while header_u32(&session, &buffer, term_core::snapshot::IMAGES_OFFSET as u32) == 0 {
         assert!(start.elapsed() < Duration::from_secs(5), "the view was never told about the image");
         std::thread::sleep(Duration::from_millis(20));
     }
@@ -1749,4 +1759,87 @@ fn base64_for_test(data: &[u8]) -> String {
         }
     }
     out
+}
+
+fn external_session(listener: Arc<Listener>) -> (Arc<Session>, Arc<Device>) {
+    let device = Arc::new(Device { written: Mutex::new(vec![]), sizes: Mutex::new(vec![]), closed: AtomicUsize::new(0) });
+    let session = Session::new(
+        Backend::External { config: ExternalConfig { label: "test".into() } },
+        20, 4, 100, listener, Arc::new(Accept), Arc::new(NoQuestions), Options::default(),
+    );
+    session.set_external_sink(device.clone());
+    session.start();
+    (session, device)
+}
+
+/// A frame drawn for nothing new — the cursor blinking — leaves the buffer as
+/// it was, and anything that changes the picture packs it again.
+#[test]
+fn a_buffer_holding_the_current_picture_is_not_packed_again() {
+    let (session, _device) = external_session(Listener::new());
+    session.push_output(b"hello".to_vec());
+    wait_for(&session, "hello");
+    let buffer = SnapshotBuffer::new();
+    let header = snapshot_header_bytes() as usize;
+    let generation_at = snapshot_generation_offset() as usize;
+    let generation = |b: &[u8]| u32::from_le_bytes(b[generation_at..generation_at + 4].try_into().unwrap());
+
+    let first = packed(&session, &buffer);
+    let before = generation(first);
+    // A mark nobody but this test could have made: a skipped fill keeps it.
+    first[header] = b'Z';
+    assert_eq!(packed(&session, &buffer)[header], b'Z', "nothing changed, so nothing was packed");
+
+    // A selection is a new picture of the same text.
+    session.select_start(0, 0, SelectKind::Word);
+    let selected = packed(&session, &buffer);
+    assert_eq!(selected[header], b'h', "the selection packed the grid again");
+    assert_eq!(generation(selected), before, "a selection is not new content");
+
+    // So is a palette.
+    selected[header] = b'Z';
+    session.set_palette(PaletteConfig { ansi: vec![0x808080; 16], foreground: 0x00ff00, background: 0, cursor: 0xffffff, selection: 0x404040 });
+    assert_eq!(packed(&session, &buffer)[header], b'h');
+
+    // New output is new content, and the counter says so.
+    packed(&session, &buffer)[header] = b'Z';
+    session.push_output(b"\r\nmore".to_vec());
+    wait_for(&session, "more");
+    let after = packed(&session, &buffer);
+    assert_eq!(after[header], b'h');
+    assert_ne!(generation(after), before);
+}
+
+/// Two sessions count from the same place, so one buffer moved between them
+/// must not mistake the second for the first.
+#[test]
+fn a_buffer_moved_to_another_session_is_packed_for_it() {
+    let (a, _da) = external_session(Listener::new());
+    let (b, _db) = external_session(Listener::new());
+    a.push_output(b"aaa".to_vec());
+    b.push_output(b"bbb".to_vec());
+    wait_for(&a, "aaa");
+    wait_for(&b, "bbb");
+    let buffer = SnapshotBuffer::new();
+    let header = snapshot_header_bytes() as usize;
+    assert_eq!(packed(&a, &buffer)[header], b'a');
+    assert_eq!(packed(&b, &buffer)[header], b'b');
+}
+
+/// Dragging a selection does not tell everything keyed on the text to read
+/// the rows again.
+#[test]
+fn a_selection_moves_the_picture_but_not_the_content() {
+    let (session, _device) = external_session(Listener::new());
+    session.push_output(b"one two".to_vec());
+    wait_for(&session, "one two");
+    let buffer = SnapshotBuffer::new();
+    let at = snapshot_generation_offset();
+    let before = header_u32(&session, &buffer, at);
+    session.select_start(0, 0, SelectKind::Simple);
+    session.select_update(5, 0, false);
+    session.select_clear();
+    assert_eq!(header_u32(&session, &buffer, at), before);
+    session.scroll_to_offset(0);
+    assert_ne!(header_u32(&session, &buffer, at), before, "scrolling still counts as new content");
 }

@@ -39,8 +39,12 @@ import dev.flint.term.core.PointerButton
 import dev.flint.term.core.SelectKind
 import dev.flint.term.core.snapshotCellBytes
 import dev.flint.term.core.snapshotGenerationOffset
+import dev.flint.term.core.snapshotImagesOffset
+import dev.flint.term.core.snapshotKittyFlagsOffset
 import dev.flint.term.core.snapshotLinksOffset
 import dev.flint.term.core.snapshotHeaderBytes
+import dev.flint.term.core.snapshotPredictionsCountOffset
+import dev.flint.term.core.snapshotPredictionsOffset
 import dev.flint.term.data.CursorStyle
 import dev.flint.term.data.HighlightRule
 import dev.flint.term.data.Settings
@@ -82,7 +86,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      * holds a list and these are this view's entry in it.
      */
     private val onDamage: () -> Unit = { requestFrame() }
-    private val onImages: () -> Unit = { imagesActive = true; imagesAt = NEVER_SCANNED; requestFrame() }
 
     /**
      * The most frames a second this view will draw; 0, the default, for as many
@@ -126,16 +129,17 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     var session: TerminalSession? = null
         set(value) {
             field?.removeDamageListener(onDamage)
-            field?.removeImagesListener(onImages)
             releaseSessionHandle()
             field = value
             sink.primary = value?.let(::SessionTarget)
             value?.addDamageListener(onDamage)
-            value?.addImagesListener(onImages)
             applyHighlights()
             snapshot = null
             dropBitmaps()
-            imagesActive = false
+            imagesSeen = 0
+            imagesAt = NEVER_SCANNED
+            predictedSeen = -1
+            predicted = emptyList()
             if (reshapesGrid && value != null && cols > 0 && !value.destroyed) {
                 value.core.resize(cols.toUShort(), rows.toUShort())
             }
@@ -189,7 +193,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         set(value) {
             if (field == value) return
             field = value
-            scannedAt = NEVER_SCANNED
             linksSeen = -1
         }
 
@@ -204,21 +207,16 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private val predictPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeWidth = 1.5f }
 
     /**
-     * The single pass over the text of the visible rows: tappable links and
-     * the keyword rules both come out of it.
+     * The links on the visible rows, fetched only when the core says the set
+     * of them changed.
      *
-     * Pulling a row's text out of the core is the expensive part, so it is
-     * pulled once and shown to both. Highlights are then cached by that text —
-     * a row that has not changed keeps the colors already worked out for it,
-     * so a screen that is sitting still runs no patterns at all.
+     * The core found them while it filled the snapshot and says in the header
+     * whether the set moved, so text with no links in it streams past without
+     * a single call for them. Keyword colours need nothing from here at all:
+     * the core paints them into the cells it packs.
      */
-    private fun scanRows(sr: Int) {
+    private fun scanLinks() {
         val c = core ?: return
-        val sc = snapCols
-        // Links on their own count. The core found them while it filled the
-        // snapshot and says in the header whether the set changed, so they
-        // are only fetched when it did: text with no links in it streams past
-        // without a single call for them.
         if (!detectLinks) {
             links.clear()
         } else if (snapLinks != linksSeen) {
@@ -228,57 +226,20 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
                 links += LinkSpan(it.row.toInt(), it.start.toInt(), it.end.toInt(), Link(it.text, it.isUrl))
             }
         }
-        // Nothing on the grid has moved since the last scan, so the colours
-        // cannot have either. A blinking cursor draws a lot of frames like this.
-        if (scannedAt == snapGeneration && scannedCols == sc && scannedRows == sr) return
-        scannedAt = snapGeneration
-        scannedCols = sc
-        scannedRows = sr
-        if (highlightRules.isEmpty()) {
-            highlighted = false
-            return
-        }
-        if (highlightColors.size != sc * sr) highlightColors = IntArray(sc * sr)
-        java.util.Arrays.fill(highlightColors, 0)
-        val spans = runCatching { c.visibleHighlights() }.getOrNull().orEmpty()
-        for (sp in spans) {
-            val row = sp.row.toInt()
-            if (row !in 0 until sr) continue
-            val from = sp.start.toInt().coerceIn(0, sc)
-            val to = sp.end.toInt().coerceIn(0, sc)
-            val base = row * sc
-            // First rule to claim a cell keeps it, as the rules are in order.
-            for (i in from until to) if (highlightColors[base + i] == 0) highlightColors[base + i] = sp.color
-        }
-        highlighted = spans.isNotEmpty()
     }
 
     private fun linkAt(col: Int, row: Int): Link? = links.firstOrNull { it.row == row && col >= it.start && col < it.end }?.link
 
-    /** The keyword rules in force, or null when highlighting is off. */
+    /** The keyword rules in force, or empty when highlighting is off. */
     private var highlightRules: List<HighlightRule> = emptyList()
 
-    /**
-     * One ARGB color per cell of the viewport, zero where no rule claimed the
-     * cell. Sized with the grid and refilled row by row as rows change, so the
-     * draw path only ever reads it.
-     */
-    private var highlightColors = IntArray(0)
-
-    /** Whether the last scan found anything to colour. */
-    private var highlighted = false
-
-    /** The grid [scanRows] last looked at; see the check at the top of it. */
-    private var scannedAt = NEVER_SCANNED
-    private var scannedCols = -1
-    /** The same, for the image placements; see [pullImages]. */
+    /** The image-change count the placements were last fetched at; see [pullImages]. */
     private var imagesAt = NEVER_SCANNED
-    private var scannedRows = -1
+    private var imagesSeen = 0
 
     /** Keyword highlighting; an empty list turns it off and costs nothing to draw. */
     fun setHighlights(rules: List<HighlightRule>) {
         highlightRules = rules
-        scannedAt = NEVER_SCANNED
         applyHighlights()
         invalidate()
     }
@@ -445,8 +406,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      */
     private val bitmaps = HashMap<Long, android.graphics.Bitmap>()
     private var placements: List<dev.flint.term.core.ImagePlacement> = emptyList()
-    /** True once this session has drawn an image; until then nothing is asked for. */
-    @Volatile private var imagesActive = false
     private val imagePaint = Paint(Paint.FILTER_BITMAP_FLAG)
     private val imageSrc = Rect()
     private val imageDst = RectF()
@@ -487,11 +446,17 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     /** Pull the placements for this frame and forget bitmaps nobody is using. */
     private fun pullImages() {
-        if (!imagesActive) return
-        // Nothing has moved on the grid, so no image has either; asking again
-        // walks every visible cell in the core for the same answer.
-        if (imagesAt == snapGeneration) return
+        // Zero until this session has shown an image, which most never do;
+        // until then nothing is asked for at all.
+        if (snapImages == 0) {
+            if (placements.isNotEmpty()) dropBitmaps()
+            return
+        }
+        // Nothing has moved on the grid and no image has changed, so asking
+        // again walks every visible cell in the core for the same answer.
+        if (imagesAt == snapGeneration && imagesSeen == snapImages) return
         imagesAt = snapGeneration
+        imagesSeen = snapImages
         placements = runCatching { core?.images() }.getOrNull() ?: emptyList()
         if (bitmaps.isEmpty()) return
         val live = placements.mapTo(HashSet()) { (it.id.toLong() shl 32) or it.generation.toLong() }
@@ -535,12 +500,19 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private val cellBytes = snapshotCellBytes().toInt()
     private val generationOffset = snapshotGenerationOffset().toInt()
     private val linksOffset = snapshotLinksOffset().toInt()
+    private val imagesOffset = snapshotImagesOffset().toInt()
+    private val predictionsOffset = snapshotPredictionsOffset().toInt()
+    private val predictionsCountOffset = snapshotPredictionsCountOffset().toInt()
+    private val kittyFlagsOffset = snapshotKittyFlagsOffset().toInt()
     private var snapCols = 0
     private var snapRows = 0
     private var cursorCol = -1
     private var cursorRow = -1
     private var cursorShape = 3
-    private var altScreen = false
+
+    /** Whether the program is on the alternate screen, as of the last frame. */
+    var altScreen = false
+        private set
     private var mouseReporting = false
     private var displayOffset = 0
     private var historySize = 0
@@ -608,7 +580,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
                 finishActionMode()
                 return true
             }
-            val (c, r) = cellAt(e.x, e.y)
+            val c = colAt(e.x)
+            val r = rowAt(e.y)
             if (mouseReporting) {
                 core?.pointer(c.toUShort(), r.toUShort(), PointerButton.LEFT, true, false)
                 core?.pointer(c.toUShort(), r.toUShort(), PointerButton.LEFT, false, false)
@@ -627,7 +600,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             val s = session ?: return
             if (scaling || multiTouch) return
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            val (c, r) = cellAt(e.x, e.y)
+            val c = colAt(e.x)
+            val r = rowAt(e.y)
             core?.selectStart(c.toUShort(), r.toUShort(), SelectKind.WORD)
             drag = Drag.SELECT
             onSelectionChanged?.invoke(true)
@@ -800,6 +774,20 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
     /** The core's count of changes to the set of links, from the same header. */
     private var snapLinks = 0
+    /** The same for the inline images; zero until the session has shown one. */
+    private var snapImages = 0
+    /** The same for predictive echo, and how many cells it is drawing. */
+    private var snapPredictions = 0
+    private var snapPredictionCount = 0
+    /** The kitty keyboard flags the program has asked for, as of the last frame. */
+    private var snapKittyFlags = 0
+
+    /**
+     * The predicted cells, fetched when the header says they changed; the
+     * count they were fetched at, or -1 to fetch again.
+     */
+    private var predicted: List<dev.flint.term.core.PredictedCell> = emptyList()
+    private var predictedSeen = -1
     /** The count the links in [links] were fetched at; -1 to fetch again. */
     private var linksSeen = -1
 
@@ -820,20 +808,32 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private var snapPtr = 0L
     private var snapLen = 0L
 
-    private fun pullSnapshot() {
-        val s = session ?: return
+    /**
+     * This view's strong reference to the session for [FrameBridge], or 0
+     * when there is no live session to hold.
+     *
+     * Taken once per session and per attach, through uniffi; every frame
+     * after that goes through FrameBridge, which is where the time went.
+     */
+    private fun frameSession(): Long {
+        val s = session ?: return 0L
         if (s.destroyed) {
             releaseSessionHandle()
-            return
+            return 0L
         }
-        // Taken once per session and per attach, through uniffi; every frame
-        // after that goes through FrameBridge, which is where the time went.
         if (sessionHandle == 0L) {
             sessionHandle = runCatching { s.core.frameHandle().toLong() }.getOrDefault(0L)
-            if (sessionHandle == 0L) return
         }
+        return sessionHandle
+    }
+
+    private fun pullSnapshot() {
+        if (frameSession() == 0L) return
         if (bufferHandle == 0L) bufferHandle = snapBuffer.frameHandle().toLong()
-        val len = FrameBridge.snapshotInto(sessionHandle, bufferHandle, if (detectLinks) FrameBridge.WANT_LINKS else 0)
+        var flags = 0
+        if (detectLinks) flags = flags or FrameBridge.WANT_LINKS
+        if (highlightRules.isNotEmpty()) flags = flags or FrameBridge.WANT_HIGHLIGHTS
+        val len = FrameBridge.snapshotInto(sessionHandle, bufferHandle, flags)
         if (len <= 0L) return
         // The buffer only moves when it has to grow, and growing changes its
         // length, so the address is only asked for then.
@@ -858,6 +858,10 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         historySize = buf.getInt(14)
         val sc = buf.getShort(18).toInt()
         val wasSelected = hasSelection
+        val wasStartCol = selStartCol
+        val wasStartRow = selStartRow
+        val wasEndCol = selEndCol
+        val wasEndRow = selEndRow
         if (sc == Short.MIN_VALUE.toInt()) {
             selStartCol = Int.MIN_VALUE
         } else {
@@ -867,9 +871,19 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             selEndRow = buf.getShort(24).toInt()
         }
         if (wasSelected != hasSelection) onSelectionChanged?.invoke(hasSelection)
-        if (hasSelection) actionMode?.invalidateContentRect()
+        // Only when an end moved: every frame asked the floating toolbar to
+        // lay itself out again, and output streaming under a selection is a
+        // lot of frames.
+        val moved = wasStartCol != selStartCol || wasStartRow != selStartRow || wasEndCol != selEndCol || wasEndRow != selEndRow
+        if (hasSelection && moved) {
+            actionMode?.invalidateContentRect()
+        }
         snapGeneration = buf.getInt(generationOffset)
         snapLinks = buf.get(linksOffset).toInt() and 0xff
+        snapImages = buf.getInt(imagesOffset)
+        snapPredictions = buf.getInt(predictionsOffset)
+        snapPredictionCount = buf.getShort(predictionsCountOffset).toInt() and 0xffff
+        snapKittyFlags = buf.get(kittyFlagsOffset).toInt() and 0xff
         snapshot = buf
     }
 
@@ -900,9 +914,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // other, which is the whole point of the cursor going away.
         val block = focused && cursorLit && cursorShape == CursorShapes.BLOCK
 
-        // Links and keyword colors, before anything is painted: the text pass
-        // needs the colors, and the underlines are drawn from the same spans.
-        scanRows(sr)
+        // The underlines are drawn from these at the end.
+        scanLinks()
 
         // Pass 1: backgrounds.
         for (r in 0 until sr) {
@@ -963,7 +976,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             if (gRow in 0 until sr && gCol in 0 until sc) {
                 val room = sc - gCol
                 if (room > 0) {
-                    val text = if (hint.length > room) hint.substring(0, room) else hint
+                    val text = ghostClipped(hint, room)
                     val textY = oy + gRow * cellH + baseline
                     textPaint.typeface = faces.regular
                     // The block cursor sits on the first character, so that one
@@ -971,11 +984,11 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
                     // cursor always is; the rest is the dim hint.
                     val underCursor = block
                     if (underCursor) {
-                        textPaint.color = bgColor or 0xff000000.toInt()
+                        textColor(bgColor or 0xff000000.toInt())
                         canvas.drawText(text, 0, 1, ox + gCol * cellW, textY, textPaint)
                     }
                     if (text.length > (if (underCursor) 1 else 0)) {
-                        textPaint.color = ghostColor()
+                        textColor(ghostColor())
                         val from = if (underCursor) 1 else 0
                         canvas.drawText(text, from, text.length, ox + (gCol + from) * cellW, textY, textPaint)
                     }
@@ -1007,12 +1020,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
                 var fg = (pair ushr 32).toInt()
                 val flags = buf.getShort(off + 12).toInt() and 0xffff
                 off += cellBytes
-                // A rule that claimed this cell replaces the foreground; the
-                // run breaks by itself, because the runs break on color.
-                if (highlighted) {
-                    val hit = highlightColors[r * sc + c]
-                    if (hit != 0) fg = hit and 0xffffff
-                }
                 val isCursorCell = block && r == cursorRow && c == cursorCol
                 if (isCursorCell) fg = bgColor
                 val styleFlags = flags and STYLE_MASK
@@ -1036,6 +1043,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
                     // where the symbols font gets its chance to take over.
                     setPaintFor(fg, styleFlags, nerdGlyphs && RunSplitter.isSymbol(cp))
                     if (!batchGlyph(cp, ox + c * cellW, textY)) {
+                        textColor(paintColor)
                         val n = Character.toChars(cp, runChars, 0)
                         canvas.drawText(runChars, 0, n, ox + c * cellW, textY, textPaint)
                     }
@@ -1051,9 +1059,9 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
         // Predicted keystrokes: drawn over the authoritative screen and underlined,
         // so it is always visible which characters the server has not confirmed.
-        val predicted = if (s.usesPrediction) s.predictions else emptyList()
-        if (predicted.isNotEmpty()) {
-            for (cell in predicted) {
+        val guesses = predictedCells(s)
+        if (guesses.isNotEmpty()) {
+            for (cell in guesses) {
                 val r = cell.row.toInt()
                 val c = cell.col.toInt()
                 if (r !in 0 until sr || c !in 0 until sc) continue
@@ -1109,6 +1117,38 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     }
 
     /**
+     * The cells predictive echo is drawing, fetched only when the header says
+     * they changed, and not at all while it says there are none — which is
+     * every frame of every session that is not Mosh on a slow link.
+     */
+    private fun predictedCells(s: TerminalSession): List<dev.flint.term.core.PredictedCell> {
+        if (snapPredictionCount == 0) {
+            predicted = emptyList()
+            predictedSeen = -1
+            return predicted
+        }
+        if (predictedSeen != snapPredictions) {
+            predictedSeen = snapPredictions
+            predicted = s.predictions
+        }
+        return predicted
+    }
+
+    /** The suggestion cut to the room left on its row, kept while neither changes. */
+    private var ghostClip: String? = null
+    private var ghostClipOf: String? = null
+    private var ghostClipRoom = -1
+
+    private fun ghostClipped(hint: String, room: Int): String {
+        if (hint !== ghostClipOf || room != ghostClipRoom) {
+            ghostClipOf = hint
+            ghostClipRoom = room
+            ghostClip = if (hint.length > room) hint.substring(0, room) else hint
+        }
+        return ghostClip ?: hint
+    }
+
+    /**
      * Fit `sc` x `sr` cells into the view. Returns whether the canvas was
      * saved, so the caller knows to restore it.
      */
@@ -1127,8 +1167,12 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // Skip runs of spaces entirely; the background pass already painted them.
         var allSpace = true
         for (i in 0 until len) if (runChars[i] != ' ') { allSpace = false; break }
+        // Nothing to draw at all, which is most of a screen: not even the
+        // paint needs to hear about it.
+        if (allSpace && flags and DECORATIONS == 0) return
         setPaintFor(fg, flags)
         if (!allSpace && !drawRunAsGlyphs(canvas, x, textY, len)) {
+            textColor(paintColor)
             canvas.drawText(runChars, 0, len, x, textY, textPaint)
         }
         drawDecorations(canvas, x, textY - baseline, len * cellW, fg, flags)
@@ -1293,7 +1337,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         for (i in batches.indices) {
             val batch = batches[i]
             if (batch.n == 0) continue
-            textPaint.color = batch.color
+            textColor(batch.color)
             canvas.drawGlyphs(batch.ids, 0, batch.pos, 0, batch.n, batch.font, textPaint)
             batch.n = 0
             batches[kept++] = batch
@@ -1440,20 +1484,36 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         }
     }
 
+    /**
+     * Point the paint at a style and colour, touching it only where it moves:
+     * both setters cross into native code, and runs mostly share both.
+     */
     private fun setPaintFor(fg: Int, flags: Int, symbol: Boolean = false) {
-        val face = if (symbol) symbolFace else null
-        textPaint.typeface = face ?: when {
+        val face = (if (symbol) symbolFace else null) ?: when {
             flags and FLAG_BOLD != 0 && flags and FLAG_ITALIC != 0 -> boldItalic
             flags and FLAG_BOLD != 0 -> bold
             flags and FLAG_ITALIC != 0 -> italic
             else -> regular
         }
+        if (textPaint.typeface !== face) textPaint.typeface = face
         paintColor = 0xff000000.toInt() or fg
-        textPaint.color = paintColor
+        // While batching, the colour only says which batch a glyph joins; the
+        // paint is given it when the batch goes down, or by [textColor] right
+        // before a glyph has to be drawn the ordinary way.
+        if (!batching) textColor(paintColor)
     }
 
     /** What [setPaintFor] last set, so batching does not ask the paint once per glyph. */
     private var paintColor = 0
+
+    /** The colour [textPaint] holds, so it is only set when it changes. */
+    private var textPaintColor = Color.BLACK
+
+    private fun textColor(color: Int) {
+        if (color == textPaintColor) return
+        textPaint.color = color
+        textPaintColor = color
+    }
 
     private fun drawDecorations(canvas: Canvas, x: Float, y: Float, w: Float, fg: Int, flags: Int) {
         if (flags and (FLAG_UNDERLINE or FLAG_STRIKEOUT or FLAG_DOUBLE_UNDERLINE or FLAG_UNDERCURL) == 0) return
@@ -1502,8 +1562,12 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         val lines = (scrollRemainder / cellH).toInt()
         if (lines == 0) return
         scrollRemainder -= lines * cellH
-        val (c, r) = if (e != null) cellAt(e.x, e.y) else Pair(0, 0)
-        core?.scroll(c.toUShort(), r.toUShort(), lines)
+        val c = if (e != null) colAt(e.x) else 0
+        val r = if (e != null) rowAt(e.y) else 0
+        // Over JNI: a drag or a fling sends one of these for every line it
+        // crosses, and each through uniffi was a round of reflection.
+        val handle = frameSession()
+        if (handle != 0L) FrameBridge.scroll(handle, c, r, lines) else core?.scroll(c.toUShort(), r.toUShort(), lines)
     }
 
     // ---- touch ------------------------------------------------------------
@@ -1513,18 +1577,21 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private var dragCell = -1L
 
     private fun dragSelect(x: Float, y: Float, moveStart: Boolean) {
-        val (c, r) = cellAt(x, y)
+        val c = colAt(x)
+        val r = rowAt(y)
         val cell = (r.toLong() shl 32) or c.toLong()
         if (cell == dragCell) return
         dragCell = cell
-        core?.selectUpdate(c.toUShort(), r.toUShort(), moveStart)
+        val handle = frameSession()
+        if (handle != 0L) FrameBridge.selectUpdate(handle, c, r, moveStart) else core?.selectUpdate(c.toUShort(), r.toUShort(), moveStart)
     }
 
-    private fun cellAt(x: Float, y: Float): Pair<Int, Int> {
-        val c = floor((x - paddingLeft - paddingPx) / cellW).toInt().coerceIn(0, max(0, snapCols - 1))
-        val r = floor((y - paddingTop - paddingPx) / cellH).toInt().coerceIn(0, max(0, snapRows - 1))
-        return Pair(c, r)
-    }
+    /** The column under `x`, clamped to the grid; see [rowAt]. */
+    private fun colAt(x: Float): Int =
+        floor((x - paddingLeft - paddingPx) / cellW).toInt().coerceIn(0, max(0, snapCols - 1))
+
+    private fun rowAt(y: Float): Int =
+        floor((y - paddingTop - paddingPx) / cellH).toInt().coerceIn(0, max(0, snapRows - 1))
 
     private fun handleAt(x: Float, y: Float): Drag {
         if (!hasSelection) return Drag.NONE
@@ -2085,8 +2152,11 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      * Kitty keyboard flags the program has asked for, or 0 when it has asked
      * for nothing — which is also what the core reports while the protocol is
      * switched off for this host.
+     *
+     * As of the last frame, out of its header: asked over uniffi instead, it
+     * was a round trip on every key that came back up.
      */
-    private fun kittyFlags(): Int = runCatching { core?.modes()?.kittyFlags?.toInt() }.getOrNull() ?: 0
+    private fun kittyFlags(): Int = snapKittyFlags
 
     /** A tap on a modifier cap, or a long press when [lock]. */
     fun toggleModifier(which: Char, lock: Boolean = false) {
@@ -2318,7 +2388,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // the visible one, so this is where a session changes hands when a
         // floating window opens over a screen or closes back into it.
         session?.addDamageListener(onDamage)
-        session?.addImagesListener(onImages)
         post { requestFocus() }
         scheduleBlink()
     }
@@ -2327,7 +2396,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         session?.removeDamageListener(onDamage)
         removeCallbacks(blinkTick)
         removeCallbacks(applyPendingGrid)
-        session?.removeImagesListener(onImages)
         dropBitmaps()
         finishActionMode()
         releaseSessionHandle()
@@ -2414,6 +2482,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         private const val FLAG_HIDDEN = 1 shl 8
         private const val FLAG_DOUBLE_UNDERLINE = 1 shl 9
         private const val FLAG_UNDERCURL = 1 shl 10
+        private const val DECORATIONS = FLAG_UNDERLINE or FLAG_STRIKEOUT or FLAG_DOUBLE_UNDERLINE or FLAG_UNDERCURL
         private const val STYLE_MASK = FLAG_BOLD or FLAG_ITALIC or FLAG_UNDERLINE or FLAG_STRIKEOUT or FLAG_DOUBLE_UNDERLINE or FLAG_UNDERCURL
     }
 }

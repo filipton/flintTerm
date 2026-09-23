@@ -250,7 +250,8 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         marked = marked,
         running = running,
         tmuxHost = tmuxHost,
-        altScreen = runCatching { session.core.modes().altScreen }.getOrDefault(false),
+        // Out of the last frame's header rather than over the bridge.
+        altScreen = view.altScreen,
     )
 
     // The loop below outlives many compositions, and the history changes under

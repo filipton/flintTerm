@@ -1,5 +1,6 @@
 package dev.flint.term.terminal
 
+import dev.flint.term.core.KeyCode
 import dev.flint.term.core.KeyPress
 import dev.flint.term.session.TerminalSession
 
@@ -48,7 +49,7 @@ class SessionTarget(private val session: TerminalSession) : KeyTarget {
     private val core get() = session.takeIf { !it.destroyed }?.core
 
     override fun key(press: KeyPress) {
-        core?.sendKey(press)
+        if (!session.destroyed) session.sendKey(press)
     }
 
     override fun text(text: String) {
@@ -58,4 +59,43 @@ class SessionTarget(private val session: TerminalSession) : KeyTarget {
     override fun paste(text: String) {
         core?.paste(text)
     }
+}
+
+/**
+ * A [KeyPress] as the numbers [FrameBridge.sendKey] takes.
+ *
+ * The key is numbered in the order [KeyCode]'s variants are declared on the
+ * Rust side, which is where it is unpacked again; the modifier keys and the
+ * event kind go by their own declaration order, which the bindings keep.
+ */
+internal object KeyPacking {
+    fun key(code: KeyCode): Int = when (code) {
+        is KeyCode.Char -> 0
+        KeyCode.Enter -> 1
+        KeyCode.Tab -> 2
+        KeyCode.Backspace -> 3
+        KeyCode.Escape -> 4
+        KeyCode.Up -> 5
+        KeyCode.Down -> 6
+        KeyCode.Left -> 7
+        KeyCode.Right -> 8
+        KeyCode.Home -> 9
+        KeyCode.End -> 10
+        KeyCode.PageUp -> 11
+        KeyCode.PageDown -> 12
+        KeyCode.Insert -> 13
+        KeyCode.Delete -> 14
+        is KeyCode.Function -> 15
+        is KeyCode.Modifier -> 16
+    }
+
+    fun arg(code: KeyCode): Int = when (code) {
+        is KeyCode.Char -> code.codepoint.toInt()
+        is KeyCode.Function -> code.n.toInt()
+        is KeyCode.Modifier -> code.which.ordinal
+        else -> 0
+    }
+
+    fun mods(press: KeyPress): Int =
+        (if (press.ctrl) 1 else 0) or (if (press.alt) 2 else 0) or (if (press.shift) 4 else 0)
 }

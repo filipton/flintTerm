@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,6 +12,7 @@ use term_core::{
     Modifiers, MouseButton, MouseEvent, Palette, PromptMark, SelectionKind, ViewPoint, CELL_BYTES, GENERATION_OFFSET,
     HEADER_BYTES, LINKS_OFFSET,
 };
+use term_core::snapshot::{IMAGES_OFFSET, KITTY_FLAGS_OFFSET, PREDICTIONS_COUNT_OFFSET, PREDICTIONS_OFFSET};
 
 use crate::emulator;
 use crate::runtime::{block_on, RUNTIME};
@@ -330,8 +331,6 @@ pub trait SessionListener: Send + Sync {
     fn on_cwd(&self, path: String);
     /// The server's pre-login banner, as it sent it.
     fn on_banner(&self, text: String);
-    /// The image store changed; the view should ask for the placements again.
-    fn on_images_changed(&self);
 }
 
 /// Where a shell said it was, in the OSC 133 sense.
@@ -662,8 +661,30 @@ struct Inner {
     /// per-frame work — link scanning, keyword colouring, reading the line
     /// being typed — that can only give the same answer twice.
     generation: AtomicU64,
+    /// Bumped when the picture changes but the text on the grid does not: a
+    /// selection dragged, a new palette, new colour rules.
+    ///
+    /// Kept apart from [`Self::generation`] because everything keyed on that
+    /// one — links, keyword colours, images, the line being typed — reads
+    /// the rows again when it moves, and a selection drag moved it on every
+    /// finger event for nothing. Together the two say whether a snapshot
+    /// buffer already holds the current picture; see [`Session::fill_snapshot`].
+    repaint: AtomicU64,
+    /// Tells this session's snapshots apart from another's in the same buffer.
+    /// Both counters above start from the same place in every session.
+    id: u64,
+    /// A count of changes to the inline images, for the snapshot header.
+    ///
+    /// This replaced a callback made for every chunk of output that touched
+    /// an image, which a program drawing a chart made dozens of times a second.
+    images: AtomicU32,
+    /// A count of changes to the predictive-echo overlay, for the header.
+    predictions: AtomicU32,
     state: Mutex<SessionState>,
     title: Mutex<Option<String>>,
+    /// The last directory the shell reported, so a prompt that repeats it on
+    /// every line does not cross the bridge to say nothing new.
+    cwd: Mutex<Option<String>>,
     size: Mutex<(u16, u16)>,
     writer: Mutex<Option<Writer>>,
     input_tx: mpsc::UnboundedSender<Vec<u8>>,
@@ -768,8 +789,29 @@ pub struct SnapshotSpan {
 /// cannot pull the memory out from under a frame that is still being painted.
 #[derive(uniffi::Object, Default)]
 pub struct SnapshotBuffer {
-    data: Mutex<Vec<u8>>,
+    data: Mutex<Packed>,
 }
+
+#[derive(Default)]
+struct Packed {
+    bytes: Vec<u8>,
+    /// What `bytes` was packed from, or None when it has to be packed again.
+    from: Option<FillKey>,
+}
+
+/// Everything a packed grid depends on, as counters: when all of them are
+/// where they were, packing again would write the same bytes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct FillKey {
+    session: u64,
+    generation: u64,
+    repaint: u64,
+    /// Which extras were asked for; see [`crate::frame`].
+    flags: u8,
+}
+
+/// Hands out [`Inner::id`].
+static NEXT_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 
 #[uniffi::export]
 impl SnapshotBuffer {
@@ -783,7 +825,7 @@ impl SnapshotBuffer {
     /// Where the packed grid starts. It only moves when the buffer has to
     /// grow, and growing changes its length.
     pub(crate) fn address(&self) -> u64 {
-        self.data.lock().as_ptr() as u64
+        self.data.lock().bytes.as_ptr() as u64
     }
 }
 
@@ -841,27 +883,110 @@ impl ssh_core::HostKeyVerifier for Verifier {
 
 impl Session {
     /// Packs the grid into `out`, and with `want_links`, works out the links
-    /// first so the header can say whether they changed.
+    /// first so the header can say whether they changed; with
+    /// `want_highlights`, the user's colour rules are painted into the cells.
     ///
     /// The one piece of work done for every frame, from either way across:
     /// uniffi's [`Session::snapshot_into`], or the JNI path in [`crate::frame`].
-    pub(crate) fn fill_snapshot(&self, out: &SnapshotBuffer, want_links: bool) -> SnapshotSpan {
+    ///
+    /// A buffer that already holds this session's current picture is left as
+    /// it is. Most frames drawn are not for new content — a blinking cursor, a
+    /// ghost suggestion, a scroll indicator fading — and packing the grid again
+    /// for them wrote the same tens of kilobytes to get the same picture.
+    pub(crate) fn fill_snapshot(&self, out: &SnapshotBuffer, want_links: bool, want_highlights: bool) -> SnapshotSpan {
+        self.inner.dirty.store(false, Ordering::Release);
+        // Read before anything is packed. Content newer than these numbers
+        // only costs one more fill on the next frame; content older than them
+        // would be kept as if it were current.
+        let key = FillKey {
+            session: self.inner.id,
+            generation: self.inner.generation.load(Ordering::Acquire),
+            repaint: self.inner.repaint.load(Ordering::Acquire),
+            flags: want_links as u8 | (want_highlights as u8) << 1,
+        };
+        {
+            let mut packed = out.data.lock();
+            if packed.from == Some(key) && packed.bytes.len() >= HEADER_BYTES {
+                // Guesses time out on a clock rather than on anything counted.
+                self.stamp_predictions(&mut packed.bytes);
+                return SnapshotSpan { ptr: packed.bytes.as_ptr() as u64, len: packed.bytes.len() as u64 };
+            }
+        }
         // Before the buffer and palette are locked, so this takes none of the
         // locks the grid does while holding theirs.
         let links = if want_links { self.refresh_links() } else { self.inner.links_last.lock().changes };
-        self.inner.dirty.store(false, Ordering::Release);
         let (cols, rows) = *self.inner.size.lock();
-        let mut buf = out.data.lock();
+        let mut packed = out.data.lock();
+        packed.from = None;
+        let buf = &mut packed.bytes;
         buf.clear();
         buf.reserve(HEADER_BYTES + cols as usize * rows as usize * CELL_BYTES);
-        let palette = self.inner.palette.lock();
-        self.inner.emu.lock().snapshot(&palette, &mut buf);
-        self.stamp_generation(&mut buf[..]);
+        let kitty = {
+            let palette = self.inner.palette.lock();
+            let emu = self.inner.emu.lock();
+            emu.snapshot(&palette, buf);
+            emu.modes().kitty_flags
+        };
         if buf.len() >= HEADER_BYTES {
+            buf[GENERATION_OFFSET..GENERATION_OFFSET + 4].copy_from_slice(&(key.generation as u32).to_le_bytes());
             buf[LINKS_OFFSET] = links;
+            let images = self.inner.images.load(Ordering::Acquire);
+            buf[IMAGES_OFFSET..IMAGES_OFFSET + 4].copy_from_slice(&images.to_le_bytes());
+            buf[KITTY_FLAGS_OFFSET] = kitty;
+            self.stamp_predictions(buf);
+            if want_highlights {
+                self.paint_highlights(buf);
+            }
         }
+        packed.from = Some(key);
         // Read after filling: growing the buffer moves it.
-        SnapshotSpan { ptr: buf.as_ptr() as u64, len: buf.len() as u64 }
+        SnapshotSpan { ptr: packed.bytes.as_ptr() as u64, len: packed.bytes.len() as u64 }
+    }
+
+    /// Puts the predictive-echo counters in the header, expiring stale
+    /// guesses on the way so the count never promises cells that are gone.
+    fn stamp_predictions(&self, buf: &mut [u8]) {
+        let count = if matches!(self.inner.backend, Backend::Mosh { .. }) {
+            let mut p = self.inner.predict.lock();
+            if p.expire(self.inner.millis()) {
+                self.inner.predictions.fetch_add(1, Ordering::AcqRel);
+            }
+            p.overlay().count().min(u16::MAX as usize) as u16
+        } else {
+            0
+        };
+        let generation = self.inner.predictions.load(Ordering::Acquire);
+        buf[PREDICTIONS_OFFSET..PREDICTIONS_OFFSET + 4].copy_from_slice(&generation.to_le_bytes());
+        buf[PREDICTIONS_COUNT_OFFSET..PREDICTIONS_COUNT_OFFSET + 2].copy_from_slice(&count.to_le_bytes());
+    }
+
+    /// Overwrites the foreground of every cell a colour rule claims.
+    ///
+    /// Done here rather than by the renderer, which used to fetch the spans
+    /// as a list, spread them over an array the size of the grid and look each
+    /// cell up in it while drawing. The cells are right here, and a colour
+    /// written into them costs the renderer nothing at all.
+    fn paint_highlights(&self, buf: &mut [u8]) {
+        if self.inner.highlight.lock().is_empty() {
+            return;
+        }
+        let cols = u16::from_le_bytes([buf[0], buf[1]]) as usize;
+        let rows = u16::from_le_bytes([buf[2], buf[3]]) as usize;
+        self.with_rows(|texts, _| {
+            self.inner.highlight.lock().paint(texts, |row, start, end, color| {
+                let row = row as usize;
+                if row >= rows {
+                    return;
+                }
+                let fg = (color as u32 & 0x00ff_ffff).to_le_bytes();
+                for col in start as usize..(end as usize).min(cols) {
+                    let at = HEADER_BYTES + (row * cols + col) * CELL_BYTES + 4;
+                    if let Some(dst) = buf.get_mut(at..at + 4) {
+                        dst.copy_from_slice(&fg);
+                    }
+                }
+            });
+        });
     }
 
     /// Finds the visible links if the grid moved since the last look, and
@@ -985,8 +1110,13 @@ impl Session {
                 palette: Mutex::new(Palette::default()),
                 dirty: AtomicBool::new(true),
                 generation: AtomicU64::new(1),
+                repaint: AtomicU64::new(0),
+                id: NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed),
+                images: AtomicU32::new(0),
+                predictions: AtomicU32::new(0),
                 state: Mutex::new(SessionState::Connecting),
                 title: Mutex::new(None),
+                cwd: Mutex::new(None),
                 size: Mutex::new((cols.max(2), rows.max(1))),
                 writer: Mutex::new(None),
                 input_tx,
@@ -1148,7 +1278,7 @@ impl Session {
     /// session, because a session can be destroyed from another thread while a
     /// frame that is already reading the pointer is still on its way out.
     pub fn snapshot_into(&self, out: Arc<SnapshotBuffer>) -> SnapshotSpan {
-        self.fill_snapshot(&out, false)
+        self.fill_snapshot(&out, false, false)
     }
 
     /// Packed grid (see `term_core::snapshot`). Clears the damage flag.
@@ -1228,7 +1358,9 @@ impl Session {
     /// Empty unless this is a Mosh session on a slow enough link.
     pub fn predictions(&self) -> Vec<PredictedCell> {
         let mut p = self.inner.predict.lock();
-        p.expire(self.inner.millis());
+        if p.expire(self.inner.millis()) {
+            self.inner.predictions.fetch_add(1, Ordering::AcqRel);
+        }
         p.overlay().map(|c| PredictedCell { row: c.row, col: c.col, codepoint: c.ch as u32 }).collect()
     }
 
@@ -1239,12 +1371,12 @@ impl Session {
             PredictionMode::Always => mosh::PredictMode::Always,
             PredictionMode::Never => mosh::PredictMode::Never,
         });
-        self.inner.mark_dirty();
+        self.inner.predictions_moved();
     }
 
     pub fn set_palette(&self, palette: PaletteConfig) {
         *self.inner.palette.lock() = palette.to_palette();
-        self.inner.mark_dirty();
+        self.inner.mark_repaint();
     }
 
     pub fn resize(&self, cols: u16, rows: u16) {
@@ -1259,6 +1391,7 @@ impl Session {
         }
         self.inner.emu.lock().resize(cols, rows);
         self.inner.predict.lock().set_cols(cols);
+        self.inner.predictions.fetch_add(1, Ordering::AcqRel);
         self.inner.mark_dirty();
         if let Some(w) = self.inner.writer.lock().clone() {
             RUNTIME.spawn(async move { w.resize(cols, rows).await });
@@ -1421,17 +1554,17 @@ impl Session {
             SelectKind::Block => SelectionKind::Block,
         };
         self.inner.emu.lock().selection_start(ViewPoint { col, row }, kind);
-        self.inner.mark_dirty();
+        self.inner.mark_repaint();
     }
 
     pub fn select_update(&self, col: u16, row: u16, move_start: bool) {
         self.inner.emu.lock().selection_update(ViewPoint { col, row }, move_start);
-        self.inner.mark_dirty();
+        self.inner.mark_repaint();
     }
 
     pub fn select_all(&self) {
         self.inner.emu.lock().selection_all();
-        self.inner.mark_dirty();
+        self.inner.mark_repaint();
     }
 
     pub fn select_clear(&self) {
@@ -1439,7 +1572,7 @@ impl Session {
         if emu.has_selection() {
             emu.selection_clear();
             drop(emu);
-            self.inner.mark_dirty();
+            self.inner.mark_repaint();
         }
     }
 
@@ -1490,7 +1623,9 @@ impl Session {
     /// A rule that is switched off is still compiled: a broken pattern has to
     /// be visible in the editor whether or not it is in use.
     pub fn set_highlight_rules(&self, rules: Vec<crate::highlight::HighlightRule>) -> Vec<crate::highlight::HighlightError> {
-        self.inner.highlight.lock().set_rules(&rules)
+        let errors = self.inner.highlight.lock().set_rules(&rules);
+        self.inner.mark_repaint();
+        errors
     }
 
     /// Whether a pattern would be accepted, and why not when it would not.
@@ -1754,8 +1889,27 @@ impl Inner {
         self.taps.store(any, Ordering::Release);
     }
 
+    /// The text on the grid changed, or which rows are showing: everything
+    /// that reads the rows has to read them again, and the grid is redrawn.
     fn mark_dirty(&self) {
         self.generation.fetch_add(1, Ordering::AcqRel);
+        self.wake();
+    }
+
+    /// Only the picture changed — see [`Inner::repaint`] — so the grid is
+    /// redrawn but nothing that reads the rows has to run again.
+    fn mark_repaint(&self) {
+        self.repaint.fetch_add(1, Ordering::AcqRel);
+        self.wake();
+    }
+
+    /// The guesses drawn over the grid changed; see [`Inner::predictions`].
+    fn predictions_moved(&self) {
+        self.predictions.fetch_add(1, Ordering::AcqRel);
+        self.mark_repaint();
+    }
+
+    fn wake(&self) {
         if !self.dirty.swap(true, Ordering::AcqRel) && !self.wake_frontend() {
             self.listener.on_damage();
         }
@@ -1807,7 +1961,7 @@ impl Inner {
         }
         if p.on_input(bytes, now) {
             drop(p);
-            self.mark_dirty();
+            self.predictions_moved();
         }
     }
 
@@ -1833,7 +1987,7 @@ impl Inner {
         }
         if changed {
             drop(p);
-            self.mark_dirty();
+            self.predictions_moved();
         }
     }
 
@@ -2717,9 +2871,15 @@ impl Inner {
         for ev in events {
             match ev {
                 EmulatorEvent::PtyWrite(bytes) => self.send(bytes),
+                // Both of these are repeated by many prompts on every line, and
+                // each one is a trip across the bridge to say nothing new.
                 EmulatorEvent::Title(t) => {
-                    *self.title.lock() = t.clone();
-                    self.listener.on_title(t);
+                    let mut title = self.title.lock();
+                    if *title != t {
+                        title.clone_from(&t);
+                        drop(title);
+                        self.listener.on_title(t);
+                    }
                 }
                 EmulatorEvent::Bell => self.listener.on_bell(),
                 EmulatorEvent::ClipboardStore(s) => self.listener.on_clipboard(s),
@@ -2735,8 +2895,19 @@ impl Inner {
                     let (kind, exit) = split_mark(m);
                     self.listener.on_prompt_mark(kind, exit);
                 }
-                EmulatorEvent::Cwd(path) => self.listener.on_cwd(path),
-                EmulatorEvent::ImagesChanged => self.listener.on_images_changed(),
+                EmulatorEvent::Cwd(path) => {
+                    let mut cwd = self.cwd.lock();
+                    if cwd.as_deref() != Some(path.as_str()) {
+                        *cwd = Some(path.clone());
+                        drop(cwd);
+                        self.listener.on_cwd(path);
+                    }
+                }
+                // Counted into the header rather than called back: the frame
+                // this output causes is where the renderer finds out.
+                EmulatorEvent::ImagesChanged => {
+                    self.images.fetch_add(1, Ordering::AcqRel);
+                }
                 // A backend that places images itself — the one we have —
                 // never hands these up; they are here for one that does not.
                 EmulatorEvent::KittyGraphics(_) | EmulatorEvent::Sixel { .. } => {}
@@ -2808,5 +2979,156 @@ fn to_proxy(p: &ProxyConfig) -> ssh_core::ProxyConfig {
         port: p.port,
         username: p.username.clone(),
         password: p.password.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct Quiet;
+    impl SessionListener for Quiet {
+        fn on_damage(&self) {}
+        fn on_command_finished(&self, _: u64, _: Option<i32>) {}
+        fn on_state(&self, _: SessionState) {}
+        fn on_title(&self, _: Option<String>) {}
+        fn on_bell(&self) {}
+        fn on_clipboard(&self, _: String) {}
+        fn on_progress(&self, _: String, _: String, _: StepStatus) {}
+        fn on_pattern(&self, _: String, _: String) {}
+        fn on_notify(&self, _: String, _: String) {}
+        fn on_prompt_mark(&self, _: PromptKind, _: Option<i32>) {}
+        fn on_cwd(&self, _: String) {}
+        fn on_banner(&self, _: String) {}
+    }
+    impl HostKeyVerifier for Quiet {
+        fn verify(&self, _: HostKey) -> bool {
+            false
+        }
+    }
+    impl AuthPrompter for Quiet {
+        fn ask(&self, _: String, _: String, _: Vec<Prompt>) -> Option<Vec<String>> {
+            None
+        }
+    }
+
+    fn session() -> Arc<Session> {
+        Session::new(
+            Backend::External { config: ExternalConfig { label: "test".into() } },
+            20,
+            2,
+            10,
+            Arc::new(Quiet),
+            Arc::new(Quiet),
+            Arc::new(Quiet),
+            Options::default(),
+        )
+    }
+
+    fn fg(buf: &SnapshotBuffer, col: usize) -> u32 {
+        let packed = buf.data.lock();
+        let at = HEADER_BYTES + col * CELL_BYTES + 4;
+        u32::from_le_bytes(packed.bytes[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn colour_rules_are_painted_into_the_cells_when_asked_for() {
+        let s = session();
+        s.set_highlight_rules(vec![crate::highlight::HighlightRule {
+            id: "e".into(),
+            pattern: "error".into(),
+            color: 0xff12_3456u32 as i32,
+            whole_line: false,
+            enabled: true,
+        }]);
+        s.inner.feed(b"an error");
+        let buf = SnapshotBuffer::default();
+        s.fill_snapshot(&buf, false, false);
+        assert_ne!(fg(&buf, 3), 0x12_3456, "not asked for, not painted");
+        s.fill_snapshot(&buf, false, true);
+        assert_ne!(fg(&buf, 2), 0x12_3456, "the space before it is left alone");
+        for col in 3..8 {
+            assert_eq!(fg(&buf, col), 0x12_3456);
+        }
+        // New rules are a new picture of the same grid.
+        s.set_highlight_rules(Vec::new());
+        s.fill_snapshot(&buf, false, true);
+        assert_ne!(fg(&buf, 3), 0x12_3456);
+    }
+
+    #[test]
+    fn a_buffer_already_current_is_handed_back_as_it_is() {
+        let s = session();
+        s.inner.feed(b"x");
+        let buf = SnapshotBuffer::default();
+        let first = s.fill_snapshot(&buf, true, false);
+        let from = buf.data.lock().from;
+        assert!(from.is_some());
+        let again = s.fill_snapshot(&buf, true, false);
+        assert_eq!((first.ptr, first.len), (again.ptr, again.len));
+        assert_eq!(buf.data.lock().from, from);
+        // Asking for more than the buffer was filled with packs it again.
+        s.fill_snapshot(&buf, true, true);
+        assert_ne!(buf.data.lock().from, from);
+    }
+
+    #[test]
+    fn images_and_kitty_flags_reach_the_header() {
+        let s = session();
+        // A program pushing kitty keyboard flags.
+        s.inner.feed(b"\x1b[>1u");
+        let buf = SnapshotBuffer::default();
+        s.fill_snapshot(&buf, false, false);
+        let kitty = buf.data.lock().bytes[KITTY_FLAGS_OFFSET];
+        assert_eq!(kitty, s.inner.emu.lock().modes().kitty_flags);
+        s.inner.images.fetch_add(1, Ordering::AcqRel);
+        s.inner.mark_dirty();
+        s.fill_snapshot(&buf, false, false);
+        let packed = buf.data.lock();
+        assert_eq!(u32::from_le_bytes(packed.bytes[IMAGES_OFFSET..IMAGES_OFFSET + 4].try_into().unwrap()), 1);
+    }
+
+    #[test]
+    fn a_title_or_directory_said_twice_is_passed_on_once() {
+        #[derive(Default)]
+        struct Count(std::sync::atomic::AtomicUsize, std::sync::atomic::AtomicUsize);
+        impl SessionListener for Count {
+            fn on_damage(&self) {}
+            fn on_command_finished(&self, _: u64, _: Option<i32>) {}
+            fn on_state(&self, _: SessionState) {}
+            fn on_title(&self, _: Option<String>) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+            fn on_bell(&self) {}
+            fn on_clipboard(&self, _: String) {}
+            fn on_progress(&self, _: String, _: String, _: StepStatus) {}
+            fn on_pattern(&self, _: String, _: String) {}
+            fn on_notify(&self, _: String, _: String) {}
+            fn on_prompt_mark(&self, _: PromptKind, _: Option<i32>) {}
+            fn on_cwd(&self, _: String) {
+                self.1.fetch_add(1, Ordering::Relaxed);
+            }
+            fn on_banner(&self, _: String) {}
+        }
+        let count = Arc::new(Count::default());
+        let s = Session::new(
+            Backend::External { config: ExternalConfig { label: "test".into() } },
+            20,
+            2,
+            10,
+            count.clone(),
+            Arc::new(Quiet),
+            Arc::new(Quiet),
+            Options::default(),
+        );
+        for _ in 0..3 {
+            s.inner.feed(b"\x1b]2;same\x07\x1b]7;file://host/tmp\x07");
+        }
+        assert_eq!(count.0.load(Ordering::Relaxed), 1);
+        assert_eq!(count.1.load(Ordering::Relaxed), 1);
+        s.inner.feed(b"\x1b]2;other\x07\x1b]7;file://host/var\x07");
+        assert_eq!(count.0.load(Ordering::Relaxed), 2);
+        assert_eq!(count.1.load(Ordering::Relaxed), 2);
     }
 }

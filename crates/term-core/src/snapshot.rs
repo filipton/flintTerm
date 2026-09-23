@@ -11,6 +11,8 @@
 //!   u32 display_offset, u32 history_size
 //!   i16 sel_start_col, i16 sel_start_row, i16 sel_end_col, i16 sel_end_row (i16::MIN when none)
 //!   u8  sel_is_block, u32 generation, u8 links_changed
+//!   u32 images_changed, u32 predictions_generation, u16 predictions_count,
+//!   u8  kitty_flags, then zeros up to HEADER_BYTES
 //! cells (rows * cols * CELL_BYTES):
 //!   u32 codepoint, u32 fg (0x00RRGGBB), u32 bg (0x00RRGGBB), u16 flags
 //! ```
@@ -19,7 +21,7 @@
 //! paints what it is told. Wide characters occupy two cells: the first carries
 //! the glyph with `WIDE`, the second is a `WIDE_SPACER` with codepoint 0.
 
-pub const HEADER_BYTES: usize = 32;
+pub const HEADER_BYTES: usize = 48;
 /// Where the content counter sits in the header.
 ///
 /// The writer leaves it zero; the session fills it in on the way out, because
@@ -33,6 +35,19 @@ pub const GENERATION_OFFSET: usize = 27;
 /// without this ever moving, so the renderer only asks for the links when it
 /// does. It wraps, which is fine: it is compared frame to frame, never kept.
 pub const LINKS_OFFSET: usize = 31;
+/// A count of changes to the inline images, filled in by the session.
+///
+/// The renderer only asks for image placements once this has moved at least
+/// once, and asks again when it moves; everything from here to the end of the
+/// header is the session's, and a backend leaves it zero like the two above.
+pub const IMAGES_OFFSET: usize = 32;
+/// A count of changes to the predictive-echo overlay, and at
+/// [`PREDICTIONS_COUNT_OFFSET`] how many cells it holds (u16), so the
+/// renderer only fetches the cells when there are some and they moved.
+pub const PREDICTIONS_OFFSET: usize = 36;
+pub const PREDICTIONS_COUNT_OFFSET: usize = 40;
+/// The kitty keyboard flags in force, so a key-up does not have to ask.
+pub const KITTY_FLAGS_OFFSET: usize = 42;
 pub const CELL_BYTES: usize = 14;
 
 pub mod CellFlags {
@@ -122,7 +137,9 @@ impl<'a> SnapshotWriter<'a> {
                 w.u8(0);
             }
         }
-        for _ in 0..5 {
+        // Everything after the selection is filled in by the session, which
+        // is what knows about it; zeroed here so a backend never has to.
+        while w.out.len() < HEADER_BYTES {
             w.u8(0);
         }
         debug_assert_eq!(w.out.len(), HEADER_BYTES);
