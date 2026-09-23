@@ -714,6 +714,9 @@ struct Inner {
     /// The links last found, the generation they were found at, and a count
     /// of the times the set changed; see [`Session::refresh_links`].
     links_last: Mutex<LinksState>,
+    /// The image placements last found, and a count of the times they
+    /// changed; see [`Session::refresh_placements`].
+    placements_last: Mutex<PlacementsState>,
     /// What the line being typed looked like at the last snapshot, and a count
     /// of the times it changed; see [`Session::input_changes`].
     input_last: Mutex<InputState>,
@@ -764,6 +767,15 @@ struct WatchLine {
     text: String,
     /// Inside an escape sequence: 0 = no, 1 = after ESC, 2 = CSI, 3 = OSC.
     esc: u8,
+}
+
+/// What [`Session::refresh_placements`] last worked out.
+#[derive(Default)]
+struct PlacementsState {
+    generation: u64,
+    images: u32,
+    changes: u32,
+    placements: Vec<term_core::images::PlacedImage>,
 }
 
 /// What [`Session::input_changes`] last saw: nothing while no command is
@@ -942,6 +954,7 @@ impl Session {
         // Before the buffer and palette are locked, so this takes none of the
         // locks the grid does while holding theirs.
         let links = if want_links { self.refresh_links() } else { self.inner.links_last.lock().changes };
+        let placements = self.refresh_placements();
         let (cols, rows) = *self.inner.size.lock();
         let mut guard = out.data.lock();
         let packed = &mut *guard;
@@ -958,8 +971,7 @@ impl Session {
         if buf.len() >= HEADER_BYTES {
             buf[GENERATION_OFFSET..GENERATION_OFFSET + 4].copy_from_slice(&(key.generation as u32).to_le_bytes());
             buf[LINKS_OFFSET] = links;
-            let images = self.inner.images.load(Ordering::Acquire);
-            buf[IMAGES_OFFSET..IMAGES_OFFSET + 4].copy_from_slice(&images.to_le_bytes());
+            buf[IMAGES_OFFSET..IMAGES_OFFSET + 4].copy_from_slice(&placements.to_le_bytes());
             buf[KITTY_FLAGS_OFFSET] = kitty;
             self.stamp_predictions(buf);
             if want_highlights {
@@ -1028,6 +1040,33 @@ impl Session {
     ///
     /// Scrolling text that holds no links leaves the set empty frame after
     /// frame, so the count stays put and the renderer never asks for them.
+    fn refresh_placements(&self) -> u32 {
+        // Zero until the session has had an image, which most never do; until
+        // then no cell is looked at for one.
+        let images = self.inner.images.load(Ordering::Acquire);
+        if images == 0 {
+            return 0;
+        }
+        let generation = self.inner.generation.load(Ordering::Acquire);
+        {
+            let state = self.inner.placements_last.lock();
+            if state.generation == generation && state.images == images {
+                return state.changes;
+            }
+        }
+        // Not under the lock above: the grid's lock is taken while a frame
+        // packs, and nothing here should wait on both.
+        let found = self.inner.emu.lock().images();
+        let mut state = self.inner.placements_last.lock();
+        state.generation = generation;
+        state.images = images;
+        if state.placements != found {
+            state.placements = found;
+            state.changes = state.changes.wrapping_add(1);
+        }
+        state.changes
+    }
+
     /// A count that moves when the line being typed may read differently: the
     /// text on the cursor's row, or the cursor's place on it.
     ///
@@ -1130,6 +1169,13 @@ impl Session {
         self.inner.send(bytes);
     }
 
+    /// Runs `f` over the pixels of one generation of an image, as row-major
+    /// RGBA, or over None once that generation is gone. Under the grid's
+    /// lock, so the pixels are only borrowed for as long as the copy takes.
+    pub(crate) fn with_image_bytes<R>(&self, id: u32, generation: u32, f: impl FnOnce(Option<&[u8]>) -> R) -> R {
+        f(self.inner.emu.lock().image_bytes(id, generation))
+    }
+
     /// Let the input tracker see keystrokes before they leave, while the
     /// screen still shows where they will land.
     fn note_typing(&self, bytes: &[u8]) {
@@ -1202,6 +1248,7 @@ impl Session {
                 link_cache: Mutex::new(Default::default()),
                 rows_text: Mutex::new((0, Vec::new())),
                 links_last: Mutex::new(LinksState::default()),
+                placements_last: Mutex::new(PlacementsState::default()),
                 input_last: Mutex::new(InputState::default()),
                 wake: Mutex::new(None),
                 input_start: Mutex::new(Default::default()),
@@ -1379,14 +1426,17 @@ impl Session {
         out
     }
 
-    /// Images on the visible grid, back to front. Cheap enough to ask for on
-    /// every frame: it is a scan of the visible cells and carries no pixels.
+    /// Images on the visible grid, back to front.
+    ///
+    /// The ones the last frame found, when nothing has changed since; the
+    /// renderer asks only when the header says they moved.
     pub fn images(&self) -> Vec<ImagePlacement> {
+        self.refresh_placements();
         self.inner
-            .emu
+            .placements_last
             .lock()
-            .images()
-            .into_iter()
+            .placements
+            .iter()
             .map(|p| ImagePlacement {
                 id: p.id,
                 generation: p.generation,
@@ -3262,15 +3312,34 @@ mod tests {
         s.fill_snapshot(&buf, false, false);
         let kitty = buf.data.lock().bytes[KITTY_FLAGS_OFFSET];
         assert_eq!(kitty, s.inner.emu.lock().modes().kitty_flags);
-        s.inner.images.fetch_add(1, Ordering::AcqRel);
-        s.inner.mark_dirty();
-        s.fill_snapshot(&buf, false, false);
-        let packed = buf.data.lock();
-        assert_eq!(u32::from_le_bytes(packed.bytes[IMAGES_OFFSET..IMAGES_OFFSET + 4].try_into().unwrap()), 1);
     }
 
     fn header_u32(buf: &SnapshotBuffer, at: usize) -> u32 {
         u32::from_le_bytes(buf.data.lock().bytes[at..at + 4].try_into().unwrap())
+    }
+
+    #[test]
+    fn the_placements_count_moves_only_when_what_is_on_screen_does() {
+        let s = session();
+        s.set_cell_size(10, 20);
+        let buf = SnapshotBuffer::default();
+        s.fill_snapshot(&buf, false, false);
+        assert_eq!(header_u32(&buf, IMAGES_OFFSET), 0, "no image, nothing to ask for");
+        // A white two by two pixel image, in one cell.
+        s.inner.feed(b"\x1b_Ga=T,f=32,s=2,v=2,i=7;/////////////////////w==\x1b\\");
+        s.fill_snapshot(&buf, false, false);
+        let shown = header_u32(&buf, IMAGES_OFFSET);
+        assert_ne!(shown, 0);
+        assert_eq!(s.images().len(), 1);
+        // Text beside it changes the grid and not the image.
+        s.inner.feed(b"abc");
+        s.fill_snapshot(&buf, false, false);
+        assert_eq!(header_u32(&buf, IMAGES_OFFSET), shown);
+        // Erased, it is a change of its own.
+        s.inner.feed(b"\x1b[2J");
+        s.fill_snapshot(&buf, false, false);
+        assert_ne!(header_u32(&buf, IMAGES_OFFSET), shown);
+        assert!(s.images().is_empty());
     }
 
     #[test]

@@ -38,7 +38,6 @@ import dev.flint.term.core.KeyPress
 import dev.flint.term.core.PointerButton
 import dev.flint.term.core.SelectKind
 import dev.flint.term.core.snapshotCellBytes
-import dev.flint.term.core.snapshotGenerationOffset
 import dev.flint.term.core.snapshotImagesOffset
 import dev.flint.term.core.snapshotKittyFlagsOffset
 import dev.flint.term.core.snapshotLinksOffset
@@ -153,8 +152,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             applyHighlights()
             snapshot = null
             dropBitmaps()
-            imagesSeen = 0
-            imagesAt = NEVER_SCANNED
+            imagesSeen = -1
             predictedSeen = -1
             predicted = emptyList()
             if (reshapesGrid && value != null && cols > 0 && !value.destroyed) {
@@ -250,9 +248,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     /** The keyword rules in force, or empty when highlighting is off. */
     private var highlightRules: List<HighlightRule> = emptyList()
 
-    /** The image-change count the placements were last fetched at; see [pullImages]. */
-    private var imagesAt = NEVER_SCANNED
-    private var imagesSeen = 0
+    /** The placement count the placements were last fetched at, or -1; see [pullImages]. */
+    private var imagesSeen = -1
 
     /** Keyword highlighting; an empty list turns it off and costs nothing to draw. */
     fun setHighlights(rules: List<HighlightRule>) {
@@ -449,14 +446,14 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private fun bitmapFor(p: dev.flint.term.core.ImagePlacement): android.graphics.Bitmap? {
         val key = (p.id.toLong() shl 32) or p.generation.toLong()
         bitmaps[key]?.let { return it }
-        val bytes = runCatching { core?.imageBytes(p.id, p.generation) }.getOrNull() ?: return null
+        val handle = frameSession()
         val w = p.width.toInt()
         val h = p.height.toInt()
-        if (bytes.size < w * h * 4 || w <= 0 || h <= 0) return null
-        // ARGB_8888 is stored red-first in memory, which is exactly the layout
-        // the core hands over, so the pixels go in without a conversion pass.
+        if (handle == 0L || w <= 0 || h <= 0) return null
+        // The core writes the pixels straight into the bitmap's memory. Over
+        // uniffi they were copied three times on the way, a whole image each.
         val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
-        bmp.copyPixelsFromBuffer(ByteBuffer.wrap(bytes))
+        if (FrameBridge.imageInto(handle, p.id.toInt(), p.generation.toInt(), bmp) != FrameBridge.IMAGE_COPIED) return null
         bitmaps[key] = bmp
         return bmp
     }
@@ -469,10 +466,9 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             if (placements.isNotEmpty()) dropBitmaps()
             return
         }
-        // Nothing has moved on the grid and no image has changed, so asking
-        // again walks every visible cell in the core for the same answer.
-        if (imagesAt == snapGeneration && imagesSeen == snapImages) return
-        imagesAt = snapGeneration
+        // The core counts the times what it would answer changed, so a frame
+        // of new text beside a picture that stayed put asks nothing.
+        if (imagesSeen == snapImages) return
         imagesSeen = snapImages
         placements = runCatching { core?.images() }.getOrNull() ?: emptyList()
         if (bitmaps.isEmpty()) return
@@ -515,7 +511,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private var snapshot: ByteBuffer? = null
     private val headerBytes = snapshotHeaderBytes().toInt()
     private val cellBytes = snapshotCellBytes().toInt()
-    private val generationOffset = snapshotGenerationOffset().toInt()
     private val linksOffset = snapshotLinksOffset().toInt()
     private val imagesOffset = snapshotImagesOffset().toInt()
     private val predictionsOffset = snapshotPredictionsOffset().toInt()
@@ -792,18 +787,9 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     val inputChanges: StateFlow<Int> get() = inputFlow
     private val inputFlow = kotlinx.coroutines.flow.MutableStateFlow(0)
 
-    /**
-     * How many times the grid has changed, as of the snapshot being drawn.
-     *
-     * The core counts it and puts it in the header; a frame whose number is the
-     * one before it is a frame drawn for something other than new content, and
-     * anything that reads the grid can sit that one out.
-     */
-    private var snapGeneration = 0
-
     /** The core's count of changes to the set of links, from the same header. */
     private var snapLinks = 0
-    /** The same for the inline images; zero until the session has shown one. */
+    /** The same for the images placed on screen; zero until one has been. */
     private var snapImages = 0
     /** The same for predictive echo, and how many cells it is drawing. */
     private var snapPredictions = 0
@@ -919,7 +905,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         if (hasSelection && moved) {
             actionMode?.invalidateContentRect()
         }
-        snapGeneration = buf.getInt(generationOffset)
         inputFlow.value = buf.getInt(inputOffset)
         snapLinks = buf.get(linksOffset).toInt() and 0xff
         snapImages = buf.getInt(imagesOffset)
@@ -2867,9 +2852,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
          * the gap between two keystrokes.
          */
         private const val STREAMING_GAP_MS = 50L
-
-        /** No generation the core can hand out, so the first frame always scans. */
-        private const val NEVER_SCANNED = -1
 
         /**
          * How long a new size has to hold before the grid is reshaped to it.

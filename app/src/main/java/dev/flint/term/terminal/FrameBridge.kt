@@ -89,6 +89,19 @@ internal object FrameBridge {
      */
     @JvmStatic external fun sendBytes(session: Long, addr: Long, len: Int)
 
+    /** What [imageInto] answers: the bitmap holds the image. */
+    const val IMAGE_COPIED = 1
+
+    /** That generation of the image is gone, and so should its bitmap be. */
+    const val IMAGE_GONE = 0
+
+    /**
+     * Writes one generation of an image into an `ARGB_8888` [bitmap] of its
+     * size, premultiplied; [IMAGE_COPIED], [IMAGE_GONE] or -1 when it could
+     * not be written.
+     */
+    @JvmStatic external fun imageInto(session: Long, id: Int, generation: Int, bitmap: android.graphics.Bitmap): Int
+
     @JvmStatic external fun releaseSession(session: Long)
 
     @JvmStatic external fun releaseBuffer(buffer: Long)

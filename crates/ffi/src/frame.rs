@@ -288,6 +288,150 @@ pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_sendBytes(
     }));
 }
 
+/// What `imageInto` answers: the bitmap holds the image.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+const IMAGE_COPIED: i32 = 1;
+/// That generation of the image is gone, and the bitmap should be too.
+const IMAGE_GONE: i32 = 0;
+/// The bitmap could not be written, or does not fit the image.
+const IMAGE_FAILED: i32 = -1;
+
+/// Copies one generation of an image straight into an `ARGB_8888` bitmap.
+///
+/// Through uniffi the pixels were copied three times on their way to the
+/// screen: into a serialized buffer, into a Java array by JNA, and into the
+/// bitmap. Here they are written once, into the bitmap's own memory.
+#[no_mangle]
+pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_imageInto(
+    env: *mut c_void,
+    _class: *mut c_void,
+    session: i64,
+    id: i32,
+    generation: i32,
+    bitmap: *mut c_void,
+) -> i32 {
+    if session == 0 || env.is_null() || bitmap.is_null() {
+        return IMAGE_FAILED;
+    }
+    catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: as in `snapshotInto`.
+        let session = unsafe { &*(session as usize as *const Session) };
+        session.with_image_bytes(id as u32, generation as u32, |rgba| match rgba {
+            None => IMAGE_GONE,
+            // SAFETY: `env` and `bitmap` are what the VM passed to this call.
+            Some(rgba) => unsafe { bitmap::write(env, bitmap, rgba) },
+        })
+    }))
+    .unwrap_or(IMAGE_FAILED)
+}
+
+/// Copies straight RGBA rows into a bitmap's rows, `stride` bytes apart,
+/// premultiplying the colour by alpha when the bitmap keeps it that way.
+///
+/// Android's `ARGB_8888` is RGBA in memory order, so the bytes only move; but
+/// a bitmap is premultiplied unless it says otherwise and the images the core
+/// decodes are not, so a translucent pixel has its colour scaled on the way.
+/// `copyPixelsFromBuffer`, which this replaced, took the bytes as they were,
+/// and a half-transparent pixel came out brighter than it is. An opaque one,
+/// which is nearly every pixel, is copied as it is.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+fn copy_rgba(src: &[u8], width: usize, height: usize, dst: &mut [u8], stride: usize, premultiply: bool) -> bool {
+    let row = width * 4;
+    if src.len() < row * height || stride < row || (height > 0 && dst.len() < stride * (height - 1) + row) {
+        return false;
+    }
+    for y in 0..height {
+        let from = &src[y * row..(y + 1) * row];
+        let to = &mut dst[y * stride..y * stride + row];
+        if !premultiply {
+            to.copy_from_slice(from);
+            continue;
+        }
+        for (d, s) in to.chunks_exact_mut(4).zip(from.chunks_exact(4)) {
+            let a = s[3] as u32;
+            if a == 255 {
+                d.copy_from_slice(s);
+            } else {
+                // Rounded rather than truncated, so a colour at half alpha
+                // does not come out a shade darker than it should.
+                let scale = |c: u8| ((c as u32 * a + 127) / 255) as u8;
+                d[0] = scale(s[0]);
+                d[1] = scale(s[1]);
+                d[2] = scale(s[2]);
+                d[3] = s[3];
+            }
+        }
+    }
+    true
+}
+
+/// The NDK's bitmap calls, from `libjnigraphics`, which only Android has. A
+/// host build gets a stand-in that writes nothing, so the tests still link.
+mod bitmap {
+    use std::ffi::c_void;
+
+    #[cfg(target_os = "android")]
+    #[repr(C)]
+    #[derive(Default)]
+    struct AndroidBitmapInfo {
+        width: u32,
+        height: u32,
+        stride: u32,
+        format: i32,
+        flags: u32,
+    }
+
+    #[cfg(target_os = "android")]
+    #[link(name = "jnigraphics")]
+    extern "C" {
+        fn AndroidBitmap_getInfo(env: *mut c_void, bitmap: *mut c_void, info: *mut AndroidBitmapInfo) -> i32;
+        fn AndroidBitmap_lockPixels(env: *mut c_void, bitmap: *mut c_void, pixels: *mut *mut c_void) -> i32;
+        fn AndroidBitmap_unlockPixels(env: *mut c_void, bitmap: *mut c_void) -> i32;
+    }
+
+    #[cfg(target_os = "android")]
+    const FORMAT_RGBA_8888: i32 = 1;
+    /// The alpha bits of `flags`. They read 0, premultiplied, before API 30,
+    /// which never says, and premultiplied is what those bitmaps are.
+    #[cfg(target_os = "android")]
+    const ALPHA_MASK: u32 = 3;
+    #[cfg(target_os = "android")]
+    const ALPHA_UNPREMUL: u32 = 2;
+
+    /// # Safety
+    /// `env` and `bitmap` must be the JNI environment and a live
+    /// `android.graphics.Bitmap` of the current call.
+    #[cfg(target_os = "android")]
+    pub(super) unsafe fn write(env: *mut c_void, bitmap: *mut c_void, rgba: &[u8]) -> i32 {
+        let mut info = AndroidBitmapInfo::default();
+        if AndroidBitmap_getInfo(env, bitmap, &mut info) != 0 || info.format != FORMAT_RGBA_8888 {
+            return super::IMAGE_FAILED;
+        }
+        let mut pixels: *mut c_void = std::ptr::null_mut();
+        if AndroidBitmap_lockPixels(env, bitmap, &mut pixels) != 0 || pixels.is_null() {
+            return super::IMAGE_FAILED;
+        }
+        let (w, h, stride) = (info.width as usize, info.height as usize, info.stride as usize);
+        let len = if h == 0 { 0 } else { stride * (h - 1) + w * 4 };
+        let dst = std::slice::from_raw_parts_mut(pixels as *mut u8, len);
+        let premultiply = info.flags & ALPHA_MASK != ALPHA_UNPREMUL;
+        let copied = super::copy_rgba(rgba, w, h, dst, stride, premultiply);
+        AndroidBitmap_unlockPixels(env, bitmap);
+        if copied {
+            super::IMAGE_COPIED
+        } else {
+            super::IMAGE_FAILED
+        }
+    }
+
+    /// # Safety
+    /// Nothing is touched.
+    #[cfg(not(target_os = "android"))]
+    pub(super) unsafe fn write(_env: *mut c_void, _bitmap: *mut c_void, _rgba: &[u8]) -> i32 {
+        super::IMAGE_FAILED
+    }
+}
+
 fn clamp_u16(v: i32) -> u16 {
     v.clamp(0, u16::MAX as i32) as u16
 }
@@ -408,6 +552,42 @@ mod tests {
             KeyPress { key: KeyCode::Modifier { which: ModifierKey::RightSuper }, alt: true, kind: KeyEventKind::Release, .. }
         ));
         assert!(matches!(key_press(14, 0, 0, 0).unwrap().key, KeyCode::Delete));
+    }
+
+    #[test]
+    fn pixels_land_row_by_row_past_the_stride() {
+        // Two by two, into rows of twelve bytes: four of padding each.
+        let src = [1, 2, 3, 255, 4, 5, 6, 255, 7, 8, 9, 255, 10, 11, 12, 255];
+        let mut dst = [0xeeu8; 20];
+        assert!(copy_rgba(&src, 2, 2, &mut dst, 12, false));
+        assert_eq!(&dst[..8], &src[..8]);
+        assert_eq!(&dst[8..12], &[0xee; 4]);
+        assert_eq!(&dst[12..20], &src[8..16]);
+    }
+
+    #[test]
+    fn a_translucent_pixel_is_premultiplied_and_an_opaque_one_is_not_touched() {
+        let src = [200, 100, 50, 128, 200, 100, 50, 255, 9, 9, 9, 0];
+        let mut dst = [0u8; 12];
+        assert!(copy_rgba(&src, 3, 1, &mut dst, 12, true));
+        assert_eq!(&dst[..4], &[100, 50, 25, 128]);
+        assert_eq!(&dst[4..8], &src[4..8]);
+        assert_eq!(&dst[8..], &[0, 0, 0, 0]);
+        // Left alone for a bitmap that keeps straight alpha.
+        assert!(copy_rgba(&src, 3, 1, &mut dst, 12, false));
+        assert_eq!(&dst[..], &src[..]);
+    }
+
+    #[test]
+    fn pixels_that_do_not_fit_are_not_written() {
+        let src = [0u8; 16];
+        let mut dst = [0u8; 16];
+        // The image is smaller than the bitmap says it is.
+        assert!(!copy_rgba(&src[..12], 2, 2, &mut dst, 8, false));
+        // A stride narrower than a row.
+        assert!(!copy_rgba(&src, 2, 2, &mut dst, 4, false));
+        // Not enough bitmap for the rows.
+        assert!(!copy_rgba(&src, 2, 2, &mut dst[..12], 8, false));
     }
 
     #[test]

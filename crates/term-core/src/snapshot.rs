@@ -37,11 +37,13 @@ pub const GENERATION_OFFSET: usize = 27;
 /// without this ever moving, so the renderer only asks for the links when it
 /// does. It wraps, which is fine: it is compared frame to frame, never kept.
 pub const LINKS_OFFSET: usize = 31;
-/// A count of changes to the inline images, filled in by the session.
+/// A count of changes to the image placements on the visible grid, filled in
+/// by the session.
 ///
-/// The renderer only asks for image placements once this has moved at least
-/// once, and asks again when it moves; everything from here to the end of the
-/// header is the session's, and a backend leaves it zero like the two above.
+/// Zero until an image has been on screen, and it moves only when what the
+/// renderer would be told about them moves, so the renderer asks for the
+/// placements exactly then; everything from here to the end of the header is
+/// the session's, and a backend leaves it zero like the two above.
 pub const IMAGES_OFFSET: usize = 32;
 /// A count of changes to the predictive-echo overlay, and at
 /// [`PREDICTIONS_COUNT_OFFSET`] how many cells it holds (u16), so the
