@@ -940,6 +940,9 @@ impl Session {
             if want_highlights {
                 self.paint_highlights(buf);
             }
+            // Last, over the cells as they will be drawn: the highlights
+            // above are part of what a row looks like.
+            term_core::rows::append_rows(buf);
         }
         packed.from = Some(key);
         // Read after filling: growing the buffer moves it.
@@ -3128,6 +3131,27 @@ mod tests {
         s.set_highlight_rules(Vec::new());
         s.fill_snapshot(&buf, false, true);
         assert_ne!(fg(&buf, 3), 0x12_3456);
+    }
+
+    #[test]
+    fn the_row_hash_is_of_the_row_as_drawn_colour_rules_and_all() {
+        let s = session();
+        s.inner.feed(b"an error");
+        let buf = SnapshotBuffer::default();
+        let hash = |row| term_core::rows::table_hash(&buf.data.lock().bytes, row).unwrap();
+        s.fill_snapshot(&buf, false, true);
+        let plain = hash(0);
+        let blank = hash(1);
+        s.set_highlight_rules(vec![crate::highlight::HighlightRule {
+            id: "e".into(),
+            pattern: "error".into(),
+            color: 0xff12_3456u32 as i32,
+            whole_line: false,
+            enabled: true,
+        }]);
+        s.fill_snapshot(&buf, false, true);
+        assert_ne!(hash(0), plain, "a recording of the uncoloured row would be drawn");
+        assert_eq!(hash(1), blank, "a row the rules did not touch keeps its recording");
     }
 
     #[test]

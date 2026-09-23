@@ -45,6 +45,8 @@ import dev.flint.term.core.snapshotLinksOffset
 import dev.flint.term.core.snapshotHeaderBytes
 import dev.flint.term.core.snapshotPredictionsCountOffset
 import dev.flint.term.core.snapshotPredictionsOffset
+import dev.flint.term.core.snapshotRowEntryBytes
+import dev.flint.term.core.snapshotRowsOffset
 import dev.flint.term.data.CursorStyle
 import dev.flint.term.data.HighlightRule
 import dev.flint.term.data.Settings
@@ -514,6 +516,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     private val predictionsOffset = snapshotPredictionsOffset().toInt()
     private val predictionsCountOffset = snapshotPredictionsCountOffset().toInt()
     private val kittyFlagsOffset = snapshotKittyFlagsOffset().toInt()
+    private val rowsOffset = snapshotRowsOffset().toInt()
+    private val rowEntryBytes = snapshotRowEntryBytes().toInt()
     private var snapCols = 0
     private var snapRows = 0
     private var cursorCol = -1
@@ -927,24 +931,15 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // The underlines are drawn from these at the end.
         scanLinks()
 
-        // Pass 1: backgrounds.
-        for (r in 0 until sr) {
-            var runStart = -1
-            var runBg = 0
-            val y = oy + r * cellH
-            var off = headerBytes + r * sc * cellBytes + 8
-            for (c in 0..sc) {
-                var bg = if (c < sc) buf.getInt(off) else -1
-                off += cellBytes
-                if (c < sc && block && r == cursorRow && c == cursorCol) bg = -2
-                if (bg != runBg || c == sc) {
-                    if (runStart >= 0 && runBg != bgColor && runBg != -2) {
-                        bgPaint.color = 0xff000000.toInt() or runBg
-                        canvas.drawRect(ox + runStart * cellW, y, ox + c * cellW, y + cellH, bgPaint)
-                    }
-                    runStart = c
-                    runBg = bg
-                }
+        // Pass 1: backgrounds. Recorded rows where the platform can draw
+        // them; the cells walked every frame where it cannot.
+        val rowNodes = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && canvas.isHardwareAccelerated && rowsAt(buf, sr) > 0
+        if (rowNodes) {
+            fitRowNodes(sc, sr, bgColor)
+            drawRowNodes(canvas, buf, ox, oy, sc, sr, bgColor, block, text = false)
+        } else {
+            for (r in 0 until sr) {
+                drawRowBackground(canvas, buf, r, sc, ox, oy + r * cellH, bgColor, blockCol(block, r, sc))
             }
         }
 
@@ -1017,58 +1012,16 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // Pass 2: text runs. Gathered by colour and put down in one go at the
         // end, so Skia builds a handful of glyph containers instead of one per
         // run; see [GlyphBatch].
-        batching = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !ligatures
-        for (r in 0 until sr) {
-            val y = oy + r * cellH
-            val textY = y + baseline
-            var runLen = 0
-            var runStartCol = 0
-            var runFg = 0
-            var runFlags = 0
-            var off = headerBytes + r * sc * cellBytes
-            for (c in 0 until sc) {
-                // Codepoint and foreground are adjacent little-endian u32s, so
-                // one read fetches both: every one of these is bounds checked,
-                // and there are four per cell of the grid on every frame.
-                val pair = buf.getLong(off)
-                val cp = pair.toInt()
-                var fg = (pair ushr 32).toInt()
-                val flags = buf.getShort(off + 12).toInt() and 0xffff
-                off += cellBytes
-                val isCursorCell = block && r == cursorRow && c == cursorCol
-                if (isCursorCell) fg = bgColor
-                val styleFlags = flags and STYLE_MASK
-                val ascii = cp in 0x20..0x7e
-                val blank = cp == 0 || cp == 0x20
-                // Flush when attributes change or a non-ASCII glyph appears.
-                if (runLen > 0 && (fg != runFg || styleFlags != runFlags || !ascii || runLen >= runChars.size - 2)) {
-                    drawRun(canvas, ox + runStartCol * cellW, textY, runLen, runFg, runFlags, runStartCol, r, sc)
-                    runLen = 0
-                }
-                if (flags and FLAG_WIDE_SPACER != 0 || flags and FLAG_HIDDEN != 0) continue
-                if (ascii) {
-                    if (runLen == 0) {
-                        runStartCol = c
-                        runFg = fg
-                        runFlags = styleFlags
-                    }
-                    runChars[runLen++] = cp.toChar()
-                } else if (!blank) {
-                    // A non-ASCII cell is already a run of its own, which is
-                    // where the symbols font gets its chance to take over.
-                    setPaintFor(fg, styleFlags, nerdGlyphs && RunSplitter.isSymbol(cp))
-                    if (!batchGlyph(cp, ox + c * cellW, textY)) {
-                        textColor(paintColor)
-                        val n = Character.toChars(cp, runChars, 0)
-                        canvas.drawText(runChars, 0, n, ox + c * cellW, textY, textPaint)
-                    }
-                    drawDecorations(canvas, ox + c * cellW, y, if (flags and FLAG_WIDE != 0) cellW * 2 else cellW, fg, styleFlags)
-                }
+        if (rowNodes) {
+            drawRowNodes(canvas, buf, ox, oy, sc, sr, bgColor, block, text = true)
+        } else {
+            batching = glyphRuns()
+            for (r in 0 until sr) {
+                drawRowText(canvas, buf, r, sc, ox, oy + r * cellH, bgColor, blockCol(block, r, sc))
             }
-            if (runLen > 0) drawRun(canvas, ox + runStartCol * cellW, textY, runLen, runFg, runFlags, runStartCol, r, sc)
+            flushBatches(canvas, prune = true)
+            batching = false
         }
-        flushBatches(canvas)
-        batching = false
 
         drawImages(canvas, ox, oy, above = true)
 
@@ -1131,6 +1084,217 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         if (!scroller.isFinished) computeFling()
     }
 
+    /** Whether glyphs can be put down by number rather than shaped: API 31, and no ligatures. */
+    private fun glyphRuns(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !ligatures
+
+    /** The column of the lit block cursor on row [r], or -1 when it is not there. */
+    private fun blockCol(block: Boolean, r: Int, sc: Int): Int =
+        if (block && r == cursorRow && cursorCol in 0 until sc) cursorCol else -1
+
+    /**
+     * One row's backgrounds, the row's top left at ([x], [y]). The cell under
+     * a block cursor, [blockCol], is left for the cursor to fill. Returns
+     * whether anything was drawn.
+     */
+    private fun drawRowBackground(canvas: Canvas, buf: ByteBuffer, r: Int, sc: Int, x: Float, y: Float, bgColor: Int, blockCol: Int): Boolean {
+        var drew = false
+        var runStart = -1
+        var runBg = 0
+        var off = headerBytes + r * sc * cellBytes + 8
+        for (c in 0..sc) {
+            var bg = if (c < sc) buf.getInt(off) else -1
+            off += cellBytes
+            if (c < sc && c == blockCol) bg = -2
+            if (bg != runBg || c == sc) {
+                if (runStart >= 0 && runBg != bgColor && runBg != -2) {
+                    bgPaint.color = 0xff000000.toInt() or runBg
+                    canvas.drawRect(x + runStart * cellW, y, x + c * cellW, y + cellH, bgPaint)
+                    drew = true
+                }
+                runStart = c
+                runBg = bg
+            }
+        }
+        return drew
+    }
+
+    /** Set by the text pass whenever it puts something down, so a row that drew nothing is known. */
+    private var rowInk = false
+
+    /**
+     * One row's text and decorations, the row's top left at ([x], [y]). The
+     * glyph under a block cursor, at [blockCol], is drawn in the background
+     * colour. Batched glyphs are left for the caller to flush. Returns whether
+     * anything was drawn or batched.
+     */
+    private fun drawRowText(canvas: Canvas, buf: ByteBuffer, r: Int, sc: Int, x: Float, y: Float, bgColor: Int, blockCol: Int): Boolean {
+        rowInk = false
+        val textY = y + baseline
+        var runLen = 0
+        var runStartCol = 0
+        var runFg = 0
+        var runFlags = 0
+        var off = headerBytes + r * sc * cellBytes
+        for (c in 0 until sc) {
+            // Codepoint and foreground are adjacent little-endian u32s, so
+            // one read fetches both: every one of these is bounds checked,
+            // and there are four per cell of the grid on every frame.
+            val pair = buf.getLong(off)
+            val cp = pair.toInt()
+            var fg = (pair ushr 32).toInt()
+            val flags = buf.getShort(off + 12).toInt() and 0xffff
+            off += cellBytes
+            if (c == blockCol) fg = bgColor
+            val styleFlags = flags and STYLE_MASK
+            val ascii = cp in 0x20..0x7e
+            val blank = cp == 0 || cp == 0x20
+            // Flush when attributes change or a non-ASCII glyph appears.
+            if (runLen > 0 && (fg != runFg || styleFlags != runFlags || !ascii || runLen >= runChars.size - 2)) {
+                drawRun(canvas, x + runStartCol * cellW, textY, runLen, runFg, runFlags)
+                runLen = 0
+            }
+            if (flags and FLAG_WIDE_SPACER != 0 || flags and FLAG_HIDDEN != 0) continue
+            if (ascii) {
+                if (runLen == 0) {
+                    runStartCol = c
+                    runFg = fg
+                    runFlags = styleFlags
+                }
+                runChars[runLen++] = cp.toChar()
+            } else if (!blank) {
+                // A non-ASCII cell is already a run of its own, which is
+                // where the symbols font gets its chance to take over.
+                rowInk = true
+                setPaintFor(fg, styleFlags, nerdGlyphs && RunSplitter.isSymbol(cp))
+                if (!batchGlyph(cp, x + c * cellW, textY)) {
+                    textColor(paintColor)
+                    val n = Character.toChars(cp, runChars, 0)
+                    canvas.drawText(runChars, 0, n, x + c * cellW, textY, textPaint)
+                }
+                drawDecorations(canvas, x + c * cellW, y, if (flags and FLAG_WIDE != 0) cellW * 2 else cellW, fg, styleFlags)
+            }
+        }
+        if (runLen > 0) drawRun(canvas, x + runStartCol * cellW, textY, runLen, runFg, runFlags)
+        return rowInk
+    }
+
+    // ---- recorded rows ----------------------------------------------------
+
+    /** Where the row table starts in [buf], or 0 when the core appended none. */
+    private fun rowsAt(buf: ByteBuffer, sr: Int): Int {
+        val at = buf.getInt(rowsOffset)
+        return if (at > 0 && at.toLong() + sr.toLong() * rowEntryBytes <= snapLen) at else 0
+    }
+
+    /** Recorded backgrounds and recorded text, each keyed on the row hash; see [RowNodes]. */
+    private val bgNodes by lazy(LazyThreadSafetyMode.NONE) { RowNodes() }
+    private val textNodes by lazy(LazyThreadSafetyMode.NONE) { RowNodes() }
+
+    /** What the recordings were drawn with; any of it moving throws them all away. */
+    private var nodesFaces: TermFonts.Faces? = null
+    private var nodesTextSize = 0f
+    private var nodesCellW = 0f
+    private var nodesCellH = 0f
+    private var nodesBg = 0
+    private var nodesCols = 0
+    private var nodesLigatures = false
+    private var nodesNerd = false
+
+    /**
+     * Size the caches to the grid, and empty them if anything a recording
+     * depends on besides the cells has changed: the font, its size, the
+     * background a default cell is left to show, ligatures or icons. A new
+     * palette needs nothing here, because the colours are in the cells.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    private fun fitRowNodes(sc: Int, sr: Int, bgColor: Int) {
+        bgNodes.fit(sr)
+        textNodes.fit(sr)
+        if (nodesFaces === faces && nodesTextSize == textPaint.textSize && nodesCellW == cellW && nodesCellH == cellH &&
+            nodesBg == bgColor && nodesCols == sc && nodesLigatures == ligatures && nodesNerd == nerdGlyphs
+        ) {
+            return
+        }
+        nodesFaces = faces
+        nodesTextSize = textPaint.textSize
+        nodesCellW = cellW
+        nodesCellH = cellH
+        nodesBg = bgColor
+        nodesCols = sc
+        nodesLigatures = ligatures
+        nodesNerd = nerdGlyphs
+        bgNodes.clear()
+        textNodes.clear()
+    }
+
+    /** Let go of every recording, on the way off screen; the next frame records again. */
+    private fun dropRowNodes() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        bgNodes.clear()
+        textNodes.clear()
+    }
+
+    /**
+     * Put down every row's backgrounds, or every row's text, from recordings,
+     * recording only the rows whose content has not been recorded yet.
+     *
+     * Backgrounds and text are kept apart so the frame is layered as before:
+     * every background first, then the search hit, the cursor, the ghost text
+     * and images meant to sit under the text, then all of the text. A glyph
+     * that reaches into the row below is not painted over by that row's
+     * background.
+     *
+     * The row under a lit block cursor is recorded under a key of its own:
+     * that cell leaves its background to the cursor and draws its glyph in the
+     * background colour. The key is the row's with the cursor column mixed
+     * in, so both halves of a blink stay recorded and blinking records
+     * nothing once each has been seen.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.Q)
+    private fun drawRowNodes(canvas: Canvas, buf: ByteBuffer, ox: Float, oy: Float, sc: Int, sr: Int, bgColor: Int, block: Boolean, text: Boolean) {
+        val cache = if (text) textNodes else bgNodes
+        val table = rowsAt(buf, sr)
+        val w = kotlin.math.ceil(sc * cellW).toInt()
+        val h = cellH.toInt()
+        var recorded = false
+        canvas.save()
+        canvas.translate(ox, oy)
+        for (r in 0 until sr) {
+            val blockCol = blockCol(block, r, sc)
+            var key = buf.getLong(table + r * rowEntryBytes)
+            if (blockCol >= 0) key = cursorKey(key, blockCol)
+            var slot = cache.find(r, key)
+            if (slot < 0) {
+                slot = cache.claim(r, key)
+                recorded = true
+                val node = cache.node(slot)
+                node.setPosition(0, 0, w, h)
+                val rc = node.beginRecording(w, h)
+                val inked = if (text) {
+                    batching = glyphRuns()
+                    val drew = drawRowText(rc, buf, r, sc, 0f, 0f, bgColor, blockCol)
+                    flushBatches(rc, prune = false)
+                    batching = false
+                    drew
+                } else {
+                    drawRowBackground(rc, buf, r, sc, 0f, 0f, bgColor, blockCol)
+                }
+                node.endRecording()
+                cache.setInked(slot, inked)
+            }
+            if (cache.inked(slot)) canvas.drawRenderNode(cache.node(slot))
+            canvas.translate(0f, cellH)
+        }
+        canvas.restore()
+        // Only after a frame that used them: one drawn wholly from recordings
+        // would otherwise throw away every colour the next change needs.
+        if (text && recorded) flushBatches(canvas, prune = true)
+    }
+
+    /** A row's key with a block cursor at [col] in it; see [drawRowNodes]. */
+    private fun cursorKey(hash: Long, col: Int): Long =
+        (hash xor ((col + 1).toLong() * -0x61c8864680b583ebL)) * -0x3d4d51c2d82b14b1L
+
     /**
      * The cells predictive echo is drawing, fetched only when the header says
      * they changed, and not at all while it says there are none — which is
@@ -1178,13 +1342,14 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         return true
     }
 
-    private fun drawRun(canvas: Canvas, x: Float, textY: Float, len: Int, fg: Int, flags: Int, startCol: Int, row: Int, sc: Int) {
+    private fun drawRun(canvas: Canvas, x: Float, textY: Float, len: Int, fg: Int, flags: Int) {
         // Skip runs of spaces entirely; the background pass already painted them.
         var allSpace = true
         for (i in 0 until len) if (runChars[i] != ' ') { allSpace = false; break }
         // Nothing to draw at all, which is most of a screen: not even the
         // paint needs to hear about it.
         if (allSpace && flags and DECORATIONS == 0) return
+        rowInk = true
         setPaintFor(fg, flags)
         if (!allSpace && !drawRunAsGlyphs(canvas, x, textY, len)) {
             textColor(paintColor)
@@ -1341,23 +1506,34 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         return t
     }
 
-    /** Put down everything the text pass gathered: one call per colour and face. */
-    private fun flushBatches(canvas: Canvas) {
-        if (!batching) return
-        // A batch nothing went into this frame is a colour that has left the
-        // screen, and it goes. Kept, they piled up for the life of the view,
-        // one per colour ever shown, and every change of colour walked them
-        // all: after a truecolor gradient that was hundreds per glyph.
+    /**
+     * Put down everything the text pass gathered: one call per colour and face.
+     *
+     * With [prune], a batch nothing went into since the last prune is a colour
+     * that has left the screen, and it goes. Kept, they piled up for the life
+     * of the view, one per colour ever shown, and every change of colour
+     * walked them all: after a truecolor gradient that was hundreds per glyph.
+     * Recorded rows flush one row at a time and prune once a frame, so a
+     * colour the next row uses is not thrown away and made again.
+     */
+    private fun flushBatches(canvas: Canvas, prune: Boolean) {
+        if (!batching && !prune) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
         var kept = 0
         for (i in batches.indices) {
             val batch = batches[i]
-            if (batch.n == 0) continue
-            textColor(batch.color)
-            canvas.drawGlyphs(batch.ids, 0, batch.pos, 0, batch.n, batch.font, textPaint)
-            batch.n = 0
-            batches[kept++] = batch
+            if (batch.n > 0) {
+                textColor(batch.color)
+                canvas.drawGlyphs(batch.ids, 0, batch.pos, 0, batch.n, batch.font, textPaint)
+                batch.n = 0
+                batch.used = true
+            }
+            if (prune && batch.used) {
+                batch.used = false
+                batches[kept++] = batch
+            }
         }
-        while (batches.size > kept) batches.removeAt(batches.size - 1)
+        if (prune) while (batches.size > kept) batches.removeAt(batches.size - 1)
         lastBatch = null
     }
 
@@ -1430,6 +1606,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         var ids = IntArray(256)
         var pos = FloatArray(512)
         var n = 0
+        /** Whether anything went down from this batch since the last prune. */
+        var used = false
         fun add(id: Int, x: Float, y: Float) {
             if (n == ids.size) {
                 ids = ids.copyOf(n * 2)
@@ -2412,6 +2590,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         removeCallbacks(blinkTick)
         removeCallbacks(applyPendingGrid)
         dropBitmaps()
+        dropRowNodes()
         finishActionMode()
         releaseSessionHandle()
         if (bufferHandle != 0L) {

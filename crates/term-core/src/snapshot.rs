@@ -12,9 +12,10 @@
 //!   i16 sel_start_col, i16 sel_start_row, i16 sel_end_col, i16 sel_end_row (i16::MIN when none)
 //!   u8  sel_is_block, u32 generation, u8 links_changed
 //!   u32 images_changed, u32 predictions_generation, u16 predictions_count,
-//!   u8  kitty_flags, then zeros up to HEADER_BYTES
+//!   u8  kitty_flags, u32 rows_offset, then zeros up to HEADER_BYTES
 //! cells (rows * cols * CELL_BYTES):
 //!   u32 codepoint, u32 fg (0x00RRGGBB), u32 bg (0x00RRGGBB), u16 flags
+//! row table, where rows_offset points: see [`crate::rows`]
 //! ```
 //!
 //! Inverse video and dim are already applied to `fg`/`bg`; the renderer only
@@ -48,6 +49,9 @@ pub const PREDICTIONS_OFFSET: usize = 36;
 pub const PREDICTIONS_COUNT_OFFSET: usize = 40;
 /// The kitty keyboard flags in force, so a key-up does not have to ask.
 pub const KITTY_FLAGS_OFFSET: usize = 42;
+/// Where the row table starts (u32), or 0 when the session appended none.
+/// See [`crate::rows`].
+pub const ROWS_OFFSET: usize = 43;
 pub const CELL_BYTES: usize = 14;
 
 pub mod CellFlags {

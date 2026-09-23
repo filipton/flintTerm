@@ -74,6 +74,16 @@ pub fn snapshot_kitty_flags_offset() -> u32 {
     term_core::snapshot::KITTY_FLAGS_OFFSET as u32
 }
 
+#[uniffi::export]
+pub fn snapshot_rows_offset() -> u32 {
+    term_core::snapshot::ROWS_OFFSET as u32
+}
+
+#[uniffi::export]
+pub fn snapshot_row_entry_bytes() -> u32 {
+    term_core::rows::ROW_ENTRY_BYTES as u32
+}
+
 /// Fills the buffer from the session and returns its length, or -1.
 #[no_mangle]
 pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_snapshotInto(

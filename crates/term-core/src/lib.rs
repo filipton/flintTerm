@@ -9,6 +9,7 @@ pub mod intercept;
 pub mod keys;
 pub mod marks;
 pub mod palette;
+pub mod rows;
 pub mod scrollback;
 pub mod snapshot;
 
