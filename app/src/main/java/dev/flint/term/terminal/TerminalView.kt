@@ -105,9 +105,20 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      * Runnable. Dropping a frame loses nothing: the core coalesces damage until
      * somebody reads the grid, so the frame that does land is the current one,
      * not a stale one caught up with later.
+     *
+     * Without a cap set, the pace still depends on what the damage looks
+     * like. A change on its own — the echo of a key — goes out on the next
+     * vsync, because that is latency somebody feels. Changes arriving back to
+     * back are output streaming, where a 120 Hz panel drew every one of them
+     * and nobody can read text scrolling at that rate: those are held to
+     * [STREAMING_FPS], which halves the work without a visible difference.
      */
     private fun requestFrame() {
-        val cap = maxFps
+        val now = android.os.SystemClock.uptimeMillis()
+        val streaming = now - lastFrameAt < STREAMING_GAP_MS
+        // A cap somebody chose is theirs, higher or lower; this only fills in
+        // for the default of none.
+        val cap = if (maxFps <= 0 && streaming) STREAMING_FPS else maxFps
         if (cap <= 0) {
             postInvalidateOnAnimation()
             return
@@ -116,7 +127,6 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         // against a 33.33ms one, so measuring the interval exactly means missing it about as often
         // as not — and a miss costs a whole frame period, which is how a cap of 30 drew 20.
         val interval = 1000L / cap - VSYNC_SLACK_MS
-        val now = android.os.SystemClock.uptimeMillis()
         val since = now - lastFrameAt
         if (since >= interval) {
             lastFrameAt = now
@@ -2454,6 +2464,16 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
 
         /** How early [requestFrame] may let a capped frame through, to catch the vsync it wants. */
         private const val VSYNC_SLACK_MS = 4L
+
+        /** The most frames a second streaming output is drawn at; see [requestFrame]. */
+        private const val STREAMING_FPS = 60
+
+        /**
+         * Damage this soon after the last frame counts as a stream rather than
+         * a change on its own. A few frames at any refresh rate, and far below
+         * the gap between two keystrokes.
+         */
+        private const val STREAMING_GAP_MS = 50L
 
         /** No generation the core can hand out, so the first frame always scans. */
         private const val NEVER_SCANNED = -1
