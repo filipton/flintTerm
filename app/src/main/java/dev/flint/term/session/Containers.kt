@@ -474,8 +474,9 @@ object ContainerLogs {
                     // Backgrounded, this was opening an exec channel to the host
                     // every two seconds to fetch a log nobody was reading, which
                     // on cellular means the radio never settles. Wait it out
-                    // instead, and pick up where it left off on the way back.
-                    if (!dev.flint.term.App.inForeground) {
+                    // instead, and pick up where it left off on the way back. The
+                    // same goes for a log tab sitting behind another one.
+                    if (!dev.flint.term.App.inForeground || !tab.onScreen) {
                         delay(FOLLOW_MILLIS)
                         continue
                     }

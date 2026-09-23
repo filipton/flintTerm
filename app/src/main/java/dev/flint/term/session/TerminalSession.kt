@@ -183,6 +183,9 @@ class TerminalSession(
         damageListeners.remove(listener)
     }
 
+    /** Whether a view is drawing this session right now. */
+    val onScreen: Boolean get() = damageListeners.isNotEmpty()
+
     val core: Session = Session(
         backend,
         initialCols.toUShort(),
