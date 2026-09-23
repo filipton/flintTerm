@@ -7,11 +7,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
 import java.io.RandomAccessFile
 import java.io.Writer
+import java.nio.ByteBuffer
+import java.nio.CharBuffer
+import java.nio.charset.CodingErrorAction
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -262,6 +267,37 @@ object SessionLog {
 }
 
 /**
+ * UTF-8 decoding of a stream that arrives in pieces.
+ *
+ * The core hands output over in whatever chunks the socket produced, and those
+ * cut through the middle of a character as happily as anywhere else. Decoding
+ * each chunk on its own turns both halves of an é or a box-drawing line into
+ * replacement characters; this holds the unfinished tail back for the next one.
+ * One per stream, used from one thread.
+ */
+class Utf8Chunks {
+    private val decoder = Charsets.UTF_8.newDecoder()
+        .onMalformedInput(CodingErrorAction.REPLACE)
+        .onUnmappableCharacter(CodingErrorAction.REPLACE)
+    /** The start of a character the last chunk ended in the middle of; at most three bytes. */
+    private var carry = EMPTY
+
+    fun decode(bytes: ByteArray): String {
+        val input = ByteBuffer.wrap(if (carry.isEmpty()) bytes else carry + bytes)
+        val out = CharBuffer.allocate(input.remaining() + 1)
+        // Not the end of input: an incomplete sequence at the end is left in
+        // the buffer instead of being replaced, and that is the carry.
+        decoder.decode(input, out, false)
+        carry = if (input.hasRemaining()) ByteArray(input.remaining()).also { input.get(it) } else EMPTY
+        return out.flip().toString()
+    }
+
+    private companion object {
+        val EMPTY = ByteArray(0)
+    }
+}
+
+/**
  * One session's recording: the files it writes, and a queue that keeps the disk
  * off the path output takes.
  *
@@ -286,28 +322,57 @@ class SessionRecording(
     /** The files this recording writes, in the order they were named. */
     val files: List<File> = listOfNotNull(textFile, castFile)
 
-    private class Chunk(val at: Long, val text: String)
+    /** Either [text], or [bytes] still to be decoded in stream order. */
+    private class Chunk(val at: Long, val text: String?, val bytes: ByteArray?)
 
-    private val chunks = Channel<Chunk>(Channel.UNLIMITED)
+    /**
+     * Bounded, and full means the output thread waits rather than anything
+     * being dropped: a gap in a log is a lie about the session, and a gap in a
+     * cast breaks the replay from there on. Nothing but a stalled disk fills
+     * this many chunks, and then holding the session back is the lesser harm
+     * than memory growing until the app is killed.
+     */
+    private val chunks = Channel<Chunk>(QUEUE_CHUNKS)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     init {
         scope.launch {
-            dir.mkdirs()
+            val utf8 = Utf8Chunks()
             val text = textFile?.let { Sink(it) }
             val cast = castFile?.let { Sink(it) }
-            cast?.write(SessionLog.castHeader(cols, rows, startedAt, shell) + "\n")
+            val sinks = listOfNotNull(text, cast)
+            // Flushed at most once a second, and within a second of the output
+            // stopping: a flush per chunk was a pair of syscalls for every
+            // redraw, and a second is all a killed app can lose. The first write
+            // after a flush starts the clock, as the store's writes do.
+            val written = Channel<Unit>(Channel.CONFLATED)
+            val flusher = launch {
+                for (tick in written) {
+                    delay(FLUSH_MS)
+                    synchronized(sinks) { sinks.forEach { it.flush() } }
+                }
+            }
             try {
+                dir.mkdirs()
+                cast?.write(SessionLog.castHeader(cols, rows, startedAt, shell) + "\n")
                 for (chunk in chunks) {
-                    text?.write(SessionLog.stripEscapes(chunk.text))
-                    // The cast keeps the stream as it came, escape sequences
-                    // included: that is what makes it replay as the session
-                    // looked rather than as a transcript of it.
-                    cast?.write(SessionLog.castEvent(chunk.at - startedAt, chunk.text) + "\n")
+                    val s = chunk.text ?: utf8.decode(chunk.bytes!!)
+                    if (s.isEmpty()) continue
+                    synchronized(sinks) {
+                        text?.write(SessionLog.stripEscapes(s))
+                        // The cast keeps the stream as it came, escape sequences
+                        // included: that is what makes it replay as the session
+                        // looked rather than as a transcript of it.
+                        cast?.write(SessionLog.castEvent(chunk.at - startedAt, s) + "\n")
+                    }
+                    written.trySend(Unit)
                 }
             } finally {
-                text?.close()
-                cast?.close()
+                // Nobody is reading any more, so a waiting append must not be
+                // left blocked on a queue that will never drain.
+                chunks.cancel()
+                flusher.cancel()
+                synchronized(sinks) { sinks.forEach { it.close() } }
             }
         }
     }
@@ -317,7 +382,16 @@ class SessionRecording(
 
     fun append(text: String) {
         if (text.isEmpty()) return
-        chunks.trySend(Chunk(System.currentTimeMillis(), text))
+        chunks.trySendBlocking(Chunk(System.currentTimeMillis(), text, null))
+    }
+
+    /**
+     * The raw stream, decoded here rather than by the caller so a character
+     * split across two chunks comes out whole. [bytes] is kept, not copied.
+     */
+    fun append(bytes: ByteArray) {
+        if (bytes.isEmpty()) return
+        chunks.trySendBlocking(Chunk(System.currentTimeMillis(), null, bytes))
     }
 
     /** Closes the files; nothing is recorded after this. */
@@ -335,19 +409,35 @@ class SessionRecording(
             try {
                 val w = out ?: FileWriter(file, true).buffered().also { out = it }
                 w.write(s)
-                // Flushed as it goes: a recording is worth having even if the
-                // app is killed before anyone stops it.
-                w.flush()
             } catch (e: Exception) {
-                Log.w("SessionLog", "cannot record to ${file.name}", e)
-                broken = true
-                close()
+                giveUp(e)
             }
+        }
+
+        /** A recording is worth having even if the app is killed before anyone stops it. */
+        fun flush() {
+            if (broken) return
+            try {
+                out?.flush()
+            } catch (e: Exception) {
+                giveUp(e)
+            }
+        }
+
+        private fun giveUp(e: Exception) {
+            Log.w("SessionLog", "cannot record to ${file.name}", e)
+            broken = true
+            close()
         }
 
         fun close() {
             runCatching { out?.close() }
             out = null
         }
+    }
+
+    private companion object {
+        const val FLUSH_MS = 1_000L
+        const val QUEUE_CHUNKS = 256
     }
 }

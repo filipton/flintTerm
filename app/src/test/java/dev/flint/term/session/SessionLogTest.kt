@@ -148,4 +148,42 @@ class SessionLogTest {
         val read = SessionLog.parseCast(cast)
         assertEquals(listOf("before\n", "after\n"), read.frames.map { it.text })
     }
+
+    @Test
+    fun `a character split between chunks comes out whole`() {
+        val bytes = "é─ok😀".toByteArray()
+        val utf8 = Utf8Chunks()
+        // Every cut, including through the four bytes of the emoji.
+        for (cut in 1 until bytes.size) {
+            val out = utf8.decode(bytes.copyOfRange(0, cut)) + utf8.decode(bytes.copyOfRange(cut, bytes.size))
+            assertEquals("é─ok😀", out)
+        }
+        assertEquals("", utf8.decode(byteArrayOf(0xE2.toByte())))
+        assertEquals("─", utf8.decode(byteArrayOf(0x94.toByte(), 0x80.toByte())))
+    }
+
+    @Test
+    fun `a byte that can never start a character is replaced, not held`() {
+        assertEquals("a�b", Utf8Chunks().decode(byteArrayOf(0x61, 0xFF.toByte(), 0x62)))
+    }
+
+    @Test
+    fun `a recording fed bytes writes them whole and closes`() {
+        val dir = java.nio.file.Files.createTempDirectory("rec").toFile().apply { deleteOnExit() }
+        val rec = SessionRecording(dir, "host", dev.flint.term.data.RecordingFormat.BOTH, 80, 24)
+        val stream = "${esc}[1mé${esc}[0m\n"
+        val bytes = stream.toByteArray()
+        // Cut through the middle of the é.
+        rec.append(bytes.copyOfRange(0, 6))
+        rec.append(bytes.copyOfRange(6, bytes.size))
+        rec.finish()
+        val log = rec.files.first { it.name.endsWith(".log") }
+        val cast = rec.files.first { it.name.endsWith(".cast") }
+        // Closing the files is what writes them out, and that happens on the
+        // recording's own thread once it has taken the last chunk.
+        val deadline = System.currentTimeMillis() + 5_000
+        while ((log.length() == 0L || !cast.readText().contains('é')) && System.currentTimeMillis() < deadline) Thread.sleep(20)
+        assertEquals("é\n", log.readText())
+        assertEquals(stream, SessionLog.parseCast(cast.readText()).frames.joinToString("") { it.text })
+    }
 }
