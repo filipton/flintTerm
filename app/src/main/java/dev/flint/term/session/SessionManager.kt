@@ -83,14 +83,24 @@ class SessionManager(
     private val prompts = AuthPrompts()
     val authPrompt: StateFlow<AuthPrompt?> = prompts.pending
 
+    /** The options each session was last given, so an unchanged set is not sent again. */
+    private val appliedOptions = java.util.concurrent.ConcurrentHashMap<String, dev.flint.term.core.Options>()
+
     init {
         // A switch flipped in settings has to reach the terminals that are
         // already on screen. Reconnecting to pick up a preference would be a
         // strange thing to ask of anybody, and the core can take the change
         // while a session is up.
+        //
+        // Only what the core is actually told is compared, per session: most
+        // settings — a font size, a theme — mean nothing to it, and each
+        // setOptions is a call across the FFI for every open session.
         scope.launch {
             store.settings.collect { settings ->
-                _sessions.value.forEach { it.setOptions(settings.coreOptions(it.host)) }
+                _sessions.value.forEach { s ->
+                    val o = settings.coreOptions(s.host)
+                    if (appliedOptions.put(s.id, o) != o) s.setOptions(o)
+                }
             }
         }
     }
@@ -765,6 +775,8 @@ class SessionManager(
         watchers.getOrPut(id) { CoroutineScope(scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])) }
 
     private fun register(session: TerminalSession, tailscaleId: String? = null, knock: KnockPlan? = null) {
+        // What it was built with, which every caller took from the same settings.
+        appliedOptions[session.id] = store.settings.value.coreOptions(session.host)
         _sessions.update { it + session }
         recordOpen()
         startWhenRoutable(session, tailscaleId, knock)
@@ -867,6 +879,7 @@ class SessionManager(
         val s = get(id) ?: return
         _sessions.update { list -> list.filterNot { it.id == id } }
         watchers.remove(id)?.cancel()
+        appliedOptions.remove(id)
         recordOpen()
         dev.flint.term.transfer.ExternalEdit.stopFor(s)
         releaseIdleTunnels()
