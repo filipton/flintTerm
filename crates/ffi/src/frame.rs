@@ -257,6 +257,32 @@ pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_sendKey(
     }));
 }
 
+/// Typed text, already UTF-8 in `len` bytes at `addr`; see
+/// [`Session::send_text`], which this is the short way round to.
+///
+/// An address rather than a string or an array, for the same reason as in
+/// `setGlyphs`: the keyboard's text is encoded once into memory the caller
+/// keeps, and nothing about a `jstring` has to be looked at here.
+#[no_mangle]
+pub extern "system" fn Java_dev_flint_term_terminal_FrameBridge_sendBytes(
+    _env: *mut c_void,
+    _class: *mut c_void,
+    session: i64,
+    addr: i64,
+    len: i32,
+) {
+    if session == 0 || addr == 0 || len <= 0 {
+        return;
+    }
+    let _ = catch_unwind(AssertUnwindSafe(|| {
+        // SAFETY: as in `snapshotInto`; the caller keeps `len` bytes alive at
+        // `addr` until this returns.
+        let session = unsafe { &*(session as usize as *const Session) };
+        let bytes = unsafe { std::slice::from_raw_parts(addr as usize as *const u8, len as usize) };
+        session.send_typed(bytes.to_vec());
+    }));
+}
+
 fn clamp_u16(v: i32) -> u16 {
     v.clamp(0, u16::MAX as i32) as u16
 }

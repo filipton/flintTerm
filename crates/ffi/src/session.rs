@@ -1083,6 +1083,13 @@ impl Session {
         f(&cache.1, cols)
     }
 
+    /// Typed text as the bytes it leaves as: what [`Self::send_text`] does,
+    /// and what `FrameBridge.sendBytes` does with text already in UTF-8.
+    pub(crate) fn send_typed(&self, bytes: Vec<u8>) {
+        self.note_typing(&bytes);
+        self.inner.send(bytes);
+    }
+
     /// Let the input tracker see keystrokes before they leave, while the
     /// screen still shows where they will land.
     fn note_typing(&self, bytes: &[u8]) {
@@ -1454,8 +1461,7 @@ impl Session {
 
     /// Text committed by the IME; sent verbatim.
     pub fn send_text(&self, text: String) {
-        self.note_typing(text.as_bytes());
-        self.inner.send(text.into_bytes());
+        self.send_typed(text.into_bytes());
     }
 
     pub fn send_key(&self, key: KeyPress) {

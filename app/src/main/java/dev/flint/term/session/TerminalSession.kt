@@ -446,7 +446,8 @@ class TerminalSession(
     }
 
     /**
-     * A strong reference for [FrameBridge.sendKey], taken on the first key.
+     * A strong reference for [FrameBridge.sendKey] and [FrameBridge.sendBytes],
+     * taken on the first key.
      *
      * Keys go the plain-JNI way because typing is constant, and through uniffi
      * each one built its record by reflection on both sides. The lock is only
@@ -458,13 +459,34 @@ class TerminalSession(
     fun sendKey(press: dev.flint.term.core.KeyPress) {
         synchronized(keyLock) {
             if (destroyed) return
-            if (keyHandle == 0L) keyHandle = runCatching { core.frameHandle().toLong() }.getOrDefault(0L)
-            if (keyHandle != 0L) {
-                FrameBridge.sendKey(keyHandle, press)
+            val handle = keyHandleLocked()
+            if (handle != 0L) {
+                FrameBridge.sendKey(handle, press)
                 return
             }
         }
         runCatching { core.sendKey(press) }
+    }
+
+    /**
+     * Typed text, packed into [utf8] by whoever typed it; the same text as
+     * [text], which only goes across when there is no handle to send by.
+     */
+    fun sendText(text: String, utf8: dev.flint.term.terminal.Utf8Buffer) {
+        synchronized(keyLock) {
+            if (destroyed) return
+            val handle = keyHandleLocked()
+            if (handle != 0L) {
+                if (utf8.length > 0) FrameBridge.sendBytes(handle, utf8.address, utf8.length)
+                return
+            }
+        }
+        runCatching { core.sendText(text) }
+    }
+
+    private fun keyHandleLocked(): Long {
+        if (keyHandle == 0L) keyHandle = runCatching { core.frameHandle().toLong() }.getOrDefault(0L)
+        return keyHandle
     }
 
 }

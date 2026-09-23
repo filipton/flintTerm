@@ -83,6 +83,12 @@ internal object FrameBridge {
     fun sendKey(session: Long, press: KeyPress) =
         sendKey(session, KeyPacking.key(press.key), KeyPacking.arg(press.key), KeyPacking.mods(press), press.kind.ordinal)
 
+    /**
+     * `Session.sendText`, with the text already UTF-8 in [len] bytes at
+     * [addr], which the caller keeps alive for the call; see [Utf8Buffer].
+     */
+    @JvmStatic external fun sendBytes(session: Long, addr: Long, len: Int)
+
     @JvmStatic external fun releaseSession(session: Long)
 
     @JvmStatic external fun releaseBuffer(buffer: Long)
