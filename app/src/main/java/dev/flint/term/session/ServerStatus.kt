@@ -84,6 +84,12 @@ object ServerProbe {
      * else is asked in BSD dialect — sysctl for the counters, vm_stat for the
      * page ledger, netstat for the interfaces — and whatever a particular BSD
      * does not have simply produces an empty section.
+     *
+     * Only the cpu lines of /proc/stat are sent. The rest of it is mostly the
+     * `intr` line, one counter per interrupt source, which runs to kilobytes
+     * on a big server and was crossing the link twice every five seconds to be
+     * thrown away here. The `cat` behind the `grep` is for a host too minimal
+     * to have one; the parser skips the other lines either way.
      */
     val SCRIPT: String = """
         echo "@@os"
@@ -99,12 +105,12 @@ object ServerProbe {
           echo "@@meminfo"
           cat /proc/meminfo 2>/dev/null || true
           echo "@@stat1"
-          cat /proc/stat 2>/dev/null || true
+          grep '^cpu' /proc/stat 2>/dev/null || cat /proc/stat 2>/dev/null || true
           echo "@@net1"
           cat /proc/net/dev 2>/dev/null || true
           sleep 1
           echo "@@stat2"
-          cat /proc/stat 2>/dev/null || true
+          grep '^cpu' /proc/stat 2>/dev/null || cat /proc/stat 2>/dev/null || true
           echo "@@net2"
           cat /proc/net/dev 2>/dev/null || true
           echo "@@uptime"
@@ -220,8 +226,12 @@ object ServerProbe {
 
     private fun statLines(lines: List<String>): Map<String, LongArray> =
         lines.mapNotNull { line ->
-            val f = line.trim().split(WHITESPACE)
-            if (f.size < 5 || !f[0].startsWith("cpu")) return@mapNotNull null
+            // Checked before splitting: from the `cat` fallback, the lines that
+            // are not cpu lines include `intr`, thousands of fields long.
+            val trimmed = line.trimStart()
+            if (!trimmed.startsWith("cpu")) return@mapNotNull null
+            val f = trimmed.trimEnd().split(WHITESPACE)
+            if (f.size < 5) return@mapNotNull null
             val times = f.drop(1).mapNotNull { it.toLongOrNull() }
             if (times.size < 4) null else f[0] to times.toLongArray()
         }.toMap()

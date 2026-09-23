@@ -278,6 +278,27 @@ class ServerStatusParserTest {
         assertTrue(s.interfaces.isEmpty())
     }
 
+    /**
+     * The script sends only the cpu lines where it can, and all of /proc/stat
+     * where the host has no grep; both have to give the same reading.
+     */
+    @Test
+    fun `cpu lines alone read the same as the whole of proc stat`() {
+        val full = ServerProbe.parse(DEBIAN)
+        val grepped = ServerProbe.parse(
+            DEBIAN.lines().filterNot { it.startsWith("ctxt") || it.startsWith("btime") || it.startsWith("processes") }
+                .joinToString("\n"),
+        )
+        val withIntr = ServerProbe.parse(
+            DEBIAN.replace("ctxt ", "intr 1 " + (1..4000).joinToString(" ") + "\nctxt "),
+        )
+
+        assertEquals(full.cpu!!, grepped.cpu!!, 0.0)
+        assertEquals(full.cores, grepped.cores)
+        assertEquals(full.cpu!!, withIntr.cpu!!, 0.0)
+        assertEquals(full.cores, withIntr.cores)
+    }
+
     @Test
     fun `the script reads what the plan says it reads`() {
         val script = ServerProbe.SCRIPT
@@ -286,6 +307,7 @@ class ServerStatusParserTest {
             "/proc/loadavg", "/proc/meminfo", "/proc/stat", "/proc/uptime", "/proc/net/dev",
             "/sys/class/thermal/thermal_zone0/temp", "nproc", "hostname", "df -P",
             "ps -eo pid,pcpu,pmem,comm --sort=-pcpu", "vm_stat", "sysctl", "uname -s",
+            "grep '^cpu' /proc/stat",
         ).forEach { assertTrue("script is missing $it", script.contains(it)) }
         // One sleep on each branch: a rate needs two samples a known distance apart.
         assertEquals(2, Regex("^\\s*sleep 1$", RegexOption.MULTILINE).findAll(script).count())
