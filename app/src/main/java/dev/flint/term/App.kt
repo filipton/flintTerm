@@ -81,6 +81,14 @@ class App : Application() {
             dev.flint.term.data.Schemes.install(dev.flint.term.data.Schemes.parseCatalog(text))
             sessions.applyTheme()
         }
+        // A crash is the other way out that gives no notice, and the store holds
+        // changes back for a moment to batch them: a host saved just before a
+        // crash in the code that connects to it would go with the process.
+        val crashed = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            runCatching { store.flush() }
+            crashed?.uncaughtException(thread, error)
+        }
         registerActivityLifecycleCallbacks(object : android.app.Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(a: android.app.Activity) {
                 if (foregroundActivities++ == 0) sessions.setBackground(false)

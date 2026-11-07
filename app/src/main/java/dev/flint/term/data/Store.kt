@@ -25,7 +25,7 @@ class Store(context: Context) {
     private val tmp = File(context.filesDir, "store.json.tmp")
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val secrets = SecretCache(Crypto::encrypt, Crypto::decrypt)
-    private val writer = CoalescingWriter<Snapshot>(scope, WRITE_QUIET_MS, ::write)
+    private val writer = CoalescingWriter<Unit>(scope, WRITE_QUIET_MS) { write(snapshot()) }
     private val historyFile = File(context.filesDir, "history.jsonl")
     private val historyLog = HistoryLog(historyFile, scope, WRITE_QUIET_MS)
 
@@ -310,13 +310,14 @@ class Store(context: Context) {
     // ---- persistence -----------------------------------------------------
 
     /**
-     * Queues the current state for the disk. Taking the snapshot is only
-     * gathering references to immutable values, so it is done here, where the
-     * state is known to be the one just changed; turning it into JSON and
-     * sealing its secrets is left to the writer, off whichever thread called.
+     * Marks the state as needing the disk. The snapshot is taken when the write
+     * runs, not here: two threads changing the store at once would otherwise
+     * race to submit, and the one with the older snapshot could land last and
+     * leave the other's change off disk, a host key the user just trusted among
+     * them. Taken at write time it is always the newest state.
      */
     private fun persist() {
-        writer.submit(snapshot())
+        writer.submit(Unit)
     }
 
     /**
@@ -331,7 +332,11 @@ class Store(context: Context) {
 
     private fun write(snap: Snapshot) {
         try {
-            val text = secrets.write { seal -> StoreJson.write(snap, withHistory = false, secret = seal) }.toString()
+            // The history has a file of its own, but until that file exists, the
+            // store's copy is the only one: an upgrade whose move to the file
+            // failed must not then write the store without it.
+            val inline = !historyFile.exists()
+            val text = secrets.write { seal -> StoreJson.write(snap, withHistory = inline, secret = seal) }.toString()
             tmp.writeText(text)
             if (!tmp.renameTo(file)) {
                 file.writeText(text)

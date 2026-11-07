@@ -167,8 +167,10 @@ internal class HistoryLog(private val file: File, scope: CoroutineScope, quietMs
             }
         } catch (e: Exception) {
             // What is on disk is no longer known to match what is in memory,
-            // so the next write puts all of it down afresh.
+            // so the next write puts all of it down afresh. Asked for now, not
+            // left for the next Enter: there may not be one before a kill.
             synchronized(lock) { rewrite = true }
+            writer.submit(Unit)
         }
     }
 
