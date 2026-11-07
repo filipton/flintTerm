@@ -158,26 +158,37 @@ where
         let sent = Instant::now();
         // The reply gets as long as russh would have given it: until the next
         // request was due.
-        let reply = tokio::time::timeout(every, ping());
+        let mut deadline = sent + every;
+        let reply = ping();
         tokio::pin!(reply);
         let answered = loop {
             tokio::select! {
-                r = &mut reply => break r,
-                // A new interval is picked up on the next round; only the
-                // client going away cuts this one short.
-                changed = interval.changed() => if changed.is_err() { return Ended::Gone },
+                r = &mut reply => break Some(r),
+                () = tokio::time::sleep_until(deadline) => break None,
+                changed = interval.changed() => {
+                    if changed.is_err() {
+                        return Ended::Gone;
+                    }
+                    // A dead link is almost always waiting here, on a request
+                    // that will never be answered. Coming back on screen has to
+                    // shorten that wait too, or the user looks at a frozen
+                    // terminal for the rest of a background-length one.
+                    if let Some(now_every) = *interval.borrow_and_update() {
+                        deadline = deadline.min(sent + now_every);
+                    }
+                }
             }
         };
         match answered {
-            Ok(true) => {
+            Some(true) => {
                 unanswered = 0;
                 activity.stamp();
             }
-            Ok(false) => return Ended::Gone,
+            Some(false) => return Ended::Gone,
             // Data counts as an answer, as it does for russh: a server busy
             // sending output is plainly alive, whatever became of the request.
-            Err(_) if activity.last() >= sent => unanswered = 0,
-            Err(_) => {
+            None if activity.last() >= sent => unanswered = 0,
+            None => {
                 unanswered += 1;
                 if unanswered >= MAX_UNANSWERED {
                     return Ended::Unanswered;
@@ -412,6 +423,30 @@ mod tests {
         assert_eq!(count.load(Ordering::SeqCst), MAX_UNANSWERED);
         // The first request at thirty seconds, then each one given thirty to answer.
         assert_eq!(start.elapsed(), FG * (MAX_UNANSWERED + 1));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn coming_back_shortens_the_wait_for_a_reply_already_under_way() {
+        let (control, rx) = Control::new(Some(FG));
+        control.set_background(true);
+        let activity = Activity::new();
+        let start = Instant::now();
+        let back = tokio::spawn({
+            let control = control.clone();
+            async move {
+                // The first background request goes out at the floor; come back
+                // a minute into the wait for its reply.
+                tokio::time::sleep(BACKGROUND_FLOOR + Duration::from_secs(60)).await;
+                control.set_background(false);
+            }
+        });
+        let ended = run(rx, &activity, || std::future::pending::<bool>()).await;
+        back.await.unwrap();
+        assert_eq!(ended, Ended::Unanswered);
+        // The first request is already past the foreground wait and fails at
+        // once; the other two get thirty seconds each. Without that it is
+        // another two minutes, then two more full background waits.
+        assert_eq!(start.elapsed(), BACKGROUND_FLOOR + Duration::from_secs(60) + FG * (MAX_UNANSWERED - 1));
     }
 
     #[tokio::test(start_paused = true)]
