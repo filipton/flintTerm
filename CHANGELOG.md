@@ -6,6 +6,64 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-07
+
+### Fixed
+
+- Links no longer pile up while output streams
+- A search hit stays lit when the program hides its cursor
+- VPNs started by the widget or a command go down again
+- A server that drops the login at once is not retried for ever
+- A recording keeps characters split between two chunks
+- A home network behind the phone's own VPN counts as home
+- A tailnet address connects without saying it is not running
+- On its side the terminal keeps its rows and the keyboard splits
+- A tunnel started by hand stays up after its sessions end
+
+### Performance
+
+- Tailscale, transfers and serial start only when needed
+- Store changes are batched and secrets sealed only once
+- The session service is not restarted after the process dies
+- Recordings flush once a second instead of on every chunk
+- Link and colour caches follow rows as they scroll
+- A frame with nothing new costs the core nothing
+- Streaming output is drawn at 60 fps, a keystroke at once
+- Less work around the terminal while output streams
+- Tailscale sleeps while no node runs instead of polling
+- Shortcuts are redrawn only when the recent hosts change
+- A settings change reaches open sessions only if it matters
+- A widget that cannot reach its host waits for its next turn
+- The SSH VPN reads its counters every 30 s in the background
+- A container log prints each new stretch in one write
+- A Mosh host's status pane hangs up while out of sight
+- Transfer notifications update at most once a second
+- A container log only follows while its tab is on screen
+- A prompt mark no longer searches the whole scrollback
+- The grid snapshot writes each cell in place
+- A WireGuard tunnel wakes once a second, never while offline
+- An idle phone VPN sleeps instead of waking twice a second
+- An idle Mosh session wakes only for its heartbeat
+- The Rust core runs its I/O on one worker thread
+- A stuck serial adapter no longer stalls other sessions
+- SSH keepalives slow to every three minutes in the background
+- Session recordings are written by the core
+- A command run appends to its own history file, not the store
+- Scrollback search and export run in the core, not over a copy
+- The status pane reads only the cpu lines of /proc/stat
+- A container log tab streams one follow instead of polling
+- SFTP downloads pipeline their reads and stream to readers
+- Rows the grid has already drawn are replayed, not redrawn
+- The core lays out each row's glyphs for the view to record
+- Typed text reaches the core over plain JNI as UTF-8
+- Enter reads the line being typed once, not twice
+- History hints follow the typed line instead of a timer
+- Images are fetched only when they move, and copied once
+
+### Documentation
+
+- Shorter feature, automation, build and backend pages
+
 ## [0.1.4] - 2026-09-17
 
 ### Added
