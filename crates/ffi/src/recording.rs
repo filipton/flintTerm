@@ -86,15 +86,17 @@ impl Recorder {
             return Ok(());
         }
         let paths: Vec<String> = text.iter().chain(cast.iter()).cloned().collect();
+        // Opened here, on the caller, so a file that cannot be written is an
+        // error the app can show, rather than "Recording to …" over nothing.
+        let header = cast.is_some().then(|| cast_header(cols, rows, started_at, ""));
+        let text = text.map(|p| Sink::open(p.into())).transpose()?;
+        let cast = cast.map(|p| Sink::open(p.into())).transpose()?;
         let (tx, rx) = mpsc::channel(QUEUE_CHUNKS);
-        // A thread rather than a task: opening and writing files blocks, and
-        // the runtime has one worker every session shares.
+        // A thread rather than a task: writing files blocks, and the runtime
+        // has one worker every session shares.
         let thread = std::thread::Builder::new()
             .name("flintterm-rec".into())
             .spawn(move || {
-                let header = cast.is_some().then(|| cast_header(cols, rows, started_at, ""));
-                let text = text.and_then(|p| Sink::open(p.into()));
-                let cast = cast.and_then(|p| Sink::open(p.into()));
                 let mut writer = Writer::new(text, cast, started_at);
                 if let Some(h) = header {
                     writer.header(&h);
@@ -240,18 +242,15 @@ struct Sink<W: Write> {
 }
 
 impl Sink<BufWriter<File>> {
-    fn open(path: PathBuf) -> Option<Self> {
+    fn open(path: PathBuf) -> Result<Self, CoreError> {
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         let opened = path
             .parent()
             .map_or(Ok(()), std::fs::create_dir_all)
             .and_then(|_| OpenOptions::new().create(true).append(true).open(&path));
         match opened {
-            Ok(f) => Some(Sink { out: Some(BufWriter::with_capacity(64 * 1024, f)), name }),
-            Err(e) => {
-                log::warn!("cannot record to {name}: {e}");
-                None
-            }
+            Ok(f) => Ok(Sink { out: Some(BufWriter::with_capacity(64 * 1024, f)), name }),
+            Err(e) => Err(CoreError::Other(format!("cannot record to {name}: {e}"))),
         }
     }
 }
@@ -520,6 +519,14 @@ mod tests {
         let text = String::from_utf8(w.text.unwrap().out.unwrap()).unwrap();
         let cast = String::from_utf8(w.cast.unwrap().out.unwrap()).unwrap();
         (text, cast)
+    }
+
+    #[test]
+    fn a_recording_that_cannot_open_its_file_fails_to_start() {
+        let rec = Recorder::default();
+        let nowhere = "/proc/flintterm-no-such-dir/x.log".to_string();
+        assert!(rec.start(Some(nowhere), None, 80, 24, 0).is_err());
+        assert!(rec.stop().is_empty());
     }
 
     #[test]
