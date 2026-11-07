@@ -202,9 +202,12 @@ class SessionManager(
      *
      * A private address means a different machine on every network: on one of
      * the phone's own networks it is the machine itself and the tunnel is in the
-     * way, and anywhere else it is unreachable without one. A name or a public
+     * way, and anywhere else it is unreachable without one. A system-wide VPN
+     * that routes that network counts as being on it. A name or a public
      * address could be either, so it is tried directly first and the tunnel
-     * catches it when that fails. "Always" skips the question.
+     * catches it when that fails; so is a private address while a VPN carries
+     * everything, since that VPN may or may not lead home. "Always" skips the
+     * question.
      *
      * Asked per address rather than once for the host, because a host with a
      * second address has it precisely so the two are reached differently.
@@ -221,11 +224,14 @@ class SessionManager(
         if (!Wol.isPrivateIpv4(ip)) {
             return TunnelChoice(tunnelId, true, "$tunnelName is used only if $name is not reachable directly")
         }
-        val lan = Wol.localNetworkContaining(ip, ip)
-        return if (lan != null) {
-            TunnelChoice(null, false, "$name is on your current network ($lan), connecting directly")
-        } else {
-            TunnelChoice(tunnelId, false, "$name is not on your current network, using $tunnelName")
+        return when (val route = LocalRoute.find(ip)) {
+            is LocalRoute.OnNetwork ->
+                TunnelChoice(null, false, "$name is on your current network (${route.net}), connecting directly")
+            is LocalRoute.ThroughVpn ->
+                TunnelChoice(null, false, "$name is reachable through the phone's VPN (${route.net}), connecting directly")
+            LocalRoute.EverythingThroughVpn ->
+                TunnelChoice(tunnelId, true, "The phone's VPN may reach $name, trying it before $tunnelName")
+            null -> TunnelChoice(tunnelId, false, "$name is not on your current network, using $tunnelName")
         }
     }
 

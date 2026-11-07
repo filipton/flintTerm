@@ -171,7 +171,7 @@ object Wol {
         return a == 10 || (a == 172 && b in 16..31) || (a == 192 && b == 168) || (a == 169 && b == 254) || a == 127
     }
 
-    private fun parseIpv4(s: String): Long? {
+    internal fun parseIpv4(s: String): Long? {
         val parts = s.split('.')
         if (parts.size != 4) return null
         var v = 0L

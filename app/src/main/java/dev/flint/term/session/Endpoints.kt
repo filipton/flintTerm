@@ -33,5 +33,5 @@ object Endpoints {
         return Wol.isPrivateIpv4(ip) && !onNetwork(ip)
     }
 
-    private fun onThisNetwork(ip: String): Boolean = Wol.localNetworkContaining(ip, ip) != null
+    private fun onThisNetwork(ip: String): Boolean = LocalRoute.find(ip) != null
 }
