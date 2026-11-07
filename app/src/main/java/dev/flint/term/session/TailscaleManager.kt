@@ -107,8 +107,10 @@ class TailscaleManager(private val context: Context, private val store: Store) {
                         starting -> 1_500L
                         // Quick while somebody is plausibly in the browser
                         // finishing the login, but a node left waiting on one
-                        // overnight has no business polling every second.
-                        login -> if (now - loginSince < LOGIN_QUICK_MS) 1_500L else 30_000L
+                        // overnight has no business polling every second. With
+                        // the Tailscale screen open somebody is waiting on it,
+                        // perhaps finishing the login on another device.
+                        login -> if (watched || now - loginSince < LOGIN_QUICK_MS) 1_500L else 30_000L
                         watched -> 5_000L
                         live -> 15_000L
                         else -> null
