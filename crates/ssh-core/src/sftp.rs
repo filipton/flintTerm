@@ -9,7 +9,7 @@
 
 use std::collections::VecDeque;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -50,6 +50,20 @@ const WRITE_OVERHEAD: u32 = 1 + 4 + 4 + 8 + 4;
 /// Kotlin, and one per packet costs more than the packet at LAN speeds.
 const PROGRESS_EVERY: Duration = Duration::from_millis(100);
 
+/// How long one request may go unanswered before the session gives up on it.
+const REQUEST_TIMEOUT_SECS: u64 = 60;
+
+/// How long a transfer may go without a single request completing. It stands
+/// in for the per-request timeout while requests are queued: russh-sftp starts
+/// that clock when a request is sent, so the sixteenth of sixteen queued reads
+/// waits behind fifteen others' worth of data, and on a link of a few hundred
+/// kbit/s it would time out although the transfer was moving all along.
+const STALL: Duration = Duration::from_secs(REQUEST_TIMEOUT_SECS);
+
+/// The per-request timeout while a transfer runs: in effect none, with [STALL]
+/// doing the job instead.
+const QUEUED_TIMEOUT_SECS: u64 = 24 * 60 * 60;
+
 #[derive(Debug, Clone)]
 pub struct Entry {
     pub name: String,
@@ -69,6 +83,29 @@ pub struct Sftp {
     limits: Limits,
     fsync: bool,
     cancelled: AtomicBool,
+    /// Transfers running, each of which needs the per-request timeout lifted.
+    transfers: AtomicUsize,
+}
+
+/// Lifts the per-request timeout for as long as a transfer runs. The timeout is
+/// one setting for the whole session, so it comes back only when the last of
+/// the transfers sharing that session ends.
+struct Queued<'a>(&'a Sftp);
+
+impl<'a> Queued<'a> {
+    fn new(sftp: &'a Sftp) -> Self {
+        sftp.transfers.fetch_add(1, Ordering::SeqCst);
+        sftp.raw.set_timeout(QUEUED_TIMEOUT_SECS);
+        Self(sftp)
+    }
+}
+
+impl Drop for Queued<'_> {
+    fn drop(&mut self) {
+        if self.0.transfers.fetch_sub(1, Ordering::SeqCst) == 1 {
+            self.0.raw.set_timeout(REQUEST_TIMEOUT_SECS);
+        }
+    }
 }
 
 impl Sftp {
@@ -79,7 +116,7 @@ impl Sftp {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let mut raw = RawSftpSession::new(stream);
-        raw.set_timeout(60);
+        raw.set_timeout(REQUEST_TIMEOUT_SECS);
         let version = raw.init().await?;
         let has = |name: &str| version.extensions.get(name).is_some_and(|v| v == "1");
         let mut limits = Limits::default();
@@ -88,7 +125,7 @@ impl Sftp {
             raw.set_limits(limits);
         }
         let fsync = has(extensions::FSYNC);
-        Ok(Self { raw: Arc::new(raw), limits, fsync, cancelled: AtomicBool::new(false) })
+        Ok(Self { raw: Arc::new(raw), limits, fsync, cancelled: AtomicBool::new(false), transfers: AtomicUsize::new(0) })
     }
 
     pub fn cancel(&self) {
@@ -256,6 +293,7 @@ impl Sftp {
         W: AsyncWrite + Unpin,
     {
         let mut len = self.limits.read_len.map_or(MAX_READ, |l| l.min(MAX_READ as u64) as u32).max(1);
+        let _queued = Queued::new(self);
         let mut inflight = Tasks::default();
         let mut next = 0u64;
         let mut done = 0u64;
@@ -312,6 +350,7 @@ impl Sftp {
             |l| l.min(MAX_PACKET as u64) as u32,
         );
         let mut buf = vec![0u8; len.max(1) as usize];
+        let _queued = Queued::new(self);
         let mut pending = Tasks::default();
         let mut done = 0u64;
         let mut ticker = Ticker::default();
@@ -416,8 +455,16 @@ impl<T> Drop for Tasks<T> {
     }
 }
 
-async fn settle<T>(task: JoinHandle<Result<T, SftpError>>) -> Result<T, SshError> {
-    Ok(task.await.map_err(|e| SshError::Other(e.to_string()))??)
+/// The oldest request's answer. Requests are answered in order, so waiting on
+/// the oldest for [STALL] is waiting that long for the transfer to move at all.
+async fn settle<T>(mut task: JoinHandle<Result<T, SftpError>>) -> Result<T, SshError> {
+    match tokio::time::timeout(STALL, &mut task).await {
+        Ok(joined) => Ok(joined.map_err(|e| SshError::Other(e.to_string()))??),
+        Err(_) => {
+            task.abort();
+            Err(SshError::Sftp(SftpError::Timeout.to_string()))
+        }
+    }
 }
 
 /// Rate limit for progress reports. The first is due at once; the caller makes
@@ -468,6 +515,9 @@ mod tests {
         read_limit: Option<u64>,
         /// Fail every read at or past this offset.
         fail_from: Option<u64>,
+        /// Take this long over every read, as a slow link does: the server
+        /// answers one request at a time, so queued reads wait their turn.
+        read_delay: Duration,
         /// (offset, length) of every read asked for, in arrival order.
         reads: Vec<(u64, u32)>,
         open_handles: i64,
@@ -529,6 +579,8 @@ mod tests {
         }
 
         async fn read(&mut self, id: u32, handle: String, offset: u64, len: u32) -> Result<Data, StatusCode> {
+            let delay = self.0.lock().unwrap().read_delay;
+            tokio::time::sleep(delay).await;
             let mut s = self.0.lock().unwrap();
             s.reads.push((offset, len));
             if s.fail_from.is_some_and(|f| offset >= f) {
@@ -757,6 +809,33 @@ mod tests {
         // Everything before the failed read arrived, and nothing after it.
         assert_eq!(out.len(), 3 * MAX_READ as usize);
         assert_eq!(state.lock().unwrap().open_handles, 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_slow_link_is_not_a_timeout_while_the_download_moves() {
+        let data = payload(20 * MAX_READ as usize);
+        let state = state_with("/f", data.clone());
+        // Each read takes 10 s, so the sixteenth queued read is answered
+        // 160 s after it was sent: well past the per-request timeout.
+        state.lock().unwrap().read_delay = Duration::from_secs(10);
+        let sftp = connect(&state, RTT / 2).await;
+        let mut out = Vec::new();
+        sftp.read_into("/f", &mut out, Some(data.len() as u64), None).await.unwrap();
+        assert!(out == data);
+        assert_eq!(state.lock().unwrap().open_handles, 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_download_that_stops_moving_times_out() {
+        let state = state_with("/f", payload(4 * MAX_READ as usize));
+        state.lock().unwrap().read_delay = STALL + Duration::from_secs(5);
+        let sftp = connect(&state, RTT / 2).await;
+        let started = Instant::now();
+        let mut out = Vec::new();
+        let err = sftp.read_into("/f", &mut out, None, None).await.unwrap_err();
+        assert!(err.to_string().contains("Timeout"), "{err}");
+        // The stall, then the close, which the stuck server cannot answer either.
+        assert!(started.elapsed() < STALL * 3, "{:?}", started.elapsed());
     }
 
     #[tokio::test(start_paused = true)]
