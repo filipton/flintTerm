@@ -134,7 +134,9 @@ fn a_recording_started_late_still_sees_the_output() {
     let session = Session::new(backend, 40, 10, 1000, listener.clone(), Arc::new(Accept), Arc::new(NoQuestions), Options::default());
     session.start();
     session.send_text("echo before-rec\n".into());
-    wait_for(&session, "before-rec");
+    // At the start of a row: the output, not the command line echoing back,
+    // which the shell may not have run yet.
+    wait_for(&session, "\nbefore-rec");
 
     // Armed only now: the session has already been running with no taps at all.
     let dir = std::env::temp_dir().join(format!("flintterm-session-rec-{}", std::process::id()));
@@ -143,11 +145,11 @@ fn a_recording_started_late_still_sees_the_output() {
     let path = |p: &std::path::Path| p.to_string_lossy().into_owned();
     session.start_recording(Some(path(&log)), Some(path(&cast)), 40, 10, 1_700_000_000_000).unwrap();
     session.send_text("echo after-rec\n".into());
-    wait_for(&session, "after-rec");
+    wait_for(&session, "\nafter-rec");
     assert_eq!(session.stop_recording(), vec![path(&log), path(&cast)]);
 
     session.send_text("echo after-stop\n".into());
-    wait_for(&session, "after-stop");
+    wait_for(&session, "\nafter-stop");
     // The files are closed on the recorder's own thread once it has the last chunk.
     let start = Instant::now();
     let read = |p: &std::path::Path| std::fs::read_to_string(p).unwrap_or_default();
