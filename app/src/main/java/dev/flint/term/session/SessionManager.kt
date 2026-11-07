@@ -878,7 +878,7 @@ class SessionManager(
             // is up; asked again here, or such a tunnel would never be stopped.
             withContext(Dispatchers.IO) { runCatching { tunnels.refreshStats() } }
             for (t in store.tunnels.value) {
-                if (t.id !in stillNeeded && tunnels.stats.value[t.id]?.running == true) {
+                if (t.id !in stillNeeded && !tunnels.startedByHand(t.id) && tunnels.stats.value[t.id]?.running == true) {
                     tunnels.stop(t.id)
                 }
             }

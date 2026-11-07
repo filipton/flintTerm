@@ -56,11 +56,25 @@ class TunnelManager(private val store: Store) {
     /** Validate a config without saving it. Returns the error message on failure. */
     fun validate(config: String): Result<TunnelInfo> = runCatching { parseTunnelConfig(config) }
 
+    /** Tunnels started from here, which stay up until stopped from here too. */
+    private val byHand = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+
+    /**
+     * Whether a tunnel was started by hand, rather than by a session that
+     * needed it. Those are left alone when the last session using a tunnel
+     * ends: the user asked for this one to be up.
+     */
+    fun startedByHand(id: String): Boolean = id in byHand
+
+    /** Start a tunnel by hand. Sessions start theirs in the core, on first use. */
     suspend fun start(id: String): Result<TunnelStats> = withContext(Dispatchers.IO) {
-        runCatching { startTunnel(id) }.also { refreshStats() }
+        runCatching { startTunnel(id) }
+            .onSuccess { byHand += id }
+            .also { refreshStats() }
     }
 
     suspend fun stop(id: String) = withContext(Dispatchers.IO) {
+        byHand -= id
         runCatching { stopTunnel(id) }
         refreshStats()
     }
