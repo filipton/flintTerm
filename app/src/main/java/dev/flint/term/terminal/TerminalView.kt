@@ -151,6 +151,7 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
             value?.addDamageListener(onDamage)
             applyHighlights()
             snapshot = null
+            snapKittyFlags = -1
             dropBitmaps()
             imagesSeen = -1
             predictedSeen = -1
@@ -794,8 +795,8 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     /** The same for predictive echo, and how many cells it is drawing. */
     private var snapPredictions = 0
     private var snapPredictionCount = 0
-    /** The kitty keyboard flags the program has asked for, as of the last frame. */
-    private var snapKittyFlags = 0
+    /** The kitty keyboard flags the program has asked for, as of the last frame; -1 before the first. */
+    private var snapKittyFlags = -1
 
     /**
      * The predicted cells, fetched when the header says they changed; the
@@ -852,7 +853,18 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
         if (highlightRules.isNotEmpty()) flags = flags or FrameBridge.WANT_HIGHLIGHTS
         syncLayout()
         val len = FrameBridge.snapshotInto(sessionHandle, bufferHandle, flags)
-        if (len <= 0L) return
+        if (len <= 0L) {
+            // A fill that failed part-way may already have moved the buffer, so
+            // the last frame's views can point at freed memory: drop them, and
+            // draw nothing rather than that.
+            snapshot = null
+            snapDirect = null
+            snapInts = null
+            snapFloats = null
+            snapPtr = 0L
+            snapLen = 0L
+            return
+        }
         // The address is asked for on every frame, not only when the length
         // changes: the row layout reserves room ahead of what it writes and
         // pads the length to a high-water mark, so the buffer can move to a new
@@ -2548,7 +2560,14 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
      * As of the last frame, out of its header: asked over uniffi instead, it
      * was a round trip on every key that came back up.
      */
-    private fun kittyFlags(): Int = snapKittyFlags
+    private fun kittyFlags(): Int {
+        // No frame of this session yet: a key pressed right after switching
+        // tabs would otherwise go out with the previous session's flags.
+        if (snapKittyFlags < 0) {
+            snapKittyFlags = runCatching { core?.modes()?.kittyFlags?.toInt() }.getOrNull() ?: 0
+        }
+        return snapKittyFlags
+    }
 
     /** A tap on a modifier cap, or a long press when [lock]. */
     fun toggleModifier(which: Char, lock: Boolean = false) {
