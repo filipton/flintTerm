@@ -392,6 +392,25 @@ impl client::Handler for ClientHandler {
     }
 }
 
+/// The TCP connection [`SshClient::connect`] runs over: direct or through the
+/// proxy, within the connect timeout. Apart, so that a caller racing several
+/// addresses can find out which one answers before any of them is asked for a
+/// host key or a password.
+///
+/// Only this part is subject to the timeout: the key exchange after it may
+/// legitimately block on the user answering the host-key prompt.
+pub async fn open_tcp(opts: &ConnectOptions) -> Result<tokio::net::TcpStream, SshError> {
+    let tcp = match &opts.proxy {
+        Some(p) => proxy::connect(p, &opts.host, opts.port, opts.connect_timeout).await?,
+        None => match tokio::time::timeout(opts.connect_timeout, tokio::net::TcpStream::connect((opts.host.as_str(), opts.port))).await {
+            Ok(r) => r?,
+            Err(_) => return Err(SshError::Timeout),
+        },
+    };
+    let _ = tcp.set_nodelay(true);
+    Ok(tcp)
+}
+
 /// A connected, authenticated SSH session.
 pub struct SshClient {
     /// Kept without a lock on purpose: every post-authentication call takes
@@ -409,21 +428,7 @@ pub struct SshClient {
 
 impl SshClient {
     pub async fn connect(opts: ConnectOptions, verifier: Arc<dyn HostKeyVerifier>) -> Result<SshClient, SshError> {
-        // Only the TCP connect is subject to the timeout: the key exchange may
-        // legitimately block on the user answering the host-key prompt.
-        let tcp = match &opts.proxy {
-            Some(p) => proxy::connect(p, &opts.host, opts.port, opts.connect_timeout).await?,
-            None => match tokio::time::timeout(
-                opts.connect_timeout,
-                tokio::net::TcpStream::connect((opts.host.as_str(), opts.port)),
-            )
-            .await
-            {
-                Ok(r) => r?,
-                Err(_) => return Err(SshError::Timeout),
-            },
-        };
-        let _ = tcp.set_nodelay(true);
+        let tcp = open_tcp(&opts).await?;
         Self::connect_over(opts, tcp, verifier).await
     }
 

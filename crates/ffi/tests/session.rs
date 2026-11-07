@@ -299,6 +299,70 @@ fn a_resize_while_the_host_key_is_being_checked_reaches_the_pty() {
     session.disconnect();
 }
 
+/// The addresses of a host are raced, not tried in turn: one that never
+/// answers — a home LAN address seen from somewhere else — does not hold up
+/// the one that would, and the machine that does answer checks its host key
+/// once, not once per address that was tried.
+#[test]
+fn an_address_that_never_answers_does_not_hold_up_the_next() {
+    let Ok(port) = std::env::var("SSH_TEST_PORT") else { return };
+    let key = std::fs::read_to_string(std::env::var("SSH_TEST_KEY").unwrap()).unwrap();
+
+    struct Counting(AtomicUsize);
+    impl HostKeyVerifier for Counting {
+        fn verify(&self, _: HostKey) -> bool {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            true
+        }
+    }
+    let verifier = Arc::new(Counting(AtomicUsize::new(0)));
+
+    let listener = Listener::new();
+    let backend = Backend::Ssh {
+        config: SshConfig {
+            label: String::new(),
+            term: String::new(),
+            // TEST-NET-1: routed nowhere, so the connect waits out its timeout.
+            host: "192.0.2.1".into(),
+            port: 22,
+            username: std::env::var("USER").unwrap(),
+            auth: vec![AuthMethod::Key { private_key: key, passphrase: None, certificate: String::new() }],
+            keepalive_secs: 10,
+            connect_timeout_secs: 10,
+            proxy: None,
+            jumps: vec![],
+            tunnel_id: None,
+            wait_for_host_secs: 0,
+            tailscale_id: None,
+            tunnel_fallback: false,
+            forward_agent: false,
+            agent_keys: vec![],
+            agent_approval: None,
+            env: vec![],
+            alternates: vec![Endpoint {
+                label: "loopback".into(),
+                host: "127.0.0.1".into(),
+                port: port.parse().unwrap(),
+                tunnel_id: None,
+                tailscale_id: None,
+                vpn_name: String::new(),
+                tunnel_fallback: false,
+            }],
+            vpn_name: String::new(),
+        },
+    };
+    let session = Session::new(backend, 80, 24, 1000, listener.clone(), verifier.clone(), Arc::new(NoQuestions), Options::default());
+    let start = Instant::now();
+    session.start();
+    while !matches!(session.state(), SessionState::Connected) {
+        assert!(start.elapsed() < Duration::from_secs(15), "state: {:?}", session.state());
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(start.elapsed() < Duration::from_secs(3), "took {:?}", start.elapsed());
+    assert_eq!(verifier.0.load(Ordering::SeqCst), 1);
+    session.disconnect();
+}
+
 #[test]
 fn ssh_session_roundtrip() {
     let Ok(port) = std::env::var("SSH_TEST_PORT") else { return };

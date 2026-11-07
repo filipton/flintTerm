@@ -2047,6 +2047,41 @@ impl Session {
     }
 }
 
+/// How far apart the addresses of a host are started when they are raced: a
+/// LAN answers well inside it, so the order the app chose still decides
+/// whenever the first address is reachable at all.
+const RACE_STAGGER: Duration = Duration::from_millis(300);
+
+/// A first hop's transport, open and ready for the SSH handshake.
+struct Opened {
+    stream: ssh_core::BoxedStream,
+    /// The WireGuard tunnel it runs through, if any.
+    tunnel: Option<String>,
+}
+
+/// Why a race over a host's addresses ended without a connection.
+enum Raced {
+    /// A machine answered and turned the login down; no other address would
+    /// say anything different.
+    Final(CoreError),
+    /// None of them could be reached; the last reason, if there was one.
+    NoneAnswered(Option<CoreError>),
+}
+
+/// The first of `running` to finish, taken out of the list, with its index.
+async fn first_done<T>(running: &mut Vec<(usize, std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + '_>>)>) -> (usize, T) {
+    std::future::poll_fn(|cx| {
+        for k in 0..running.len() {
+            if let std::task::Poll::Ready(out) = running[k].1.as_mut().poll(cx) {
+                let (i, _) = running.swap_remove(k);
+                return std::task::Poll::Ready((i, out));
+            }
+        }
+        std::task::Poll::Pending
+    })
+    .await
+}
+
 impl Inner {
     fn set_state(&self, state: SessionState) {
         {
@@ -2547,66 +2582,26 @@ impl Inner {
                 tunnel_fallback: config.tunnel_fallback,
             }];
             candidates.extend(config.alternates.iter().cloned());
+            let opts = candidates
+                .iter()
+                .map(|c| opts_for(&c.host, c.port, &config.username, &config.auth, &config.proxy, config.forward_agent))
+                .collect::<Result<Vec<_>, _>>()?;
             let deadline = tokio::time::Instant::now() + Duration::from_secs(config.wait_for_host_secs as u64);
-            let mut last: Option<CoreError> = None;
             loop {
-                for (i, candidate) in candidates.iter().enumerate() {
-                    // Everything this attempt says goes on one line, which ends
-                    // as either the connection that worked or the one that did not.
-                    let key = format!("addr{i}");
-                    let name = if candidate.label.is_empty() {
-                        format!("{}:{}", candidate.host, candidate.port)
-                    } else {
-                        format!("{} ({}:{})", candidate.label, candidate.host, candidate.port)
-                    };
-                    // The VPN row is created first, because that is the order it
-                    // happens in: the tunnel comes up, then the address is dialled
-                    // through it.
-                    if candidate.tunnel_id.is_some() || candidate.tailscale_id.is_some() {
-                        let what = if candidate.tailscale_id.is_some() { "tailnet" } else { "tunnel" };
-                        let named = if candidate.vpn_name.is_empty() { what.to_string() } else { format!("{what} {}", candidate.vpn_name) };
-                        self.step("vpn", format!("Bringing up the {named}"), StepStatus::Running);
+                let last = match self.race_candidates(&candidates, &opts, &verifier).await {
+                    Ok((i, client)) => {
+                        self.track_keepalive(&client);
+                        *self.used_endpoint.lock() = Some(candidates[i].clone());
+                        self.note_kex(&client);
+                        self.progress("Authenticated");
+                        if config.forward_agent {
+                            self.progress(format!("Agent forwarding on ({} key{})", agent_keys.len(), if agent_keys.len() == 1 { "" } else { "s" }));
+                        }
+                        return Ok(client);
                     }
-                    self.step(&key, format!("Trying {name}"), StepStatus::Running);
-                    let opts = opts_for(&candidate.host, candidate.port, &config.username, &config.auth, &config.proxy, config.forward_agent)?;
-                    // No waiting inside a single attempt: with several addresses,
-                    // sitting on the first one defeats the point of the list.
-                    match self
-                        .dial_first_hop(
-                            opts,
-                            candidate.tunnel_id.as_deref(),
-                            candidate.tailscale_id.as_deref(),
-                            0,
-                            &verifier,
-                            &key,
-                            &candidate.vpn_name,
-                            candidate.tunnel_fallback,
-                        )
-                        .await
-                    {
-                        Ok(client) => {
-                            self.track_keepalive(&client);
-                            *self.used_endpoint.lock() = Some(candidate.clone());
-                            self.step(&key, format!("Connected to {name}"), StepStatus::Done);
-                            self.note_kex(&client);
-                            self.progress("Authenticated");
-                            if config.forward_agent {
-                                self.progress(format!("Agent forwarding on ({} key{})", agent_keys.len(), if agent_keys.len() == 1 { "" } else { "s" }));
-                            }
-                            return Ok(client);
-                        }
-                        // Reaching the machine and being turned away is an answer:
-                        // another address would only ask the same question again.
-                        Err(e @ (CoreError::Auth(_) | CoreError::HostKeyRejected | CoreError::InvalidKey(_))) => {
-                            self.step(&key, format!("{name}: {e}"), StepStatus::Failed);
-                            return Err(e);
-                        }
-                        Err(e) => {
-                            self.step(&key, format!("{name}: {e}"), StepStatus::Failed);
-                            last = Some(e);
-                        }
-                    }
-                }
+                    Err(Raced::Final(e)) => return Err(e),
+                    Err(Raced::NoneAnswered(last)) => last,
+                };
                 if tokio::time::Instant::now() >= deadline {
                     return Err(last.unwrap_or(CoreError::Timeout));
                 }
@@ -2626,7 +2621,7 @@ impl Inner {
                 None => {
                     self.step(&key, format!("Connecting to jump host {label}"), StepStatus::Running);
                     let tunnel = hop.tunnel_id.as_deref().or(config.tunnel_id.as_deref());
-                    match self.dial_first_hop(opts, tunnel, hop.tailscale_id.as_deref(), 0, &verifier, &key, "", self.tunnel_fallback()).await {
+                    match self.dial_first_hop(opts, tunnel, hop.tailscale_id.as_deref(), &verifier, &key, self.tunnel_fallback()).await {
                         Ok(c) => c,
                         Err(e) => {
                             self.step(&key, format!("Jump host {label}: {e}"), StepStatus::Failed);
@@ -2746,20 +2741,159 @@ impl Inner {
         }
     }
 
+    /// Reach the first machine of a jump chain and log in to it.
     async fn dial_first_hop(
         &self,
         opts: ssh_core::ConnectOptions,
         tunnel_id: Option<&str>,
         tailscale_id: Option<&str>,
-        wait_secs: u32,
         verifier: &Arc<dyn ssh_core::HostKeyVerifier>,
+        step_key: &str,
+        tunnel_fallback: bool,
+    ) -> Result<SshClient, CoreError> {
+        let opened = self.open_first_hop(&opts, tunnel_id, tailscale_id, step_key, "vpn", "", tunnel_fallback).await?;
+        *self.used_tunnel.lock() = opened.tunnel;
+        Ok(SshClient::connect_over(opts, opened.stream, verifier.clone()).await?)
+    }
+
+    /// Log in over whichever of `candidates` answers first.
+    ///
+    /// Only the transport is raced: the TCP connection, the tunnel or the
+    /// tailnet. Each address starts [`RACE_STAGGER`] after the one before it,
+    /// or at once when that one has failed, so the address [`Endpoints.order`]
+    /// put first still wins whenever it answers promptly, and one that will
+    /// never answer — a home LAN address seen from a café — no longer holds the
+    /// others back for its whole timeout. The SSH handshake runs on the first
+    /// stream to open, and only there, so the host key and the password are
+    /// asked for once; if that machine turns out not to speak SSH, the race
+    /// carries on with the rest.
+    async fn race_candidates(
+        &self,
+        candidates: &[Endpoint],
+        opts: &[ssh_core::ConnectOptions],
+        verifier: &Arc<dyn ssh_core::HostKeyVerifier>,
+    ) -> Result<(usize, SshClient), Raced> {
+        type Attempt<'a> = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Opened, CoreError>> + Send + 'a>>;
+        let name = |c: &Endpoint| {
+            if c.label.is_empty() {
+                format!("{}:{}", c.host, c.port)
+            } else {
+                format!("{} ({}:{})", c.label, c.host, c.port)
+            }
+        };
+        // Tunnels that were down before the race, so that one a losing attempt
+        // brought up for nothing can be taken down again.
+        let tunnels_down: Vec<String> = candidates
+            .iter()
+            .filter_map(|c| c.tunnel_id.clone().filter(|_| c.tailscale_id.is_none()))
+            .filter(|id| !crate::tunnel::is_running(id))
+            .collect();
+        let mut running: Vec<(usize, Attempt<'_>)> = Vec::new();
+        let mut next = 0;
+        let mut next_at = tokio::time::Instant::now();
+        let mut last = None;
+        let won = loop {
+            if next < candidates.len() && (running.is_empty() || tokio::time::Instant::now() >= next_at) {
+                let (i, c) = (next, &candidates[next]);
+                next += 1;
+                next_at = tokio::time::Instant::now() + RACE_STAGGER;
+                // The VPN row is created first, because that is the order it
+                // happens in: the tunnel comes up, then the address is dialled
+                // through it.
+                if c.tunnel_id.is_some() || c.tailscale_id.is_some() {
+                    let what = if c.tailscale_id.is_some() { "tailnet" } else { "tunnel" };
+                    let named = if c.vpn_name.is_empty() { what.to_string() } else { format!("{what} {}", c.vpn_name) };
+                    self.step(&format!("vpn{i}"), format!("Bringing up the {named}"), StepStatus::Running);
+                }
+                self.step(&format!("addr{i}"), format!("Trying {}", name(c)), StepStatus::Running);
+                let attempt = async move {
+                    let (key, vpn) = (format!("addr{i}"), format!("vpn{i}"));
+                    self.open_first_hop(&opts[i], c.tunnel_id.as_deref(), c.tailscale_id.as_deref(), &key, &vpn, &c.vpn_name, c.tunnel_fallback).await
+                };
+                running.push((i, Box::pin(attempt)));
+                continue;
+            }
+            if running.is_empty() {
+                break None;
+            }
+            let (i, opened) = tokio::select! {
+                done = first_done(&mut running) => done,
+                () = tokio::time::sleep_until(next_at), if next < candidates.len() => continue,
+            };
+            let key = format!("addr{i}");
+            let c = &candidates[i];
+            let opened = match opened {
+                Ok(o) => o,
+                Err(e) => {
+                    self.step(&key, format!("{}: {e}", name(c)), StepStatus::Failed);
+                    last = Some(e);
+                    next_at = tokio::time::Instant::now();
+                    continue;
+                }
+            };
+            match SshClient::connect_over(opts[i].clone(), opened.stream, verifier.clone()).await {
+                Ok(client) => {
+                    self.step(&key, format!("Connected to {}", name(c)), StepStatus::Done);
+                    *self.used_tunnel.lock() = opened.tunnel.clone();
+                    break Some((i, client, opened.tunnel));
+                }
+                Err(e) => {
+                    let e: CoreError = e.into();
+                    self.step(&key, format!("{}: {e}", name(c)), StepStatus::Failed);
+                    // Reaching the machine and being turned away is an answer:
+                    // another address would only ask the same question again.
+                    if matches!(e, CoreError::Auth(_) | CoreError::HostKeyRejected | CoreError::InvalidKey(_)) {
+                        drop(running);
+                        self.release_tunnels(tunnels_down, None);
+                        return Err(Raced::Final(e));
+                    }
+                    last = Some(e);
+                    next_at = tokio::time::Instant::now();
+                }
+            }
+        };
+        // Every attempt still under way is dropped here, which is the end of it.
+        drop(running);
+        if let Some((w, _, _)) = &won {
+            for (i, c) in candidates[..next].iter().enumerate().filter(|(i, _)| i != w) {
+                self.step(&format!("addr{i}"), format!("{}: not needed", name(c)), StepStatus::Warning);
+            }
+        }
+        match won {
+            Some((i, client, tunnel)) => {
+                self.release_tunnels(tunnels_down, tunnel.as_deref());
+                Ok((i, client))
+            }
+            None => {
+                self.release_tunnels(tunnels_down, None);
+                Err(Raced::NoneAnswered(last))
+            }
+        }
+    }
+
+    /// Stop the tunnels in `ids`, all down before a race, other than `keep`:
+    /// a losing attempt may have brought one up that nothing will use.
+    fn release_tunnels(&self, ids: Vec<String>, keep: Option<&str>) {
+        crate::tunnel::stop_after_starts(ids.into_iter().filter(|id| Some(id.as_str()) != keep).collect());
+    }
+
+    /// Open the transport to a first hop: plain TCP, a proxy, a WireGuard
+    /// tunnel or the tailnet. No SSH yet, so that several can be tried at once.
+    #[allow(clippy::too_many_arguments)]
+    async fn open_first_hop(
+        &self,
+        opts: &ssh_core::ConnectOptions,
+        tunnel_id: Option<&str>,
+        tailscale_id: Option<&str>,
         // Which step line this attempt writes to, so one address stays one line.
         step_key: &str,
-        // What the tunnel or tailnet is called, for its own step line.
+        // The step line of its tunnel or tailnet.
+        vpn_key: &str,
+        // What the tunnel or tailnet is called, for that line.
         vpn_name: &str,
         // Whether this address would rather be tried directly first.
         tunnel_fallback: bool,
-    ) -> Result<SshClient, CoreError> {
+    ) -> Result<Opened, CoreError> {
         let say = |msg: String| self.step(step_key, msg, StepStatus::Running);
         let target = format!("{}:{}", opts.host, opts.port);
         // Smart tunnel use: reachable directly? Then no tunnel. Otherwise go through it.
@@ -2768,17 +2902,16 @@ impl Inner {
                 say(format!("Trying {target} directly first"));
                 let mut quick = opts.clone();
                 quick.connect_timeout = Duration::from_secs(4);
-                match SshClient::connect(quick, verifier.clone()).await {
-                    Ok(c) => {
-                        self.step(step_key, format!("Reachable directly, not using the tunnel"), StepStatus::Running);
-                        *self.used_tunnel.lock() = None;
-                        return Ok(c);
+                match ssh_core::open_tcp(&quick).await {
+                    Ok(tcp) => {
+                        self.step(step_key, "Reachable directly, not using the tunnel".to_string(), StepStatus::Running);
+                        self.step(vpn_key, "Not needed: reachable directly".to_string(), StepStatus::Done);
+                        return Ok(Opened { stream: Box::new(tcp), tunnel: None });
                     }
-                    Err(ssh_core::SshError::Io(_)) | Err(ssh_core::SshError::Timeout) | Err(ssh_core::SshError::Other(_)) => {
+                    Err(_) => {
                         say("Not reachable directly, using the WireGuard tunnel".to_string());
                         Some(id)
                     }
-                    Err(e) => return Err(e.into()),
                 }
             }
             other => other,
@@ -2787,22 +2920,22 @@ impl Inner {
             // The tailnet is a step of its own: when a node is slow to come up,
             // that is what the connection is waiting for.
             let name = if vpn_name.is_empty() { "Tailscale".to_string() } else { format!("Tailscale ({vpn_name})") };
-            self.step("vpn", format!("Dialling inside {name}"), StepStatus::Done);
+            self.step(vpn_key, format!("Dialling inside {name}"), StepStatus::Done);
             say(format!("Connecting to {target} through Tailscale"));
         }
-        *self.used_tunnel.lock() = tunnel_id.filter(|_| tailscale_id.is_none()).map(str::to_string);
-        let tunnel = match tunnel_id.filter(|_| tailscale_id.is_none()) {
+        let tunnel_id = tunnel_id.filter(|_| tailscale_id.is_none());
+        let tunnel = match tunnel_id {
             Some(id) => {
                 let name = if vpn_name.is_empty() { "WireGuard tunnel".to_string() } else { format!("WireGuard tunnel {vpn_name}") };
-                self.step("vpn", format!("Bringing up {name}"), StepStatus::Running);
+                self.step(vpn_key, format!("Bringing up {name}"), StepStatus::Running);
                 let t = match crate::tunnel::tunnel_for(id).await {
                     Ok(t) => t,
                     Err(e) => {
-                        self.step("vpn", format!("{name}: {e}"), StepStatus::Failed);
+                        self.step(vpn_key, format!("{name}: {e}"), StepStatus::Failed);
                         return Err(e);
                     }
                 };
-                self.step("vpn", format!("{name} is up"), StepStatus::Done);
+                self.step(vpn_key, format!("{name} is up"), StepStatus::Done);
                 say(format!("Connecting to {target} through the tunnel"));
                 Some(t)
             }
@@ -2816,43 +2949,15 @@ impl Inner {
                 None
             }
         };
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(wait_secs as u64);
-        let mut attempt = 0u32;
-        loop {
-            attempt += 1;
-            let result = if let Some(ts) = tailscale_id {
-                match crate::tailscale::dial(ts.to_string(), target.clone()).await {
-                    Ok(stream) => SshClient::connect_over(opts.clone(), stream, verifier.clone()).await,
-                    Err(e) => Err(ssh_core::SshError::Other(e.to_string())),
-                }
-            } else { match &tunnel {
-                Some(t) => {
-                    let ip = match t.resolve(&opts.host).await {
-                        Ok(ip) => ip,
-                        Err(e) => return Err(CoreError::Other(e.to_string())),
-                    };
-                    match t.connect(ip, opts.port).await {
-                        Ok(stream) => SshClient::connect_over(opts.clone(), stream, verifier.clone()).await,
-                        Err(e) => Err(ssh_core::SshError::Other(e.to_string())),
-                    }
-                }
-                None => SshClient::connect(opts.clone(), verifier.clone()).await,
-            } };
-            match result {
-                Ok(c) => return Ok(c),
-                // Only network-level failures are worth retrying; auth/host-key problems are final.
-                Err(e @ (ssh_core::SshError::Io(_) | ssh_core::SshError::Timeout | ssh_core::SshError::Other(_))) => {
-                    let now = tokio::time::Instant::now();
-                    if now >= deadline {
-                        return Err(e.into());
-                    }
-                    let left = (deadline - now).as_secs();
-                    self.step(step_key, format!("{target} not reachable yet (attempt {attempt}: {e}), retrying for {left}s…"), StepStatus::Warning);
-                    tokio::time::sleep(Duration::from_secs(3)).await;
-                }
-                Err(e) => return Err(e.into()),
-            }
-        }
+        let stream: ssh_core::BoxedStream = if let Some(ts) = tailscale_id {
+            Box::new(crate::tailscale::dial(ts.to_string(), target.clone()).await.map_err(|e| CoreError::Other(e.to_string()))?)
+        } else if let Some(t) = &tunnel {
+            let ip = t.resolve(&opts.host).await.map_err(|e| CoreError::Other(e.to_string()))?;
+            Box::new(t.connect(ip, opts.port).await.map_err(|e| CoreError::Other(e.to_string()))?)
+        } else {
+            Box::new(ssh_core::open_tcp(opts).await?)
+        };
+        Ok(Opened { stream, tunnel: tunnel_id.map(str::to_string) })
     }
 
     /// From `hop`, run its pre-command (if any) and open a tunnel to

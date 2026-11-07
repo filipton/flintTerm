@@ -264,8 +264,47 @@ pub fn parse_mac(s: &str) -> Result<[u8; 6], CoreError> {
     Ok(out)
 }
 
+/// Starts in progress: one at a time, so two connections racing through the
+/// same tunnel do not both start it and leave the first copy running unseen.
+static STARTING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// Running tunnel for `id`, starting it when needed.
+///
+/// The start runs as a task of its own: a connection attempt that loses a race
+/// and is dropped half-way would otherwise leave a tunnel running that the
+/// registry never heard of, and so nothing could stop.
 pub(crate) async fn tunnel_for(id: &str) -> Result<Arc<Tunnel>, CoreError> {
+    let id = id.to_string();
+    crate::runtime::RUNTIME
+        .spawn(async move {
+            let _one_at_a_time = STARTING.lock().await;
+            start_registered(&id).await
+        })
+        .await
+        .map_err(|e| CoreError::Other(format!("tunnel: {e}")))?
+}
+
+/// Whether the tunnel is up right now, without starting it.
+pub(crate) fn is_running(id: &str) -> bool {
+    with_registry(|reg| reg.get(id).and_then(|e| e.running.clone())).is_some_and(|t| t.is_running())
+}
+
+/// Stop `ids` once any start still under way has finished: a connection
+/// attempt dropped while its tunnel was coming up leaves that start running to
+/// the end, and stopping before it lands would miss the tunnel it brings up.
+pub(crate) fn stop_after_starts(ids: Vec<String>) {
+    if ids.is_empty() {
+        return;
+    }
+    crate::runtime::RUNTIME.spawn(async move {
+        let _no_start_in_flight = STARTING.lock().await;
+        for id in ids {
+            stop_tunnel(id);
+        }
+    });
+}
+
+async fn start_registered(id: &str) -> Result<Arc<Tunnel>, CoreError> {
     let (config, running) = with_registry(|reg| {
         reg.get(id).map(|e| (e.config.clone(), e.running.clone())).ok_or_else(|| CoreError::Other(format!("unknown tunnel {id}")))
     })?;
