@@ -294,10 +294,16 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
             val input = runCatching { session.core.inputLine() }.getOrNull()
             if (input == null) {
                 if (typed.isNotEmpty()) typed = ""
-                return@collect
+            } else {
+                val t = dev.flint.term.data.CommandHistory.typed(input.line, input.typed, input.atEnd, latestHistory)
+                if (t != typed) typed = t
             }
-            val t = dev.flint.term.data.CommandHistory.typed(input.line, input.typed, input.atEnd, latestHistory)
-            if (t != typed) typed = t
+            // The counter can move on every frame while output streams, when the
+            // core cannot tell typed text from a command's output (a paste, or
+            // typing ahead). A keystroke is still answered at once; after it, the
+            // line is read at most every so often, and the state flow hands over
+            // only the latest change.
+            kotlinx.coroutines.delay(HINT_SETTLE_MS)
         }
     }
 
@@ -1325,6 +1331,9 @@ private const val MIN_SHEET_MS = 1100L
 
 /** How long typing in the search field has to pause before the scrollback is searched. */
 private const val SEARCH_DEBOUNCE_MS = 150L
+
+/** The least time between two reads of the line being typed, for the history hint. */
+private const val HINT_SETTLE_MS = 50L
 
 /**
  * The two chevrons that walk the session from one prompt to the next.
