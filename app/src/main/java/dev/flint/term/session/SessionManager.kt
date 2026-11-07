@@ -974,14 +974,17 @@ class SessionManager(
                                 session.reconnectAttempts = 0
                             }
                             val attempt = session.reconnectAttempts
-                            if (attempt >= 6) return@collect
-                            val delayMs = listOf(3L, 5L, 10L, 20L, 30L, 60L)[attempt] * 1000
-                            kotlinx.coroutines.delay(delayMs)
+                            if (attempt >= RECONNECT_DELAYS_S.size) {
+                                runCatching { session.core.note("Stopped reconnecting after $attempt attempts") }
+                                return@collect
+                            }
+                            kotlinx.coroutines.delay(RECONNECT_DELAYS_S[attempt] * 1000)
                             // On a train the link comes and goes. Retrying into a
                             // dead network just spends battery and burns an attempt,
                             // so wait for connectivity first — and do not count the
                             // wait as an attempt, since it was never tried.
-                            if (!network.online) {
+                            val waited = !network.online
+                            if (waited) {
                                 runCatching { session.core.note("Waiting for a network…") }
                                 network.awaitOnline()
                                 // Let the new link settle, and spread out the
@@ -991,7 +994,7 @@ class SessionManager(
                             }
                             if (session.closedByUser || session.destroyed || get(session.id) == null) return@collect
                             val fresh = openSsh(host, automatic = true)
-                            fresh.reconnectAttempts = attempt + 1
+                            fresh.reconnectAttempts = if (waited) attempt else attempt + 1
                             runCatching { fresh.core.note("Reconnected automatically (attempt ${attempt + 1})") }
                             _replacements.tryEmit(session.id to fresh.id)
                             remove(session.id)
@@ -1076,8 +1079,16 @@ class SessionManager(
     }
 
     companion object {
-        /** How long a session has to stay up before its reconnects start counting from one again. */
-        private const val STABLE_CONNECTION_MS = 60_000L
+        /**
+         * How long a session has to stay up before its reconnects start counting
+         * from one again. Long enough to catch a server that drops the login at
+         * once, and short of how long a link on a train stays up between drops,
+         * so that one is reconnected for as long as it keeps working at all.
+         */
+        private const val STABLE_CONNECTION_MS = 10_000L
+
+        /** The wait before each automatic reconnect; after the last one it stops. */
+        private val RECONNECT_DELAYS_S = longArrayOf(3, 5, 10, 20, 30, 60)
 
         /** The spread of reconnects that were all waiting for the same network. */
         private const val RECONNECT_JITTER_MS = 3_000L
