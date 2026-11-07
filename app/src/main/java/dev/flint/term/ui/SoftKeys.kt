@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,10 +53,31 @@ private val CAP_HEIGHT = 46.dp
  */
 private val STRIP_HEIGHT = 38.dp
 
-private class KeyboardRow(val keys: List<Key>, val inset: Float = 0f, val height: Dp = CAP_HEIGHT)
+private val COMPACT_CAP_HEIGHT = 34.dp
+private val COMPACT_STRIP_HEIGHT = 28.dp
 
-private fun row(vararg tokens: String, inset: Float = 0f, height: Dp = CAP_HEIGHT) =
-    KeyboardRow(tokens.map { Key(it) }, inset, height)
+/** Each half of the split keyboard is five standard keys wide. */
+private const val SPLIT_UNITS = 5f
+
+/** Wide enough for five keys a thumb can hit, and no wider, so each half stays in reach. */
+private val SPLIT_HALF_MAX = 270.dp
+
+/** Even on a narrow screen the two halves must read as two. */
+private val SPLIT_MIN_GAP = 24.dp
+
+/**
+ * [splitAt] is where the row breaks when the keyboard is split: halfway by
+ * count, which puts t|y, g|h and v|b where a split keyboard puts them.
+ */
+private class KeyboardRow(
+    val keys: List<Key>,
+    val inset: Float = 0f,
+    val height: Dp = CAP_HEIGHT,
+    val splitAt: Int = (keys.size + 1) / 2,
+)
+
+private fun row(vararg tokens: String, inset: Float = 0f, height: Dp = CAP_HEIGHT, splitAt: Int = (tokens.size + 1) / 2) =
+    KeyboardRow(tokens.map { Key(it) }, inset, height, splitAt)
 
 private val LETTERS = listOf(
     // The digits are a strip above the keyboard rather than part of it, and a
@@ -100,7 +123,10 @@ private val FUNCTIONS = listOf(
     // Ten across and flush, like every other row on both pages: a row indented
     // by half a key puts this page's caps between the other page's, and paging
     // between the two then moves every key under the thumb.
-    row("HOME", "END", "PGUP", "PGDN", "LEFT", "DOWN", "UP", "RIGHT", "NAV", "SEARCH"),
+    //
+    // Split, the four go together to the right half, where hjkl are, rather
+    // than one of them being left behind on the other side of the gap.
+    row("HOME", "END", "PGUP", "PGDN", "LEFT", "DOWN", "UP", "RIGHT", "NAV", "SEARCH", splitAt = 4),
     KeyboardRow(
         listOf(Key(PAGE, 1.5f)) + listOf("F11", "F12", "ALT", "SHIFT", "STAB", "PASTE", "KEYBOARD").map { Key(it) } + Key("BKSP", 1.5f),
     ),
@@ -119,6 +145,23 @@ private val LABELS = mapOf("SHIFT" to "⇧", "ENTER" to "⏎", "BKSP" to "⌫")
  */
 private const val PAGE = "@page"
 
+/** Not a key either: the cap that goes between letters and symbols. */
+private const val LAYER = "@layer"
+
+// Where a phone keyboard puts the emoji key, a terminal wants Ctrl. The comma
+// keeps its place beside it, and space, full stop and enter keep theirs, so the
+// row still reads the way the hand expects.
+private val BOTTOM = KeyboardRow(
+    listOf(Key(LAYER, 1.35f), Key("CTRL", 1.2f), Key(",", 0.9f), Key(" ", 4.25f), Key(".", 0.9f), Key("ENTER", 1.4f)),
+)
+
+// Split, the space bar is under both thumbs, as on every split keyboard: either
+// half of it is a space, so neither hand has to reach across the gap for one.
+private val BOTTOM_SPLIT = KeyboardRow(
+    listOf(Key(LAYER, 1.35f), Key("CTRL", 1.2f), Key(",", 0.9f), Key(" ", 1.55f), Key(" ", 2.6f), Key(".", 0.9f), Key("ENTER", 1.5f)),
+    splitAt = 4,
+)
+
 private enum class Layer { LETTERS, SYMBOLS, FUNCTIONS }
 
 @Composable
@@ -131,7 +174,15 @@ fun TerminalKeyboard(
     onSearch: () -> Unit = {},
     onCompose: () -> Unit = {},
     onChords: (() -> Unit)? = null,
+    /**
+     * For a phone on its side: split in two, one half under each thumb, and
+     * shorter caps, where five full rows would leave no terminal above them.
+     */
+    compact: Boolean = false,
 ) {
+    // Every row keeps its height relative to the others, so the strip still
+    // reads as a strip and switching layer still moves nothing.
+    fun Dp.scaled(): Dp = if (!compact) this else if (this == STRIP_HEIGHT) COMPACT_STRIP_HEIGHT else COMPACT_CAP_HEIGHT
     val mods by view.modifiers.collectAsStateWithLifecycle()
     val pickToInsert = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) view.onFilesDropped?.invoke(uris)
@@ -165,53 +216,76 @@ fun TerminalKeyboard(
     // of its own, and two lots of it read as a gap between the two halves of
     // what is really one keyboard.
     Column(
-        modifier.background(chrome).padding(start = 3.dp, end = 3.dp, top = 1.dp, bottom = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+        modifier.background(chrome).padding(start = 3.dp, end = 3.dp, top = 1.dp, bottom = if (compact) 3.dp else 6.dp),
+        verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 7.dp),
     ) {
         val rows = when (layer) {
             Layer.LETTERS -> LETTERS
             Layer.SYMBOLS -> SYMBOLS
             Layer.FUNCTIONS -> FUNCTIONS
+        } + if (compact) BOTTOM_SPLIT else BOTTOM
+
+        @Composable
+        fun RowScope.cap(k: Key, height: Dp) {
+            when (k.token) {
+                // Where a phone keyboard says 1/2, and for the same reason: the
+                // second page of everything that is not a letter, one tap away
+                // and one tap back.
+                PAGE -> KeyCapText(
+                    if (layer == Layer.SYMBOLS) "1/2" else "2/2",
+                    special, capText, Modifier.weight(k.weight).padding(horizontal = 2.dp), height,
+                ) {
+                    layer = if (layer == Layer.SYMBOLS) Layer.FUNCTIONS else Layer.SYMBOLS
+                }
+                // Letters and symbols under one key, as on a phone: from either
+                // page away from the letters this reads abc and goes straight
+                // back, rather than being the next stop on a cycle through three.
+                LAYER -> KeyCapText(
+                    if (layer == Layer.LETTERS) "?123" else "abc",
+                    special, capText, Modifier.weight(k.weight).padding(horizontal = 2.dp), height,
+                ) {
+                    layer = if (layer == Layer.LETTERS) Layer.SYMBOLS else Layer.LETTERS
+                }
+                else -> key(k.token, k.weight, height)
+            }
         }
-        rows.forEach { line ->
-            Row(Modifier.fillMaxWidth()) {
-                if (line.inset > 0f) Spacer(Modifier.weight(line.inset))
-                line.keys.forEach {
-                    if (it.token == PAGE) {
-                        // Where a phone keyboard says 1/2, and for the same
-                        // reason: the second page of everything that is not a
-                        // letter, one tap away and one tap back.
-                        KeyCapText(
-                            if (layer == Layer.SYMBOLS) "1/2" else "2/2",
-                            special, capText, Modifier.weight(it.weight).padding(horizontal = 2.dp), line.height,
-                        ) {
-                            layer = if (layer == Layer.SYMBOLS) Layer.FUNCTIONS else Layer.SYMBOLS
-                        }
-                    } else {
-                        key(it.token, it.weight, line.height)
+
+        if (!compact) {
+            rows.forEach { line ->
+                Row(Modifier.fillMaxWidth()) {
+                    if (line.inset > 0f) Spacer(Modifier.weight(line.inset))
+                    line.keys.forEach { cap(it, line.height) }
+                    if (line.inset > 0f) Spacer(Modifier.weight(line.inset))
+                }
+            }
+        } else {
+            // On its side, a phone is held at both ends, and a keyboard stretched
+            // across the middle puts half its keys out of reach of either thumb.
+            // Each half is a phone keyboard's half at a phone keyboard's size,
+            // against its own edge, and the middle is left empty.
+            val width = LocalConfiguration.current.screenWidthDp.dp - 6.dp
+            val half = minOf((width - SPLIT_MIN_GAP) / 2, SPLIT_HALF_MAX)
+            rows.forEach { line ->
+                val left = line.keys.take(line.splitAt)
+                val right = line.keys.drop(line.splitAt)
+                // The same width of key on both sides of a row, however its keys
+                // fall: the half with less in it is padded, on its outer edge, so
+                // the two halves meet the gap the way they met each other.
+                val units = maxOf(SPLIT_UNITS, left.sumOf { it.weight.toDouble() }.toFloat(), right.sumOf { it.weight.toDouble() }.toFloat())
+                val height = line.height.scaled()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Row(Modifier.width(half)) {
+                        val pad = units - left.sumOf { it.weight.toDouble() }.toFloat()
+                        if (pad > 0f) Spacer(Modifier.weight(pad))
+                        left.forEach { cap(it, height) }
+                    }
+                    Row(Modifier.width(half)) {
+                        right.forEach { cap(it, height) }
+                        val pad = units - right.sumOf { it.weight.toDouble() }.toFloat()
+                        if (pad > 0f) Spacer(Modifier.weight(pad))
                     }
                 }
-                if (line.inset > 0f) Spacer(Modifier.weight(line.inset))
             }
-        }
-        // Where a phone keyboard puts the emoji key, a terminal wants Ctrl. The
-        // comma keeps its place beside it, and space, full stop and enter keep
-        // theirs, so the row still reads the way the hand expects.
-        Row(Modifier.fillMaxWidth()) {
-            // Letters and symbols under one key, as on a phone: from either
-            // page away from the letters this reads abc and goes straight
-            // back, rather than being the next stop on a cycle through three.
-            KeyCapText(
-                if (layer == Layer.LETTERS) "?123" else "abc",
-                special, capText, Modifier.weight(1.35f).padding(horizontal = 2.dp), CAP_HEIGHT,
-            ) {
-                layer = if (layer == Layer.LETTERS) Layer.SYMBOLS else Layer.LETTERS
-            }
-            key("CTRL", 1.2f)
-            key(",", 0.9f)
-            key(" ", 4.25f)
-            key(".", 0.9f)
-            key("ENTER", 1.4f)
         }
     }
 }

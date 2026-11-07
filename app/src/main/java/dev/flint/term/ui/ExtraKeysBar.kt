@@ -92,6 +92,12 @@ fun ExtraKeysBar(
     onChords: (() -> Unit)? = null,
     /** The ⋯ cap at the end of the first row; null leaves it off. */
     onMore: (() -> Unit)? = null,
+    /**
+     * Both rows as one that scrolls, for a phone on its side: the width is
+     * there to spare and the height is not, and a row of eight caps stretched
+     * across a landscape screen is all cap and no key.
+     */
+    singleRow: Boolean = false,
 ) {
     val mods by view.modifiers.collectAsStateWithLifecycle()
     // The picked files take the path files dropped on the terminal already
@@ -110,6 +116,28 @@ fun ExtraKeysBar(
         KeyFor(token, actions, mods, cap, capText, if (weight != null) Modifier.weight(weight) else Modifier)
     }
 
+    if (singleRow) {
+        Row(
+            modifier.background(chrome).padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+            ) {
+                // Not every kind of cap has a width of its own, and an arrow
+                // drawn at the width of its icon is too small a target.
+                (row1 + row2).distinct().forEach { t ->
+                    KeyFor(t, actions, mods, cap, capText, Modifier.widthIn(min = 52.dp), capHeight = SINGLE_ROW_CAP)
+                }
+            }
+            if (onMore != null) {
+                KeyCap("⋯", cap, capText, Modifier.width(38.dp), mono = true, capHeight = SINGLE_ROW_CAP) { onMore() }
+            }
+        }
+        return
+    }
 
     Column(modifier.background(chrome).padding(horizontal = 6.dp, vertical = 5.dp)) {
         if (row1.isNotEmpty()) {
@@ -135,6 +163,9 @@ fun ExtraKeysBar(
 }
 
 private val CapShape = RoundedCornerShape(10.dp)
+
+/** A little under the usual cap, because on its side every dp of the bar is a dp of terminal. */
+private val SINGLE_ROW_CAP = 34.dp
 
 @Composable
 private fun KeyCap(

@@ -27,7 +27,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.isImeVisible
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -144,6 +149,7 @@ import dev.flint.term.terminal.sendChord
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun TerminalScreen(nav: NavController, sessionId: String) {
     val context = LocalContext.current
@@ -373,6 +379,22 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
     }
     // Declared here rather than with the other sheets: the effect below needs it.
     var softKeys by remember { mutableStateOf(false) }
+    // A phone on its side. With a keyboard up, the strip left over is a few
+    // rows at best, and the chrome around the terminal would take all of them.
+    val shortWindow = LocalConfiguration.current.screenHeightDp < SHORT_WINDOW_DP
+    val keyboardUp = WindowInsets.isImeVisible || (settings.builtInKeyboard && softKeys)
+    val bare = shortWindow && keyboardUp
+    // The status bar is the one piece of chrome nobody reads in a terminal held
+    // sideways; it comes back with a swipe from the top, as in a video player.
+    DisposableEffect(shortWindow) {
+        val window = (context as? android.app.Activity)?.window
+        val controller = window?.let { WindowCompat.getInsetsController(it, rootView) }
+        if (shortWindow && controller != null) {
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.hide(WindowInsetsCompat.Type.statusBars())
+        }
+        onDispose { controller?.show(WindowInsetsCompat.Type.statusBars()) }
+    }
     DisposableEffect(view) {
         view.onKeyboardWanted = { up -> softKeys = up }
         onDispose { view.onKeyboardWanted = null; view.session = null }
@@ -677,7 +699,9 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         // is one line: where you are, and the two things you reach for. What
         // used to be a second line of subtitle is only worth the space while
         // the connection is not simply up, and then it says so beside the name.
-        Row(Modifier.fillMaxWidth().height(40.dp).padding(start = 2.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        // Sideways with a keyboard up, it goes altogether: putting the keyboard
+        // away brings it back, and so does back, which does that first.
+        if (!bare) Row(Modifier.fillMaxWidth().height(40.dp).padding(start = 2.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { view.hideKeyboard(); nav.popBackStack() }, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", Modifier.size(19.dp), tint = onChrome)
             }
@@ -734,7 +758,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
 
         // One session needs no tabs, and the terminal should keep every row it
         // can — so the strip only exists once there is something to switch between.
-        AnimatedVisibility(visible = (live.size > 1 || Workspace.hasTabs) && settings.showSessionTabs) {
+        AnimatedVisibility(visible = (live.size > 1 || Workspace.hasTabs) && settings.showSessionTabs && !bare) {
             WorkspaceTabs(
                 sessions = live,
                 current = here,
@@ -936,6 +960,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 onCompose = { softKeys = false; compose.open = true },
                 onChords = if (settings.ctrlLongPressOpensChords) ({ chords = true }) else null,
                 onMore = { pad = true },
+                singleRow = shortWindow,
             )
         } else {
             Spacer(Modifier.fillMaxWidth().then(bottomInsets))
@@ -947,6 +972,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 onSearch = { searching = !searching; if (!searching) view.searchHighlight = null },
                 onCompose = { softKeys = false; compose.open = true },
                 onChords = if (settings.ctrlLongPressOpensChords) ({ chords = true }) else null,
+                compact = shortWindow,
             )
         }
     }
@@ -1290,6 +1316,9 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
  */
 private fun menuGroup(name: String, vararg actions: SheetAction?): List<SheetAction> =
     actions.filterNotNull().map { it.copy(section = name) }
+
+/** Below this many dp of height a phone is on its side, and the chrome has to make room. */
+private const val SHORT_WINDOW_DP = 480
 
 /** How long the connection drawer stays up even when the connection was instant. */
 private const val MIN_SHEET_MS = 1100L
