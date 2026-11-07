@@ -389,8 +389,13 @@ class SessionManager(
             Backend.Ssh(sshConfig)
         }
         // Only the first hop can be dialled inside a tailnet; later hops ride the SSH chain.
-        val tailscaleId = if (chain.isEmpty()) host.tailscaleId else chain.first().tailscaleId
-        tailscaleId?.let { tailscale?.ensureUp(it) }
+        // The address dialled first is whichever [Endpoints.order] put there, which is
+        // often an extra address on the tailnet rather than the host's own, and any
+        // address after it may fall back to a tailnet too, so every node one of them
+        // names is started now.
+        val tailscaleId = if (chain.isEmpty()) first?.tailscaleId else chain.first().tailscaleId
+        val tailnets = if (chain.isEmpty()) candidates.mapNotNull { it.tailscaleId }.toSet() else setOfNotNull(tailscaleId)
+        tailnets.forEach { tailscale?.ensureUp(it) }
         return Prepared(backend, wakeFromPhone, decision?.reason, tunnelNote, tailscaleId, knock)
     }
 
@@ -821,12 +826,14 @@ class SessionManager(
      */
     private fun startWhenRoutable(session: TerminalSession, tailscaleId: String?, knock: KnockPlan? = null) {
         val ts = tailscale
-        val waitingForTailnet = tailscaleId != null && ts != null && ts.status(tailscaleId).state != "running"
+        // Always asked, even when the last reading says "running": that reading
+        // can be a node a test or an idle timeout has just brought down.
+        val waitingForTailnet = tailscaleId != null && ts != null
         if (!waitingForTailnet && knock == null) {
             session.start()
             return
         }
-        if (waitingForTailnet) {
+        if (waitingForTailnet && ts!!.status(tailscaleId!!).state != "running") {
             val name = store.tailscaleProfile(tailscaleId)?.name?.takeIf { it.isNotBlank() } ?: "Tailscale"
             runCatching { session.core.note("Waiting for $name to come up") }
         }

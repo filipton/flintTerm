@@ -84,10 +84,6 @@ mod imp {
         NODES.lock().as_ref().map(|m| m.values().cloned().collect()).unwrap_or_default()
     }
 
-    fn sd_of(id: &str) -> Option<c_int> {
-        node(id).lock().sd
-    }
-
     fn errmsg(sd: c_int) -> String {
         let mut buf = vec![0u8; 1024];
         unsafe {
@@ -215,15 +211,24 @@ mod imp {
         std::thread::Builder::new()
             .name("tailscale-up".into())
             .spawn(move || {
+                // A node brought down while this was starting it has been
+                // replaced, possibly already by one that is starting too; what
+                // the old one ends in is not that node's state to report.
                 let rc = unsafe { TsnetStart(sd) };
                 if rc != 0 {
                     let mut g = n.lock();
+                    if g.sd != Some(sd) {
+                        return;
+                    }
                     g.state = "error".into();
                     g.error = Some(errmsg(sd));
                     return;
                 }
                 let rc = unsafe { TsnetUp(sd) };
                 let mut g = n.lock();
+                if g.sd != Some(sd) {
+                    return;
+                }
                 if rc == 0 {
                     g.state = "running".into();
                     g.login_url = None;
@@ -313,6 +318,41 @@ mod imp {
         unsafe { TsnetSetInterfaces(c.as_ptr() as *mut c_char) };
     }
 
+    /// How long a dial waits for a node that is still coming up.
+    const READY_WAIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+    /// The node's handle once it can carry a connection.
+    ///
+    /// The app starts a node at the same moment as the connection that needs
+    /// it, and an address tried after another one failed gets there while the
+    /// node is still talking to the control plane. Failing that dial would say
+    /// the host is down when the tailnet is only late, so a starting node is
+    /// waited for. One that needs a login or has failed will not get better by
+    /// waiting, and is reported at once.
+    async fn ready(id: &str) -> Result<c_int, CoreError> {
+        let deadline = tokio::time::Instant::now() + READY_WAIT;
+        loop {
+            {
+                let n = node(id);
+                let g = n.lock();
+                match (g.sd, g.state.as_str()) {
+                    (None, _) => return Err(CoreError::Other("tailscale is not running".into())),
+                    (Some(sd), "running") => return Ok(sd),
+                    (Some(_), "error") => {
+                        let why = g.error.clone().unwrap_or_else(|| "unknown error".into());
+                        return Err(CoreError::Other(format!("tailscale could not start: {why}")));
+                    }
+                    (Some(_), "starting" | "stopped") if tokio::time::Instant::now() < deadline => {}
+                    (Some(_), "starting" | "stopped") => {
+                        return Err(CoreError::Other(format!("tailscale did not connect within {}s", READY_WAIT.as_secs())));
+                    }
+                    _ => return Err(CoreError::Other("tailscale is not connected yet (open VPN & tunnels to log in)".into())),
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+    }
+
     /// Start (or reuse) the node's loopback server and return its SOCKS5 proxy.
     ///
     /// This is how a datagram protocol gets onto the tailnet: `dial` hands back
@@ -320,10 +360,7 @@ mod imp {
     /// server is a real SOCKS5 proxy and tailscale's SOCKS5 implements UDP
     /// ASSOCIATE. Returns (host, port, password); the username is always "tsnet".
     pub async fn loopback_proxy(id: String) -> Result<(String, u16, String), CoreError> {
-        let sd = sd_of(&id).ok_or_else(|| CoreError::Other("tailscale is not running".into()))?;
-        if node(&id).lock().state != "running" {
-            return Err(CoreError::Other("tailscale is not connected yet (open VPN & tunnels to log in)".into()));
-        }
+        let sd = ready(&id).await?;
         tokio::task::spawn_blocking(move || {
             // The credentials are exactly 32 bytes plus a NUL, per libtailscale.
             let mut addr = vec![0u8; 128];
@@ -356,10 +393,7 @@ mod imp {
 
     /// Dial `host:port` inside the tailnet. Returns a Unix socket connected to the remote TCP endpoint.
     pub async fn dial(id: String, addr: String) -> Result<tokio::net::UnixStream, CoreError> {
-        let sd = sd_of(&id).ok_or_else(|| CoreError::Other("tailscale is not running".into()))?;
-        if node(&id).lock().state != "running" {
-            return Err(CoreError::Other("tailscale is not connected yet (open VPN & tunnels to log in)".into()));
-        }
+        let sd = ready(&id).await?;
         let fd = tokio::task::spawn_blocking(move || {
             let mut out: c_int = -1;
             let rc = unsafe { TsnetDial(sd, cstr("tcp").into_raw(), cstr(&addr).into_raw(), &mut out) };

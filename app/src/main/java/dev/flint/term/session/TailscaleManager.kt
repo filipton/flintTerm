@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.net.NetworkInterface
@@ -247,20 +248,31 @@ class TailscaleManager(private val context: Context, private val store: Store) {
 
     fun ensureUp(id: String) {
         if (!available) return
-        scope.launch {
-            followNetworks(true)
-            pushInterfaces()
-            // A node that failed to start cannot be restarted in place; rebuild it.
-            if (status(id).state == "error") runCatching { tailscaleDown(id) }
-            val p = store.tailscaleProfile(id) ?: return@launch
-            val hostname = p.hostname.ifBlank { defaultHostname() }
-            val dir = stateDir(id).apply { mkdirs() }
-            runCatching { tailscaleConfigure(id, dir.absolutePath, hostname, p.authKey.ifBlank { null }, p.controlUrl.ifBlank { null }) }
-                .onFailure { Log.w("Tailscale", "configure ${p.name}: ${it.message}") }
-            runCatching { tailscaleUp(id) }.onFailure { Log.w("Tailscale", "up ${p.name}: ${it.message}") }
-            refresh()
-            poke()
-        }
+        scope.launch { bringUp(id) }
+    }
+
+    /**
+     * Configure and start the node, returning once it is starting.
+     *
+     * Serialised because a connection and the screen it came from can ask at
+     * the same moment, and two callers both rebuilding a failed node would have
+     * the second close the one the first had just started.
+     */
+    @Synchronized
+    private fun bringUp(id: String) {
+        followNetworks(true)
+        pushInterfaces()
+        // A node that failed to start cannot be restarted in place; rebuild it.
+        // Asked of the node itself: the cached reading may be older than its last start.
+        if (tailscaleStatus(id).state == "error") runCatching { tailscaleDown(id) }
+        val p = store.tailscaleProfile(id) ?: return
+        val hostname = p.hostname.ifBlank { defaultHostname() }
+        val dir = stateDir(id).apply { mkdirs() }
+        runCatching { tailscaleConfigure(id, dir.absolutePath, hostname, p.authKey.ifBlank { null }, p.controlUrl.ifBlank { null }) }
+            .onFailure { Log.w("Tailscale", "configure ${p.name}: ${it.message}") }
+        runCatching { tailscaleUp(id) }.onFailure { Log.w("Tailscale", "up ${p.name}: ${it.message}") }
+        refresh()
+        poke()
     }
 
     /**
@@ -274,8 +286,10 @@ class TailscaleManager(private val context: Context, private val store: Store) {
      */
     suspend fun awaitUp(id: String, timeoutMs: Long = 45_000): Boolean {
         if (!available) return false
+        // Started here rather than in the background, so what is waited on
+        // below is this start and not a failure left over from the last one.
+        withContext(Dispatchers.IO) { bringUp(id) }
         if (status(id).state == "running") return true
-        ensureUp(id)
         return withTimeoutOrNull(timeoutMs) {
             statuses.first { m -> (m[id]?.state ?: "stopped").let { it == "running" || it == "error" } }[id]?.state == "running"
         } == true
