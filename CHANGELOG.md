@@ -6,6 +6,14 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-08
+
+### Fixed
+
+- Sessions opened together each get their host key question, one at a time
+- A session cut off by a network change keeps its tab and offers to reconnect
+- The floating window shows keyword colours too
+
 ## [0.1.6] - 2026-11-08
 
 ### Fixed
