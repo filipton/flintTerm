@@ -794,7 +794,13 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
                 Text(if (matches.isEmpty()) (if (query.isBlank()) "" else "0") else "${matchIndex + 1}/${matches.size / 2}", style = MaterialTheme.typography.labelSmall, color = onChromeMuted)
                 IconButton(onClick = { showMatch(matchIndex - 1) }, enabled = matches.isNotEmpty()) { Icon(Icons.Rounded.KeyboardArrowUp, "Previous", tint = onChrome) }
                 IconButton(onClick = { showMatch(matchIndex + 1) }, enabled = matches.isNotEmpty()) { Icon(Icons.Rounded.KeyboardArrowDown, "Next", tint = onChrome) }
-                IconButton(onClick = { searching = false; view.searchHighlight = null }) { Icon(Icons.Rounded.Close, stringResource(R.string.terminalscreen_close_search), tint = onChrome) }
+                IconButton(onClick = {
+                    searching = false
+                    view.searchHighlight = null
+                    // The search field had the keys; without handing them back,
+                    // typing after a search went nowhere until the terminal was tapped.
+                    view.showKeyboard()
+                }) { Icon(Icons.Rounded.Close, stringResource(R.string.terminalscreen_close_search), tint = onChrome) }
             }
         }
 
