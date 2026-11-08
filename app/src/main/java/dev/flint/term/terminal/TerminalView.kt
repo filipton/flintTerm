@@ -255,12 +255,21 @@ class TerminalView @JvmOverloads constructor(context: Context, attrs: AttributeS
     /** Keyword highlighting; an empty list turns it off and costs nothing to draw. */
     fun setHighlights(rules: List<HighlightRule>) {
         highlightRules = rules
+        highlightsGiven = true
         applyHighlights()
         invalidate()
     }
 
+    /**
+     * Whether this view was ever handed rules. The rules live in the session,
+     * so a view that only borrows it — the floating window — must not push its
+     * own empty list: that turned keyword colours off for the main screen too.
+     */
+    private var highlightsGiven = false
+
     /** Hand the rules to the core, which is what matches them. */
     private fun applyHighlights() {
+        if (!highlightsGiven) return
         val c = core ?: return
         runCatching {
             c.setHighlightRules(
