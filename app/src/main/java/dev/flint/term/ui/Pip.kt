@@ -182,6 +182,9 @@ fun FloatingTerminal(sessionId: String?) {
             // that times the scale the fit works out, so dropping it here would
             // only be taken back by a larger scale.
             fontSizeSp = session.host.fontSize(settings)
+            // The same keyword colours as the screen it floated out of; the
+            // rules are the session's, so these are the ones already there.
+            setHighlights(if (settings.highlightEnabled) settings.highlightRules else emptyList())
         }
     }
     LaunchedEffect(settings.fontFamily, settings.ligatures) { view.setFont(settings.fontFamily, settings.ligatures) }
