@@ -1061,8 +1061,28 @@ class SessionManager(
     }
 
     /** Runs on a core blocking thread. Blocks until the user decides when needed. */
+    /**
+     * One host-key question on screen at a time. There is one place to show
+     * it, and two sessions asking at once — the sessions restored at launch,
+     * say — used to overwrite each other there: the answered one connected
+     * and the other waited for ever on a question nobody could see.
+     */
+    private val hostKeyTurn = java.util.concurrent.locks.ReentrantLock(true)
+
     private fun verifyHostKey(key: HostKey): Boolean {
-        val known = store.knownHost(key.host, key.port.toInt())
+        fun knownMatch(): KnownHost? = store.knownHost(key.host, key.port.toInt())
+        if (knownMatch()?.let { it.keyType == key.keyType && it.keyBase64 == key.keyBase64 } == true) return true
+        hostKeyTurn.lock()
+        try {
+            return askHostKey(key, knownMatch())
+        } finally {
+            hostKeyTurn.unlock()
+        }
+    }
+
+    private fun askHostKey(key: HostKey, known: KnownHost?): Boolean {
+        // Asked again after the wait: the question before this one may have
+        // been about the same machine, and trusting it answers this one too.
         if (known != null && known.keyType == key.keyType && known.keyBase64 == key.keyBase64) return true
         val prompt = HostKeyPrompt(key, known?.fingerprint, CompletableDeferred())
         _hostKeyPrompt.value = prompt
