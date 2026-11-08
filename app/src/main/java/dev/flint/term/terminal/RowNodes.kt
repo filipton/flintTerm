@@ -85,6 +85,11 @@ internal class RowSlots {
         return slot
     }
 
+    /** Forget what [slot] holds, so the next [claim] may take it. */
+    fun forget(slot: Int) {
+        filled[slot] = false
+    }
+
     fun clear() {
         filled.fill(false)
         atRow.fill(-1)
@@ -113,8 +118,23 @@ internal class RowNodes {
         inked = BooleanArray(slots.capacity)
     }
 
-    /** The slot already holding [key] for [row], or -1 when it has to be recorded. */
-    fun find(row: Int, key: Long): Int = slots.find(row, key)
+    /**
+     * The slot already holding [key] for [row], or -1 when it has to be
+     * recorded.
+     *
+     * A recording is only as good as the renderer left it. A node that sat
+     * out a frame — the prompt row while a command was being typed over it, a
+     * menu while another item was lit — counts for the render thread as taken
+     * out of the tree, and it frees the node's display list. Drawn again, that
+     * node puts down nothing: the row stayed blank until it changed or a
+     * resize threw every recording away.
+     */
+    fun find(row: Int, key: Long): Int {
+        val slot = slots.find(row, key)
+        if (slot < 0 || !inked[slot] || nodes[slot]!!.hasDisplayList()) return slot
+        slots.forget(slot)
+        return -1
+    }
 
     /** A slot to record [key] into for [row], its node's old recording dropped. */
     fun claim(row: Int, key: Long): Int {

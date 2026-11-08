@@ -50,6 +50,19 @@ class RowSlotsTest {
     }
 
     @Test
+    fun `a forgotten row is recorded again, and the others are kept`() {
+        val slots = RowSlots()
+        slots.fit(3)
+        val drawn = slots.frame(longArrayOf(1, 2, 3))
+        slots.forget(drawn[1])
+        assertEquals(-1, slots.find(1, 2))
+        assertEquals(drawn[0], slots.find(0, 1))
+        assertEquals(drawn[2], slots.find(2, 3))
+        assertNotEquals(-1, slots.claim(1, 2))
+        assertNotEquals(-1, slots.find(1, 2))
+    }
+
+    @Test
     fun `clearing forgets every row, and a new size starts empty`() {
         val slots = RowSlots()
         assertTrue(slots.fit(2))
