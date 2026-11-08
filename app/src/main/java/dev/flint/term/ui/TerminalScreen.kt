@@ -559,7 +559,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
 
     // Swiping sideways moves along the tab strip, in the order shown there.
     fun switchSession(next: Boolean): Boolean {
-        val live = sessions.filterNot { it.isFinished }
+        val live = sessions.filter { it.isListed }
         val at = live.indexOfFirst { it.id == sessionId }
         val to = if (next) at + 1 else at - 1
         return if (at >= 0 && to in live.indices) {
@@ -699,7 +699,7 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         nav.popBackStack()
     }
 
-    val live = sessions.filterNot { it.isFinished }
+    val live = sessions.filter { it.isListed }
     val here = Pane.Term(sessionId)
 
     // Broadcasting only means anything between two terminals, and only while

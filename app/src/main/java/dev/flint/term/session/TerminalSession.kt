@@ -282,6 +282,19 @@ class TerminalSession(
     val isConnected: Boolean get() = state.value is SessionState.Connected
     val isFinished: Boolean get() = state.value is SessionState.Disconnected
 
+    /**
+     * Whether the session still belongs in the tabs and the list of active
+     * sessions: running, or dropped by the network rather than ended by the
+     * person or the shell. A phone VPN coming up or a switch from Wi-Fi to
+     * mobile aborts every TCP connection, and those sessions used to vanish
+     * from the tabs without a word; kept, each says what happened and offers
+     * to reconnect.
+     */
+    val isListed: Boolean get() = when (val s = state.value) {
+        is SessionState.Disconnected -> s.error != null && !closedByUser && !destroyed
+        else -> true
+    }
+
     fun start() = core.start()
 
     fun setPalette(p: PaletteConfig) = core.setPalette(p)

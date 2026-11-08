@@ -3049,7 +3049,16 @@ impl Inner {
                     self.feed(&data)
                 }
                 Event::Exit(code) => break (code, None),
-                Event::Closed => break (None, None),
+                // A shell that ends on its own sends its exit status first, so
+                // an SSH or Mosh session closing without one, and without
+                // being hung up from here, lost its connection: a phone VPN
+                // coming up, a switch of network. Said so, rather than ending
+                // like `exit`, so the app keeps the tab and offers to reconnect.
+                Event::Closed => {
+                    let remote = matches!(self.backend, Backend::Ssh { .. } | Backend::Mosh { .. });
+                    let lost = remote && !self.closed.load(Ordering::Acquire);
+                    break (None, lost.then(|| "the connection was lost".to_string()));
+                }
             }
         };
         write_task.abort();

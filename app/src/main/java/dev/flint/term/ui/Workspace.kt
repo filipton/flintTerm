@@ -520,7 +520,7 @@ fun WorkspaceFrame(
     val settings by app.store.settings.collectAsStateWithLifecycle()
     val sessions by app.sessions.sessions.collectAsStateWithLifecycle()
     val chrome = chromeFor(session.host?.theme, settings.theme)
-    val live = sessions.filterNot { it.isFinished }
+    val live = sessions.filter { it.isListed }
     val state by session.state.collectAsStateWithLifecycle()
     val name by session.name.collectAsStateWithLifecycle()
 

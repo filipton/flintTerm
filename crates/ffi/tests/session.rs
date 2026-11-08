@@ -363,6 +363,92 @@ fn an_address_that_never_answers_does_not_hold_up_the_next() {
     session.disconnect();
 }
 
+/// A connection cut from outside — the relay to the server stops, as a
+/// socket does when a phone VPN comes up — ends the session with an error,
+/// not like `exit`; hanging up from the app still ends it without one.
+#[test]
+fn a_cut_connection_ends_with_an_error_and_a_hang_up_without() {
+    let Ok(port) = std::env::var("SSH_TEST_PORT") else { return };
+    let port: u16 = port.parse().unwrap();
+    let key = std::fs::read_to_string(std::env::var("SSH_TEST_KEY").unwrap()).unwrap();
+
+    // A relay in front of the sshd that can be cut at will.
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let (relay_port, cut) = rt.block_on(async move {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let relay_port = listener.local_addr().unwrap().port();
+        let (cut, cut_rx) = tokio::sync::watch::channel(false);
+        tokio::spawn(async move {
+            while let Ok((mut inbound, _)) = listener.accept().await {
+                let mut cut_rx = cut_rx.clone();
+                tokio::spawn(async move {
+                    let mut outbound = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+                    tokio::select! {
+                        _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound) => {}
+                        _ = cut_rx.wait_for(|c| *c) => {}
+                    }
+                });
+            }
+        });
+        (relay_port, cut)
+    });
+
+    let open = |port: u16| {
+        let backend = Backend::Ssh {
+            config: SshConfig {
+                label: String::new(),
+                term: String::new(),
+                host: "127.0.0.1".into(),
+                port,
+                username: std::env::var("USER").unwrap(),
+                auth: vec![AuthMethod::Key { private_key: key.clone(), passphrase: None, certificate: String::new() }],
+                keepalive_secs: 0,
+                connect_timeout_secs: 10,
+                proxy: None,
+                jumps: vec![],
+                tunnel_id: None,
+                wait_for_host_secs: 0,
+                tailscale_id: None,
+                tunnel_fallback: false,
+                forward_agent: false,
+                agent_keys: vec![],
+                agent_approval: None,
+                env: vec![],
+                alternates: vec![],
+                vpn_name: String::new(),
+            },
+        };
+        let session = Session::new(backend, 80, 24, 1000, Listener::new(), Arc::new(Accept), Arc::new(NoQuestions), Options::default());
+        session.start();
+        let start = Instant::now();
+        while !matches!(session.state(), SessionState::Connected) {
+            assert!(start.elapsed() < Duration::from_secs(15), "state: {:?}", session.state());
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        session
+    };
+    let ended = |session: &Session| {
+        let start = Instant::now();
+        loop {
+            if let SessionState::Disconnected { exit_code, error } = session.state() {
+                return (exit_code, error);
+            }
+            assert!(start.elapsed() < Duration::from_secs(15), "still {:?}", session.state());
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    };
+
+    let cut_off = open(relay_port);
+    cut.send(true).unwrap();
+    let (code, error) = ended(&cut_off);
+    assert_eq!(code, None);
+    assert!(error.is_some_and(|e| e.contains("lost")), "a cut connection must say so");
+
+    let hung_up = open(port);
+    hung_up.disconnect();
+    assert_eq!(ended(&hung_up), (None, None));
+}
+
 #[test]
 fn ssh_session_roundtrip() {
     let Ok(port) = std::env::var("SSH_TEST_PORT") else { return };

@@ -128,7 +128,7 @@ fun HostsScreen(nav: NavController) {
     val scanning by scanner.scanning.collectAsStateWithLifecycle()
     val nearby = remember(announced, hosts) { dev.flint.term.session.Discovery.offer(announced, hosts) }
     val pullState = rememberPullToRefreshState()
-    val active = sessions.filter { !it.isFinished }
+    val active = sessions.filter { it.isListed }
 
     // "Can I even reach this?" for the rows that are not a session already.
     // Only what is on screen is asked, and only hosts the phone can dial
