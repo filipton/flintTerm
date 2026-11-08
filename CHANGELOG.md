@@ -6,6 +6,19 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-08
+
+### Fixed
+
+- Text that left the screen for a moment is drawn again when it comes back
+- Closing the scrollback search gives the keyboard back to the terminal
+- Tab after fast typing completes the line as typed, not an old guess
+- The floating window no longer turns off keyword colours
+
+### Performance
+
+- A host's addresses are tried at once, so a dead one no longer stalls the rest
+
 ## [0.1.5] - 2026-11-07
 
 ### Fixed
