@@ -354,10 +354,19 @@ fun TerminalScreen(nav: NavController, sessionId: String) {
         view.setHighlights(if (settings.highlightEnabled) settings.highlightRules else emptyList())
     }
     view.onAcceptGhost = {
-        val hint = ghost
+        // The line as it is now, not as the hint last saw it: that is read at
+        // most every [HINT_SETTLE_MS], and a key typed inside that window made
+        // Tab send the rest of the old guess ("gi" + "t status" after "git").
+        val now = if (atPrompt()) {
+            runCatching { session.core.inputLine() }.getOrNull()
+                ?.let { dev.flint.term.data.CommandHistory.typed(it.line, it.typed, it.atEnd, latestHistory) }
+        } else {
+            null
+        }
+        val hint = if (now == null || now == typed) ghost else dev.flint.term.data.CommandHistory.ghost(hostHistory, now, hostCounts)
         if (settings.completeFromHistory && settings.tabAcceptsSuggestion && hint != null) {
             view.sendText(hint)
-            typed += hint
+            typed = (now ?: typed) + hint
             moreSuggestions = emptyList()
             true
         } else {
