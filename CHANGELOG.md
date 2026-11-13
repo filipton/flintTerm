@@ -6,6 +6,12 @@ the history cannot drift apart. Versions follow [semantic versioning](https://se
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-11-13
+
+### Fixed
+
+- File transfers run on mobile data with data saver on, since each starts from a tap
+
 ## [0.1.7] - 2026-11-08
 
 ### Fixed
