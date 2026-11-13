@@ -36,8 +36,6 @@ enum class TransferKind {
 
 enum class TransferStatus {
     QUEUED,
-    /** Held back because the connection is metered and data saving is on. */
-    WAITING_FOR_WIFI,
     RUNNING,
     DONE,
     FAILED,
@@ -66,7 +64,7 @@ data class Transfer(
     val startedAt: Long = System.currentTimeMillis(),
     val finishedAt: Long? = null,
 ) {
-    val isActive get() = status == TransferStatus.QUEUED || status == TransferStatus.RUNNING || status == TransferStatus.WAITING_FOR_WIFI
+    val isActive get() = status == TransferStatus.QUEUED || status == TransferStatus.RUNNING
     val fraction: Float? get() = total?.takeIf { it > 0 }?.let { (done.toFloat() / it).coerceIn(0f, 1f) }
 
     /** Which machines are involved, so a copy states its direction wherever it is shown. */
@@ -80,13 +78,8 @@ data class Transfer(
  * background (see [TransferService], which turns the state into notifications).
  */
 class TransferManager(private val context: Context) {
-    /**
-     * Set by [dev.flint.term.App]. When it says we are saving data, a transfer
-     * waits for an unmetered connection instead of spending mobile data on what
-     * is usually a large file. Interactive work is never held up — only this.
-     */
-    var holdForWifi: (() -> Boolean)? = null
-    var awaitUnmetered: (suspend () -> Unit)? = null
+    // Data saver deliberately has no say here. Every transfer starts from a tap,
+    // so holding one for Wi-Fi only ever second-guessed the person who asked.
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _transfers = MutableStateFlow<List<Transfer>>(emptyList())
     val transfers: StateFlow<List<Transfer>> = _transfers
@@ -284,13 +277,6 @@ class TransferManager(private val context: Context) {
             val upd: ((Transfer) -> Transfer) -> Unit = { f -> update(id, f) }
             var sftp: SftpClient? = null
             try {
-                // Big files are exactly what data saving is for; wait for Wi-Fi.
-                if (holdForWifi?.invoke() == true) {
-                    upd { it.copy(status = TransferStatus.WAITING_FOR_WIFI) }
-                    TransferService.refresh(context)
-                    awaitUnmetered?.invoke()
-                    if (r.cancelled.get()) throw CancelledException()
-                }
                 upd { it.copy(status = TransferStatus.RUNNING) }
                 sftp = session.core.openSftp()
                 r.sftp = sftp

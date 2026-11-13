@@ -284,7 +284,7 @@ class StatusWidgetWorker(context: Context, params: WorkerParameters) : Coroutine
         // The one rule that outranks the interval. Not a retry: the answer
         // would be the same in ten minutes, and the widget already has numbers
         // to show. It picks itself up on the next run over a cheaper link.
-        if (app.sessions.holdTransfers()) return Result.success()
+        if (app.sessions.holdBackgroundWork()) return Result.success()
         // The constraint says connected, but it is read when the job is
         // queued; a dial into no network only earns a failure to show.
         if (!app.network.online) return Result.success()

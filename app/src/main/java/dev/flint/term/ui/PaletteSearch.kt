@@ -219,7 +219,7 @@ object PaletteCatalog {
         setting(R.string.sessionssettings_long_command_finished, R.string.palette_a_notification_when_a_command_over_30_second, Routes.SETTINGS_SESSIONS),
         setting(R.string.sessionssettings_let_programs_raise_a_notification, R.string.palette_a_script_on_the_server_can_ask_for_one_with, Routes.SETTINGS_SESSIONS),
         setting(R.string.connectionssettings_keepalive, R.string.palette_how_often_an_idle_session_pokes_the_server, Routes.SETTINGS_CONNECTIONS),
-        setting(R.string.connectionssettings_data_saver, R.string.palette_holds_transfers_for_wi_fi_and_spaces_out_kee, Routes.SETTINGS_CONNECTIONS),
+        setting(R.string.connectionssettings_data_saver, R.string.palette_data_saver, Routes.SETTINGS_CONNECTIONS),
         setting(R.string.connectionssettings_ask_before_agent_signing, R.string.palette_a_forwarded_key_asks_before_it_signs, Routes.SETTINGS_CONNECTIONS),
         setting(R.string.connectionssettings_find_hosts_on_this_network, R.string.connectionssettings_servers_that_announce_ssh_on_this_network_appear, Routes.SETTINGS_CONNECTIONS),
         setting(R.string.connectionssettings_show_the_server_s_message, R.string.palette_what_a_server_prints_before_login, Routes.SETTINGS_CONNECTIONS),

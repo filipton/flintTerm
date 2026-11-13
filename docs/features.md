@@ -67,8 +67,9 @@ Everything the app does. The short list is in the [README](../README.md).
   the machine over SSH.
 - **Port forwarding**: local, remote and dynamic (`-D`, SOCKS5 and SOCKS4/4a), started with the
   session and switchable while it runs.
-- **Data saver** on metered links: transfers wait for Wi-Fi, keepalives are spaced out, reconnects
-  wait for a network. Typing is never held up. On for mobile data by default.
+- **Data saver** on metered links: keepalives are spaced out, widget refreshes are skipped,
+  reconnects wait for a network. Typing and file transfers are never held up. On for mobile data by
+  default.
 
 ## Mosh, telnet and serial
 

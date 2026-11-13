@@ -23,7 +23,6 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Upload
-import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
@@ -118,7 +117,6 @@ private fun TransferRow(t: Transfer, onCancel: (() -> Unit)?) {
             TransferStatus.DONE -> Icons.Rounded.CheckCircle to Status.online
             TransferStatus.FAILED -> Icons.Rounded.Error to MaterialTheme.colorScheme.error
             TransferStatus.CANCELLED -> Icons.Rounded.Cancel to MaterialTheme.colorScheme.onSurfaceVariant
-            TransferStatus.WAITING_FOR_WIFI -> Icons.Rounded.Wifi to MaterialTheme.colorScheme.tertiary
             else -> when (t.kind) {
                 TransferKind.DOWNLOAD -> Icons.Rounded.Download
                 TransferKind.UPLOAD -> Icons.Rounded.Upload
@@ -139,7 +137,7 @@ private fun TransferRow(t: Transfer, onCancel: (() -> Unit)?) {
                 maxLines = 2,
             )
             Text(t.route, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-            if (t.isActive && t.status != TransferStatus.WAITING_FOR_WIFI) {
+            if (t.isActive) {
                 Spacer(Modifier.height(6.dp))
                 val f = t.fraction
                 if (f != null) LinearProgressIndicator(progress = { f }, Modifier.fillMaxWidth().clip(RoundedCornerShape(4.dp)))
@@ -155,7 +153,6 @@ private fun TransferRow(t: Transfer, onCancel: (() -> Unit)?) {
 }
 
 private fun detail(t: Transfer): String = when (t.status) {
-    TransferStatus.WAITING_FOR_WIFI -> "waiting for Wi-Fi  ·  ${humanBytes(t.total ?: 0)}"
     TransferStatus.QUEUED -> "starting…"
     TransferStatus.RUNNING -> buildString {
         append(humanBytes(t.done))

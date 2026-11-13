@@ -23,13 +23,7 @@ class App : Application() {
      * for a quick settings tile, a widget or a reconnect in the background, and
      * none of those move a file.
      */
-    val transfers: TransferManager by lazy {
-        TransferManager(this).apply {
-            // Transfers are the one thing worth holding back on mobile data.
-            holdForWifi = { sessions.holdTransfers() }
-            awaitUnmetered = { network.state.first { !it.metered && it.online } }
-        }
-    }
+    val transfers: TransferManager by lazy { TransferManager(this) }
     lateinit var tunnels: TunnelManager
         private set
     /**

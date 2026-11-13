@@ -600,8 +600,8 @@ enum class AppTheme(@StringRes val label: Int) { SYSTEM(R.string.enum_apptheme_s
 
 /** How hard to work at not spending mobile data. */
 enum class DataSaver(@StringRes val label: Int, @StringRes val help: Int) {
-    METERED(R.string.enum_datasaver_on_mobile_data, R.string.enum_datasaver_hold_transfers_and_ease_off_keepalives_when),
-    ALWAYS(R.string.enum_tunnelmode_always, R.string.enum_datasaver_ease_off_keepalives_on_any_connection_transf),
+    METERED(R.string.enum_datasaver_on_mobile_data, R.string.enum_datasaver_on_mobile_data_help),
+    ALWAYS(R.string.enum_tunnelmode_always, R.string.enum_datasaver_always_help),
     OFF(R.string.enum_datasaver_off, R.string.enum_datasaver_behave_the_same_on_any_connection),
 }
 

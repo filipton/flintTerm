@@ -157,14 +157,16 @@ class SessionManager(
     }
 
     /**
-     * True when a file transfer should wait rather than run now.
+     * True when work nobody asked for just now — a home-screen widget's
+     * refresh — should be skipped until a cheaper connection.
      *
      * This asks about the *actual* connection, not the mode: "Always" means be
-     * frugal with chatter on any link, but a transfer can only ever wait for a
-     * cheaper connection to appear. Keying it off the mode would leave transfers
-     * queued for ever on Wi-Fi, since there would be nothing better to wait for.
+     * frugal with chatter on any link, but skipped work only comes back on a
+     * cheaper connection. Keying it off the mode would skip it for ever on
+     * Wi-Fi, since there would be nothing better to wait for. Transfers are not
+     * held by this: each one starts from a tap.
      */
-    fun holdTransfers(): Boolean =
+    fun holdBackgroundWork(): Boolean =
         store.settings.value.dataSaver != dev.flint.term.data.DataSaver.OFF && network.metered
 
     /**

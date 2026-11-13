@@ -35,24 +35,24 @@ class DataSaverTest {
         assertEquals(DataSaver.METERED, dev.flint.term.data.Settings().dataSaver)
     }
 
-    private fun holdTransfers(mode: DataSaver, metered: Boolean) = mode != DataSaver.OFF && metered
+    private fun holdBackgroundWork(mode: DataSaver, metered: Boolean) = mode != DataSaver.OFF && metered
 
     /**
-     * The trap this guards: a transfer can only wait for a *better* connection.
-     * Keying the hold off "Always" would queue transfers for ever on Wi-Fi,
-     * because there would be nothing cheaper to wait for.
+     * The trap this guards: skipped background work only comes back on a
+     * *better* connection. Keying the hold off "Always" would skip it for ever
+     * on Wi-Fi, because there would be nothing cheaper to wait for.
      */
     @Test
-    fun `always does not strand transfers on an unmetered connection`() {
-        assertFalse(holdTransfers(DataSaver.ALWAYS, metered = false))
-        assertTrue(holdTransfers(DataSaver.ALWAYS, metered = true))
+    fun `always does not strand background work on an unmetered connection`() {
+        assertFalse(holdBackgroundWork(DataSaver.ALWAYS, metered = false))
+        assertTrue(holdBackgroundWork(DataSaver.ALWAYS, metered = true))
     }
 
     @Test
-    fun `transfers wait on mobile data unless data saving is off`() {
-        assertTrue(holdTransfers(DataSaver.METERED, metered = true))
-        assertFalse(holdTransfers(DataSaver.METERED, metered = false))
-        assertFalse(holdTransfers(DataSaver.OFF, metered = true))
+    fun `background work waits on mobile data unless data saving is off`() {
+        assertTrue(holdBackgroundWork(DataSaver.METERED, metered = true))
+        assertFalse(holdBackgroundWork(DataSaver.METERED, metered = false))
+        assertFalse(holdBackgroundWork(DataSaver.OFF, metered = true))
     }
 
     /** Keepalives are spaced out rather than switched off, and stay bounded. */

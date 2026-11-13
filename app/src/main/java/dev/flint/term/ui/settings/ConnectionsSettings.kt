@@ -54,7 +54,7 @@ fun ConnectionsSettings(nav: NavController) {
         ActionSheet(
             onDismiss = { dataSheet = false },
             title = stringResource(R.string.connectionssettings_data_saver),
-            subtitle = stringResource(R.string.connectionssettings_waits_for_wi_fi_before_transferring_files_and_se),
+            subtitle = stringResource(R.string.connectionssettings_data_saver_help),
             actions = DataSaver.entries.map { mode ->
                 SheetAction(stringResource(mode.label) + if (mode == settings.dataSaver) "   ✓" else "", subtitle = stringResource(mode.help)) {
                     app.store.updateSettings { it.copy(dataSaver = mode) }
@@ -83,7 +83,7 @@ fun ConnectionsSettings(nav: NavController) {
             RowDivider()
             GroupRow(
                 title = stringResource(R.string.connectionssettings_data_saver),
-                subtitle = stringResource(R.string.connectionssettings_waits_for_wi_fi_to_transfer_files_and_sends_keep),
+                subtitle = stringResource(R.string.connectionssettings_data_saver_summary),
                 icon = Icons.Rounded.DataSaverOn,
                 iconTint = MaterialTheme.colorScheme.tertiary,
                 onClick = { dataSheet = true },
